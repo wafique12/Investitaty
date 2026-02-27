@@ -2118,3 +2118,9 @@ function AppContent() {
   if (dbLoading || !db) return <LoadingScreen message="LOADING YOUR PORTFOLIO..." />;
   return <MainApp />;
 }
+
+// في آخر الملف خالص:
+import { createRoot } from 'react-dom/client';
+const container = document.getElementById('root');
+const root = createRoot(container);
+root.render(<App />);
