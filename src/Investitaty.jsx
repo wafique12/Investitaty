@@ -47,7 +47,8 @@ const TRANSLATIONS = {
     loadingApis: "Loading Google APIs...",
     privacyFirst: "Privacy-First",
     driveSynced: "Drive-Synced",
-    privacyNote: "Your data is stored exclusively in your own Google Drive. We never see your investments. <br/> Developed and Owned by Wafiq Abdulrahman",
+    privacyNote: "Your data is stored exclusively in your own Google Drive. We never see your investments.",
+    ownershipFooter: "Owned and developed by Wafiq Abdulrahman",
     loading: "LOADING YOUR PORTFOLIO...",
     synced: "SYNCED",
     syncing: "SYNCING...",
@@ -202,7 +203,8 @@ const TRANSLATIONS = {
     loadingApis: "تحميل واجهات Google...",
     privacyFirst: "خصوصية أولاً",
     driveSynced: "مزامنة Drive",
-    privacyNote: "بياناتك محفوظة في Google Drive الخاص بك فقط. نحن لا نرى استثماراتك. <br/> مطور ومملوك بواسطة وفيق عبد الرحمن",
+    privacyNote: "بياناتك محفوظة في Google Drive الخاص بك فقط. نحن لا نرى استثماراتك.",
+    ownershipFooter: "مملوك ومطور بواسطة وفيق عبد الرحمن",
     loading: "جارٍ تحميل محفظتك...",
     synced: "تمت المزامنة",
     syncing: "جارٍ المزامنة...",
@@ -955,6 +957,19 @@ function LoginPage() {
         )}
         <p style={{ marginTop:"24px",fontSize:"0.72rem",lineHeight:1.7,color:"rgba(255,255,255,0.3)" }}>{t.privacyNote}</p>
       </div>
+
+      <footer style={{
+        position:"absolute",
+        bottom:"14px",
+        insetInline:"20px",
+        textAlign:"center",
+        color:"rgba(255,255,255,0.46)",
+        fontSize:"0.72rem",
+        letterSpacing:isRTL?"0":"0.02em",
+        zIndex:1,
+      }}>
+        {t.ownershipFooter}
+      </footer>
     </div>
   );
 }
@@ -986,7 +1001,7 @@ function LoadingScreen({ message }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // SIDEBAR
 // ═══════════════════════════════════════════════════════════════════════════════
-function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, pinned, setPinned }) {
+function Sidebar({ activeTab, setActiveTab, expanded, setExpanded }) {
   const { user, signOut, syncing, t, font, lang, setLang, isRTL } = useApp();
 
   const navItems = [
@@ -998,27 +1013,21 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, pinned, setPinned
     { id:"settings",     label:t.settings,     icon:<Settings size={17}/> },
   ];
 
-  const showLabels = pinned || isOpen;
+  const showLabels = expanded;
 
   const handleHamburger = () => {
-    if (pinned) {
-      setPinned(false);
-      setIsOpen(false);
-      return;
-    }
-    setPinned(true);
-    setIsOpen(true);
+    setExpanded((prev) => !prev);
   };
 
   return (
     <aside dir="ltr" style={{
       width:showLabels?"220px":"72px",minHeight:"100vh",background:T.bgSidebar,
       borderRight:"none",display:"flex",flexDirection:"column",flexShrink:0,
-      fontFamily:font,transition:"width 0.2s ease",
-    }} onMouseEnter={() => { if (!pinned) setIsOpen(true); }} onMouseLeave={() => { if (!pinned) setIsOpen(false); }}>
+      fontFamily:font,transition:"width 0.24s ease",
+    }}>
       <div style={{ padding:showLabels?"24px 20px 18px":"16px 10px",borderBottom:`1px solid ${T.borderDark}` }}>
         <div style={{ display:"flex",alignItems:"center",gap:"10px",justifyContent:showLabels?"flex-start":"center" }}>
-          <button onClick={handleHamburger} title={pinned?t.unpinSidebar:t.pinSidebar} style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", width:"28px", height:"28px", borderRadius:"6px", border:`1px solid ${T.borderDark}`, background:"transparent", color:T.textSidebar, cursor:"pointer", flexShrink:0 }}>
+          <button onClick={handleHamburger} title={showLabels?t.unpinSidebar:t.pinSidebar} style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", width:"28px", height:"28px", borderRadius:"6px", border:`1px solid ${T.borderDark}`, background:"transparent", color:T.textSidebar, cursor:"pointer", flexShrink:0 }}>
             <Menu size={14} />
           </button>
           <div style={{ width:"32px",height:"32px",borderRadius:"8px",background:T.emeraldBg,border:`1px solid ${T.emeraldBorder}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
@@ -1040,7 +1049,7 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, pinned, setPinned
         {navItems.map(({ id, label, icon }) => {
           const active = activeTab === id;
           return (
-            <button key={id} onClick={() => { setActiveTab(id); if (!pinned) setIsOpen(false); }} style={{
+            <button key={id} onClick={() => setActiveTab(id)} style={{
               display:"flex",alignItems:"center",gap:"10px",width:"100%",
               padding:"9px 12px",borderRadius:"8px",border:"none",
               background:active?T.emeraldBg:"transparent",
@@ -1058,7 +1067,7 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, pinned, setPinned
       </nav>
 
       <div style={{ padding:"12px" }}>
-        {showLabels && <div style={{ color:T.textSidebarMuted, fontSize:"0.7rem", marginBottom:"2px" }}>{pinned?t.unpinSidebar:t.pinSidebar}</div>}
+        {showLabels && <div style={{ color:T.textSidebarMuted, fontSize:"0.7rem", marginBottom:"2px" }}>{t.collapseSidebar}</div>}
       </div>
 
       {showLabels && (
@@ -2362,14 +2371,9 @@ function StatisticsTab() {
 function MainApp() {
   const { syncError, t, isRTL, font } = useApp();
   const [activeTab, setActiveTab] = useState("dashboard");
-  const [sidebarPinned, setSidebarPinned] = useState(true);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [investmentPrefill, setInvestmentPrefill] = useState(null);
   const [transactionPrefill, setTransactionPrefill] = useState(null);
-
-  useEffect(() => {
-    setSidebarOpen(sidebarPinned);
-  }, [sidebarPinned]);
 
   const quickAddInvestment = (portfolioId) => {
     setActiveTab("investments");
@@ -2403,22 +2407,20 @@ function MainApp() {
         body { margin: 0; }
       `}</style>
 
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} isOpen={sidebarOpen} setIsOpen={setSidebarOpen} pinned={sidebarPinned} setPinned={setSidebarPinned}/>
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} expanded={sidebarExpanded} setExpanded={setSidebarExpanded}/>
 
-      {!sidebarPinned && !sidebarOpen && (
-        <div
-          onMouseEnter={()=>setSidebarOpen(true)}
-          style={{ position:"fixed", left:0, top:0, width:"14px", height:"100vh", zIndex:45 }}
-        />
-      )}
-
-      <main style={{ flex:1,overflowY:"auto",padding:"32px 36px",maxWidth:"100%" }}>
+      <main style={{ flex:1,overflowY:"auto",padding:"32px 36px 18px",maxWidth:"100%",display:"flex",flexDirection:"column",minHeight:"100vh" }}>
         {syncError && (
           <div style={{ marginBottom:"16px",padding:"10px 16px",background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.2)",borderRadius:"8px",color:T.negative,fontSize:"0.8rem",display:"flex",alignItems:"center",gap:"8px" }}>
             <AlertCircle size={14}/>{syncError}
           </div>
         )}
-        {tabs[activeTab]}
+        <div style={{ flex:1 }}>
+          {tabs[activeTab]}
+        </div>
+        <footer style={{ marginTop:"24px",textAlign:"center",color:"#64748b",fontSize:"0.76rem" }}>
+          {t.ownershipFooter}
+        </footer>
       </main>
     </div>
   );
