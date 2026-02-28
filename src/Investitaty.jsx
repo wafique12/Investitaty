@@ -995,7 +995,7 @@ function LoadingScreen({ message }) {
 // SIDEBAR
 // ═══════════════════════════════════════════════════════════════════════════════
 function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, pinned, setPinned }) {
-  const { user, signOut, syncing, t, font, lang, setLang } = useApp();
+  const { user, signOut, syncing, t, font, lang, setLang, isRTL } = useApp();
 
   const navItems = [
     { id:"dashboard",    label:t.dashboard,    icon:<BarChart2 size={17}/> },
