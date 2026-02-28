@@ -37,7 +37,7 @@ const INITIAL_SCHEMA = {
 // ═══════════════════════════════════════════════════════════════════════════════
 const TRANSLATIONS = {
   en: {
-    appName: "INVESTITATY",
+    appName: "INVESTATY",
     appTagline: "Professional Investment Manager",
     signIn: "Sign in with Google",
     connecting: "Connecting...",
@@ -920,7 +920,7 @@ function Sidebar({ activeTab, setActiveTab }) {
           <div style={{ width:"32px",height:"32px",borderRadius:"8px",background:T.emeraldBg,border:`1px solid ${T.emeraldBorder}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
             <TrendingUp size={16} color={T.emerald} />
           </div>
-          <span style={{ color:"#f1f5f9",fontSize:"0.85rem",fontWeight:700,letterSpacing:"0.08em" }}>INVESTITATY</span>
+          <span style={{ color:"#f1f5f9",fontSize:"0.85rem",fontWeight:700,letterSpacing:"0.08em" }}>INVESTATY</span>
         </div>
         {/* Sync dot */}
         <div style={{ display:"flex",alignItems:"center",gap:"6px",marginTop:"8px" }}>
