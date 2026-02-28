@@ -5,7 +5,8 @@ import {
   RefreshCw, ChevronDown, ChevronRight, Plus, Settings,
   TrendingUp, Wallet, DollarSign, BarChart2, Globe, LogOut,
   Cloud, Shield, Layers, Tag, FolderOpen, ArrowUpRight, PieChart as PieChartIcon,
-  ArrowDownRight, Eye, EyeOff, AlertCircle, CheckCircle2, PanelLeft, Pin, PinOff,
+  ArrowDownRight, Eye, EyeOff, AlertCircle, CheckCircle2,
+  Menu, Search, Landmark, ListTree, CircleDollarSign,
 } from "lucide-react";
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -999,14 +1000,27 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, pinned, setPinned
 
   const showLabels = pinned || isOpen;
 
+  const handleHamburger = () => {
+    if (pinned) {
+      setPinned(false);
+      setIsOpen(false);
+      return;
+    }
+    setPinned(true);
+    setIsOpen(true);
+  };
+
   return (
     <aside dir="ltr" style={{
       width:showLabels?"220px":"72px",minHeight:"100vh",background:T.bgSidebar,
       borderRight:"none",display:"flex",flexDirection:"column",flexShrink:0,
       fontFamily:font,transition:"width 0.2s ease",
-    }}>
+    }} onMouseEnter={() => { if (!pinned) setIsOpen(true); }} onMouseLeave={() => { if (!pinned) setIsOpen(false); }}>
       <div style={{ padding:showLabels?"24px 20px 18px":"16px 10px",borderBottom:`1px solid ${T.borderDark}` }}>
         <div style={{ display:"flex",alignItems:"center",gap:"10px",justifyContent:showLabels?"flex-start":"center" }}>
+          <button onClick={handleHamburger} title={pinned?t.unpinSidebar:t.pinSidebar} style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", width:"28px", height:"28px", borderRadius:"6px", border:`1px solid ${T.borderDark}`, background:"transparent", color:T.textSidebar, cursor:"pointer", flexShrink:0 }}>
+            <Menu size={14} />
+          </button>
           <div style={{ width:"32px",height:"32px",borderRadius:"8px",background:T.emeraldBg,border:`1px solid ${T.emeraldBorder}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
             <TrendingUp size={16} color={T.emerald} />
           </div>
@@ -1044,14 +1058,7 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, pinned, setPinned
       </nav>
 
       <div style={{ padding:"12px" }}>
-        <button onClick={()=>setPinned(v=>!v)} title={pinned?t.unpinSidebar:t.pinSidebar} style={{ width:"100%",marginBottom:"8px",display:"flex",alignItems:"center",justifyContent:showLabels?"space-between":"center",padding:"8px",border:`1px solid ${T.borderDark}`,background:"transparent",color:T.textSidebar,borderRadius:"8px",cursor:"pointer" }}>
-          {showLabels && <span style={{ fontSize:"0.75rem" }}>{pinned?t.unpinSidebar:t.pinSidebar}</span>}
-          {pinned ? <PinOff size={14}/> : <Pin size={14}/>}
-        </button>
-        <button onClick={()=>setIsOpen(v=>!v)} title={t.collapseSidebar} style={{ width:"100%",display:"flex",alignItems:"center",justifyContent:showLabels?"space-between":"center",padding:"8px",border:`1px solid ${T.borderDark}`,background:"transparent",color:T.textSidebar,borderRadius:"8px",cursor:"pointer" }}>
-          {showLabels && <span style={{ fontSize:"0.75rem" }}>{t.collapseSidebar}</span>}
-          <PanelLeft size={14}/>
-        </button>
+        {showLabels && <div style={{ color:T.textSidebarMuted, fontSize:"0.7rem", marginBottom:"2px" }}>{pinned?t.unpinSidebar:t.pinSidebar}</div>}
       </div>
 
       {showLabels && (
@@ -1971,80 +1978,150 @@ function SettingsTab() {
   );
 }
 
-function StatisticsMatrixTable({ title, headers, rows, currency = "USD" }) {
+function AccordionSection({ title, icon, children }) {
+  const [open, setOpen] = useState(false);
   return (
-    <Card style={{ padding:"0", overflow:"hidden", marginBottom:"18px" }}>
-      <div style={{ padding:"14px 16px", borderBottom:`1px solid ${T.border}`, background:T.bgApp }}>
-        <h3 style={{ margin:0, color:T.textPrimary, fontSize:"0.95rem", fontWeight:700 }}>{title}</h3>
-      </div>
-      <div style={{ overflowX:"auto" }}>
-        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.82rem" }}>
-          <thead>
-            <tr style={{ background:T.bgApp }}>
-              {headers.map((h) => (
-                <th key={h} style={{ padding:"11px 12px", borderBottom:`1px solid ${T.border}`, color:T.textSecondary, fontWeight:700, textAlign:"start", whiteSpace:"nowrap" }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, idx) => {
-              const isTotal = row.isTotal;
-              return (
-                <tr key={row.key || idx} style={{ background:isTotal?"rgba(16,185,129,0.08)":(idx % 2 ? "rgba(148,163,184,0.07)" : "transparent") }}>
-                  {row.values.map((cell, ci) => (
-                    <td key={`${row.key||idx}-${ci}`} style={{ padding:"10px 12px", borderTop:`1px solid ${T.border}`, color:isTotal?T.textPrimary:T.textSecondary, fontWeight:isTotal?700:500, whiteSpace:"nowrap" }}>
-                      {typeof cell === "number" ? fmtMoney(cell, { currency }) : cell}
-                    </td>
-                  ))}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+    <Card style={{ padding:"0", overflow:"hidden", marginBottom:"14px", background:"#111c33", border:"1px solid rgba(148,163,184,0.24)" }}>
+      <button onClick={()=>setOpen((v)=>!v)} style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between", background:"rgba(15,23,42,0.92)", border:"none", color:"#e2e8f0", padding:"13px 16px", cursor:"pointer", fontWeight:600, fontSize:"0.84rem" }}>
+        <span style={{ display:"flex", alignItems:"center", gap:"8px" }}>{icon}{title}</span>
+        <ChevronDown size={16} style={{ transform:open?"rotate(180deg)":"rotate(0deg)", transition:"transform 0.2s" }}/>
+      </button>
+      {open && <div style={{ padding:"14px" }}>{children}</div>}
     </Card>
   );
 }
 
-function CategoryAnalyticsTable({ title, rows, currency = "USD", t }) {
+function SearchableMultiYearSelect({ options, selectedYears, onChange, t, font }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
+  const filtered = options.filter((year) => String(year).toLowerCase().includes(query.toLowerCase()));
+  const allSelected = selectedYears.length === 0;
+
   return (
-    <Card style={{ padding:"0", overflow:"hidden", marginBottom:"18px" }}>
-      <div style={{ padding:"14px 16px", borderBottom:`1px solid ${T.border}`, background:T.bgApp }}>
-        <h3 style={{ margin:0, color:T.textPrimary, fontSize:"0.95rem", fontWeight:700 }}>{title}</h3>
-      </div>
-      <div style={{ overflowX:"auto" }}>
-        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.82rem" }}>
-          <thead>
-            <tr style={{ background:T.bgApp }}>
-              <th style={{ padding:"11px 12px", borderBottom:`1px solid ${T.border}`, color:T.textSecondary, fontWeight:700, textAlign:"start" }}>{t.categoryNameLabel}</th>
-              <th style={{ padding:"11px 12px", borderBottom:`1px solid ${T.border}`, color:T.textSecondary, fontWeight:700, textAlign:"start" }}>{t.totalLabel}</th>
-              <th style={{ padding:"11px 12px", borderBottom:`1px solid ${T.border}`, color:T.textSecondary, fontWeight:700, textAlign:"start" }}>{t.breakdownByInvestment}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, idx) => (
-              <tr key={row.category} style={{ background:idx % 2 ? "rgba(148,163,184,0.07)" : "transparent" }}>
-                <td style={{ padding:"10px 12px", borderTop:`1px solid ${T.border}`, color:T.textPrimary, fontWeight:600, whiteSpace:"nowrap" }}>{row.category}</td>
-                <td style={{ padding:"10px 12px", borderTop:`1px solid ${T.border}`, color:T.textSecondary, fontWeight:600, whiteSpace:"nowrap" }}>{fmtMoney(row.total, { currency })}</td>
-                <td style={{ padding:"10px 12px", borderTop:`1px solid ${T.border}`, color:T.textSecondary }}>
-                  {row.breakdown.map((part, partIdx) => (
-                    <div key={`${row.category}-${partIdx}`} style={{ marginBottom:partIdx===row.breakdown.length-1?0:4 }}>
-                      {part.investment}: {fmtMoney(part.amount, { currency })}
-                    </div>
-                  ))}
-                </td>
-              </tr>
+    <div ref={ref} style={{ position:"relative", minWidth:"260px" }}>
+      <button onClick={()=>setOpen((v)=>!v)} style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between", gap:"8px", padding:"9px 10px", border:"1px solid rgba(148,163,184,0.32)", borderRadius:"8px", background:"#111c33", color:"#e2e8f0", fontFamily:font, fontSize:"0.8rem", cursor:"pointer" }}>
+        <span style={{ whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+          {allSelected ? t.allYears : selectedYears.join(", ")}
+        </span>
+        <ChevronDown size={14} style={{ transform:open?"rotate(180deg)":"rotate(0deg)", transition:"transform 0.2s" }} />
+      </button>
+      {open && (
+        <div style={{ position:"absolute", top:"calc(100% + 6px)", left:0, right:0, border:"1px solid rgba(148,163,184,0.3)", borderRadius:"10px", background:"#0b1220", zIndex:30, padding:"10px", boxShadow:"0 8px 30px rgba(2,6,23,0.6)" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:"6px", border:"1px solid rgba(148,163,184,0.25)", borderRadius:"8px", padding:"6px 8px", marginBottom:"8px", color:"#94a3b8" }}>
+            <Search size={14} />
+            <input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder={t.yearFilter} style={{ flex:1, border:"none", outline:"none", background:"transparent", color:"#e2e8f0", fontSize:"0.78rem", fontFamily:font }} />
+          </div>
+          <label style={{ display:"flex", alignItems:"center", gap:"8px", padding:"6px 4px", color:"#e2e8f0", fontSize:"0.78rem", cursor:"pointer" }}>
+            <input type="checkbox" checked={allSelected} onChange={()=>onChange([])} />
+            {t.allYears}
+          </label>
+          <div style={{ maxHeight:"180px", overflowY:"auto", borderTop:"1px solid rgba(148,163,184,0.18)", marginTop:"6px", paddingTop:"6px" }}>
+            {filtered.map((year) => {
+              const key = String(year);
+              const checked = selectedYears.includes(key);
+              return (
+                <label key={key} style={{ display:"flex", alignItems:"center", gap:"8px", padding:"6px 4px", color:"#cbd5e1", fontSize:"0.78rem", cursor:"pointer" }}>
+                  <input type="checkbox" checked={checked} onChange={() => {
+                    onChange(checked ? selectedYears.filter((y)=>y!==key) : [...selectedYears, key]);
+                  }} />
+                  {key}
+                </label>
+              );
+            })}
+            {!filtered.length && <div style={{ color:"#64748b", fontSize:"0.75rem", padding:"8px 4px" }}>No matches</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LegendList({ rows, currency = "USD" }) {
+  return (
+    <div style={{ display:"grid", gap:"8px", minWidth:"190px" }}>
+      {rows.map((row) => (
+        <div key={row.name} style={{ display:"grid", gridTemplateColumns:"14px 1fr auto", gap:"8px", alignItems:"center", fontSize:"0.76rem", color:"#cbd5e1" }}>
+          <span style={{ width:"10px", height:"10px", borderRadius:"999px", background:row.color }} />
+          <span>{row.name}</span>
+          <span style={{ color:"#f8fafc", fontWeight:600 }}>{fmtMoney(row.value, { currency })} ({row.pct.toFixed(1)}%)</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function StatisticsMatrixTable({ title, headers, rows, currency = "USD" }) {
+  return (
+    <div style={{ overflowX:"auto" }}>
+      <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.8rem" }}>
+        <thead>
+          <tr style={{ background:"rgba(15,23,42,0.85)" }}>
+            {headers.map((h) => (
+              <th key={h} style={{ padding:"10px 12px", borderBottom:"1px solid rgba(148,163,184,0.24)", color:"#94a3b8", fontWeight:700, textAlign:"start", whiteSpace:"nowrap" }}>{h}</th>
             ))}
-          </tbody>
-        </table>
-      </div>
-    </Card>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, idx) => {
+            const isTotal = row.isTotal;
+            return (
+              <tr key={row.key || idx} style={{ background:isTotal?"rgba(16,185,129,0.16)":(idx % 2 ? "rgba(148,163,184,0.07)" : "transparent") }}>
+                {row.values.map((cell, ci) => (
+                  <td key={`${row.key||idx}-${ci}`} style={{ padding:"10px 12px", borderTop:"1px solid rgba(148,163,184,0.16)", color:isTotal?"#f8fafc":"#cbd5e1", fontWeight:isTotal?700:500, whiteSpace:"nowrap" }}>
+                    {typeof cell === "number" ? fmtMoney(cell, { currency }) : cell}
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function FundingSourceBreakdownTable({ rows, currency }) {
+  return (
+    <div style={{ overflowX:"auto" }}>
+      <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.8rem" }}>
+        <thead>
+          <tr style={{ background:"rgba(15,23,42,0.85)" }}>
+            <th style={{ padding:"10px 12px", borderBottom:"1px solid rgba(148,163,184,0.24)", color:"#94a3b8", textAlign:"start" }}><span style={{ display:"inline-flex", alignItems:"center", gap:"6px" }}><Landmark size={14}/>Source Name</span></th>
+            <th style={{ padding:"10px 12px", borderBottom:"1px solid rgba(148,163,184,0.24)", color:"#94a3b8", textAlign:"start" }}><span style={{ display:"inline-flex", alignItems:"center", gap:"6px" }}><CircleDollarSign size={14}/>Total Allocated Amount</span></th>
+            <th style={{ padding:"10px 12px", borderBottom:"1px solid rgba(148,163,184,0.24)", color:"#94a3b8", textAlign:"start" }}><span style={{ display:"inline-flex", alignItems:"center", gap:"6px" }}><ListTree size={14}/>Investments List</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, idx) => (
+            <tr key={row.source} style={{ background:idx % 2 ? "rgba(148,163,184,0.07)" : "transparent" }}>
+              <td style={{ padding:"10px 12px", borderTop:"1px solid rgba(148,163,184,0.16)", color:"#f8fafc", fontWeight:600 }}>{row.source}</td>
+              <td style={{ padding:"10px 12px", borderTop:"1px solid rgba(148,163,184,0.16)", color:"#cbd5e1" }}>{fmtMoney(row.total, { currency })}</td>
+              <td style={{ padding:"10px 12px", borderTop:"1px solid rgba(148,163,184,0.16)", color:"#cbd5e1" }}>
+                {row.breakdown.map((item, i) => (
+                  <div key={`${row.source}-${i}`} style={{ marginBottom:i===row.breakdown.length-1?0:4 }}>
+                    {item.investment}: {fmtMoney(item.amount, { currency })}
+                  </div>
+                ))}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
 function StatisticsTab() {
   const { db, t, isRTL, font } = useApp();
-  const [selectedYear, setSelectedYear] = useState("all");
+  const [selectedYears, setSelectedYears] = useState([]);
 
   const investments = visible(db?.investments || []);
   const transactions = visible(db?.transactions || []);
@@ -2052,7 +2129,6 @@ function StatisticsTab() {
   const allCurrencies = portfolios.map(p=>p.currency).filter(Boolean);
   const primaryCurrency = allCurrencies[0] || "USD";
 
-  const bi = (en, ar) => `${en} / ${ar}`;
   const toRiskBucket = (risk) => {
     const val = String(risk || "").toLowerCase();
     if (val.includes("low") || val.includes("منخفض")) return "low";
@@ -2062,11 +2138,10 @@ function StatisticsTab() {
   };
 
   const invById = new Map(investments.map((i) => [i.id, i]));
-  const invNameById = new Map(investments.map((i) => [i.id, i.name || t.unassignedInvestment]));
   const yearlyRows = [...new Set(transactions.map((tx) => new Date(tx.date || tx.created_at || Date.now()).getFullYear()))]
     .filter((y) => Number.isFinite(y))
     .sort((a, b) => b - a);
-  const visibleYears = selectedYear === "all" ? yearlyRows : yearlyRows.filter((y) => String(y) === selectedYear);
+  const visibleYears = selectedYears.length ? yearlyRows.filter((y) => selectedYears.includes(String(y))) : yearlyRows;
 
   const capitalByRisk = { low:0, medium:0, high:0 };
   investments.forEach((inv) => {
@@ -2101,7 +2176,7 @@ function StatisticsTab() {
   });
 
   const capitalRows = [
-    { key:"capital", values:[bi(t.totalCapitalLabel, "إجمالي رأس المال"), capitalByRisk.low, capitalByRisk.medium, capitalByRisk.high, capitalByRisk.low + capitalByRisk.medium + capitalByRisk.high] },
+    { key:"capital", values:[t.totalCapitalLabel, capitalByRisk.low, capitalByRisk.medium, capitalByRisk.high, capitalByRisk.low + capitalByRisk.medium + capitalByRisk.high] },
   ];
 
   const riskProfitRows = visibleYears.map((year) => {
@@ -2112,7 +2187,7 @@ function StatisticsTab() {
     acc[0] += row.values[1]; acc[1] += row.values[2]; acc[2] += row.values[3];
     return acc;
   }, [0, 0, 0]);
-  riskProfitRows.push({ key:"risk-profit-total", isTotal:true, values:[bi(t.totalLabel, "الإجمالي"), riskProfitTotals[0], riskProfitTotals[1], riskProfitTotals[2], riskProfitTotals[0]+riskProfitTotals[1]+riskProfitTotals[2]] });
+  riskProfitRows.push({ key:"risk-profit-total", isTotal:true, values:[t.totalLabel, riskProfitTotals[0], riskProfitTotals[1], riskProfitTotals[2], riskProfitTotals[0]+riskProfitTotals[1]+riskProfitTotals[2]] });
 
   const statusRows = visibleYears.map((year) => {
     const byStatus = incomeByYearStatus[year] || {};
@@ -2120,7 +2195,7 @@ function StatisticsTab() {
     return { key:`status-${year}`, values:[String(year), ...values, values.reduce((sum, n) => sum + n, 0)] };
   });
   const statusTotals = statuses.map((status, idx) => statusRows.reduce((sum, row) => sum + (row.values[idx + 1] || 0), 0));
-  statusRows.push({ key:"status-total", isTotal:true, values:[bi(t.totalLabel, "الإجمالي"), ...statusTotals, statusTotals.reduce((sum, n) => sum + n, 0)] });
+  statusRows.push({ key:"status-total", isTotal:true, values:[t.totalLabel, ...statusTotals, statusTotals.reduce((sum, n) => sum + n, 0)] });
 
   const lossRows = visibleYears.map((year) => {
     const row = lossByYearRisk[year] || { low:0, medium:0, high:0 };
@@ -2130,128 +2205,153 @@ function StatisticsTab() {
     acc[0] += row.values[1]; acc[1] += row.values[2]; acc[2] += row.values[3];
     return acc;
   }, [0, 0, 0]);
-  lossRows.push({ key:"loss-total", isTotal:true, values:[bi(t.totalLabel, "الإجمالي"), lossTotals[0], lossTotals[1], lossTotals[2], lossTotals[0]+lossTotals[1]+lossTotals[2]] });
+  lossRows.push({ key:"loss-total", isTotal:true, values:[t.totalLabel, lossTotals[0], lossTotals[1], lossTotals[2], lossTotals[0]+lossTotals[1]+lossTotals[2]] });
 
-  const categoryUniverse = [...new Set([...(db?.settings?.transactionCategories || []), ...transactions.map((tx) => tx.category || t.uncategorized)])];
-  const categoryRows = categoryUniverse.map((category) => {
-    const relevant = transactions.filter((tx) => (tx.category || t.uncategorized) === category);
-    const total = relevant.reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0);
-    const byInvestment = {};
-    relevant.forEach((tx) => {
-      const key = tx.investmentId || "unassigned";
-      byInvestment[key] = (byInvestment[key] || 0) + (parseFloat(tx.amount) || 0);
+  const fundingSourceUniverse = [...new Set([...(db?.settings?.fundingSources || []), ...investments.flatMap((inv) => (inv.funding || []).map((f) => f.source).filter(Boolean))])];
+  const fundingRows = fundingSourceUniverse.map((source) => {
+    const breakdown = [];
+    let total = 0;
+    investments.forEach((inv) => {
+      const amount = (inv.funding || []).filter((f) => f.source === source).reduce((sum, f) => sum + (parseFloat(f.amount) || 0), 0);
+      if (amount > 0) {
+        breakdown.push({ investment:inv.name || t.unassignedInvestment, amount });
+        total += amount;
+      }
     });
-    const breakdown = Object.entries(byInvestment)
-      .map(([invId, amount]) => ({ investment: invNameById.get(invId) || t.unassignedInvestment, amount }))
-      .sort((a, b) => b.amount - a.amount);
-    if (!breakdown.length) {
-      breakdown.push({ investment:t.unassignedInvestment, amount:0 });
-    }
-    return { category, total, breakdown };
-  }).sort((a, b) => b.total - a.total);
+    if (!breakdown.length) breakdown.push({ investment:t.unassignedInvestment, amount:0 });
+    return { source, total, breakdown };
+  }).filter((row) => row.total > 0 || row.breakdown.length).sort((a,b)=>b.total-a.total);
 
-  const allocationData = portfolios.map((p) => {
-    const portfolioInv = inv_of_portfolio(db, p.id);
-    const value = portfolioInv.reduce((sum, inv) => sum + curVal(inv), 0);
-    return { name:p.name, value };
-  }).filter((item) => item.value > 0);
+  const fundingChartTotal = fundingRows.reduce((sum, row) => sum + row.total, 0);
+  const fundingChartData = fundingRows.filter((row) => row.total > 0).map((row, idx) => ({ ...row, pct:fundingChartTotal ? (row.total / fundingChartTotal) * 100 : 0, color:T.chart[idx % T.chart.length], name:row.source, value:row.total }));
+
+  const riskCapitalData = [
+    { name:t.lowLabel, value:capitalByRisk.low, color:T.positive },
+    { name:t.mediumLabel, value:capitalByRisk.medium, color:T.warning },
+    { name:t.highLabel, value:capitalByRisk.high, color:T.negative },
+  ].filter((row) => row.value > 0);
+  const riskCapitalTotal = riskCapitalData.reduce((s,d)=>s+d.value,0);
+  riskCapitalData.forEach((row) => { row.pct = riskCapitalTotal ? (row.value/riskCapitalTotal)*100 : 0; });
+
+  const riskProfitByBucket = riskProfitTotals;
+  const riskProfitChartData = [
+    { name:t.lowLabel, value:riskProfitByBucket[0], color:T.positive },
+    { name:t.mediumLabel, value:riskProfitByBucket[1], color:T.warning },
+    { name:t.highLabel, value:riskProfitByBucket[2], color:T.negative },
+  ].filter((row) => row.value > 0);
+  const riskProfitTotal = riskProfitChartData.reduce((s,d)=>s+d.value,0);
+  riskProfitChartData.forEach((row) => { row.pct = riskProfitTotal ? (row.value/riskProfitTotal)*100 : 0; });
 
   return (
-    <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font }}>
+    <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font, background:"#0f172a", borderRadius:"14px", padding:"16px" }}>
       <div style={{ marginBottom:"18px", display:"flex", justifyContent:"space-between", gap:"10px", alignItems:"flex-end", flexWrap:"wrap" }}>
         <div>
-          <h2 style={{ margin:0, fontSize:"1.45rem", color:T.textPrimary }}>{bi(t.statistics, "الإحصائيات")}</h2>
-          <div style={{ marginTop:"4px", fontSize:"0.82rem", color:T.textMuted }}>{bi(t.statisticsCenter, "مركز الإحصائيات")}</div>
+          <h2 style={{ margin:0, fontSize:"1.45rem", color:"#f8fafc" }}>{t.statistics}</h2>
+          <div style={{ marginTop:"4px", fontSize:"0.82rem", color:"#94a3b8" }}>{t.statisticsCenter}</div>
         </div>
         <div>
-          <label style={{ display:"block", marginBottom:"6px", fontSize:"0.74rem", color:T.textMuted }}>{bi(t.yearFilter, "مرشح السنة")}</label>
-          <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} style={{ minWidth:"180px", padding:"8px 10px", border:`1px solid ${T.border}`, borderRadius:"8px", background:T.bgCard, color:T.textPrimary, fontFamily:font }}>
-            <option value="all">{bi(t.allYears, "كل السنوات")}</option>
-            {yearlyRows.map((year) => <option key={year} value={String(year)}>{year}</option>)}
-          </select>
+          <label style={{ display:"block", marginBottom:"6px", fontSize:"0.74rem", color:"#94a3b8" }}>{t.yearFilter}</label>
+          <SearchableMultiYearSelect options={yearlyRows} selectedYears={selectedYears} onChange={setSelectedYears} t={t} font={font} />
         </div>
       </div>
 
-      <StatisticsMatrixTable
-        title={bi(t.investmentVolumeRiskMatrix, "مصفوفة حجم الاستثمار مقابل المخاطرة")}
-        currency={primaryCurrency}
-        headers={[
-          bi(t.totalCapitalLabel, "إجمالي رأس المال"),
-          bi(t.lowLabel, "منخفض"),
-          bi(t.mediumLabel, "متوسط"),
-          bi(t.highLabel, "مرتفع"),
-          bi(t.grandTotalLabel, "الإجمالي الكلي"),
-        ]}
-        rows={capitalRows}
-      />
+      <div style={{ display:"grid", gap:"14px", gridTemplateColumns:"repeat(auto-fit, minmax(300px, 1fr))", marginBottom:"16px" }}>
+        <Card style={{ padding:"14px", background:"#111c33", border:"1px solid rgba(148,163,184,0.24)" }}>
+          <h3 style={{ margin:"0 0 10px", color:"#f8fafc", fontSize:"0.88rem" }}>{t.investmentVolumeRiskMatrix}</h3>
+          <div style={{ display:"flex", gap:"10px", alignItems:"center", flexWrap:"wrap" }}>
+            <div style={{ flex:"1 1 180px", height:"220px" }}>
+              {riskCapitalData.length ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={riskCapitalData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={78}>
+                      {riskCapitalData.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
+                    </Pie>
+                    <Tooltip formatter={(value) => fmtMoney(value, { currency:primaryCurrency })} />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : <div style={{ display:"grid", placeItems:"center", height:"100%", color:"#64748b" }}>{t.noAllocation}</div>}
+            </div>
+            <LegendList rows={riskCapitalData} currency={primaryCurrency} />
+          </div>
+        </Card>
 
-      <StatisticsMatrixTable
-        title={bi(t.annualProfitsByRiskLevel, "الأرباح السنوية حسب المخاطرة")}
-        currency={primaryCurrency}
-        headers={[
-          bi(t.yearLabel, "السنة"),
-          bi(t.lowLabel, "منخفض"),
-          bi(t.mediumLabel, "متوسط"),
-          bi(t.highLabel, "مرتفع"),
-          bi(t.totalLabel, "الإجمالي"),
-        ]}
-        rows={riskProfitRows}
-      />
+        <Card style={{ padding:"14px", background:"#111c33", border:"1px solid rgba(148,163,184,0.24)" }}>
+          <h3 style={{ margin:"0 0 10px", color:"#f8fafc", fontSize:"0.88rem" }}>{t.annualProfitsByRiskLevel}</h3>
+          <div style={{ display:"flex", gap:"10px", alignItems:"center", flexWrap:"wrap" }}>
+            <div style={{ flex:"1 1 180px", height:"220px" }}>
+              {riskProfitChartData.length ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={riskProfitChartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" />
+                    <XAxis dataKey="name" stroke="#94a3b8" tick={{ fill:"#94a3b8", fontSize:11 }} />
+                    <YAxis stroke="#94a3b8" tick={{ fill:"#94a3b8", fontSize:11 }} />
+                    <Tooltip formatter={(value) => fmtMoney(value, { currency:primaryCurrency })} />
+                    <Bar dataKey="value" radius={[6,6,0,0]}>
+                      {riskProfitChartData.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : <div style={{ display:"grid", placeItems:"center", height:"100%", color:"#64748b" }}>{t.noAllocation}</div>}
+            </div>
+            <LegendList rows={riskProfitChartData} currency={primaryCurrency} />
+          </div>
+        </Card>
 
-      <StatisticsMatrixTable
-        title={bi(t.annualProfitsByStatus, "الأرباح السنوية حسب حالة المعاملة")}
-        currency={primaryCurrency}
-        headers={[
-          bi(t.yearLabel, "السنة"),
-          ...statuses.map((status) => status),
-          bi(t.totalLabel, "الإجمالي"),
-        ]}
-        rows={statusRows}
-      />
+        <Card style={{ padding:"14px", background:"#111c33", border:"1px solid rgba(148,163,184,0.24)" }}>
+          <h3 style={{ margin:"0 0 10px", color:"#f8fafc", fontSize:"0.88rem" }}>Total Investment by Funding Source</h3>
+          <div style={{ display:"flex", gap:"10px", alignItems:"center", flexWrap:"wrap" }}>
+            <div style={{ flex:"1 1 180px", height:"220px" }}>
+              {fundingChartData.length ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={fundingChartData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={78}>
+                      {fundingChartData.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
+                    </Pie>
+                    <Tooltip formatter={(value) => fmtMoney(value, { currency:primaryCurrency })} />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : <div style={{ display:"grid", placeItems:"center", height:"100%", color:"#64748b" }}>{t.noFunding}</div>}
+            </div>
+            <LegendList rows={fundingChartData} currency={primaryCurrency} />
+          </div>
+        </Card>
+      </div>
 
-      <StatisticsMatrixTable
-        title={bi(t.lossAnalysisMatrix, "مصفوفة تحليل الخسائر")}
-        currency={primaryCurrency}
-        headers={[
-          bi(t.yearLabel, "السنة"),
-          bi(t.lowLabel, "منخفض"),
-          bi(t.mediumLabel, "متوسط"),
-          bi(t.highLabel, "مرتفع"),
-          bi(t.totalLabel, "الإجمالي"),
-        ]}
-        rows={lossRows}
-      />
+      <AccordionSection title={t.investmentVolumeRiskMatrix} icon={<PieChartIcon size={14} color="#94a3b8" />}>
+        <StatisticsMatrixTable
+          currency={primaryCurrency}
+          headers={[t.totalCapitalLabel, t.lowLabel, t.mediumLabel, t.highLabel, t.grandTotalLabel]}
+          rows={capitalRows}
+        />
+      </AccordionSection>
 
-      <CategoryAnalyticsTable
-        title={bi(t.centralizedCategoryAnalytics, "تحليلات العناصر/الفئات المركزية")}
-        rows={categoryRows}
-        currency={primaryCurrency}
-        t={{
-          categoryNameLabel: bi(t.categoryNameLabel, "اسم الفئة"),
-          totalLabel: bi(t.totalLabel, "الإجمالي"),
-          breakdownByInvestment: bi(t.breakdownByInvestment, "تفصيل حسب الاستثمار"),
-        }}
-      />
+      <AccordionSection title={t.annualProfitsByRiskLevel} icon={<BarChart2 size={14} color="#94a3b8" />}>
+        <StatisticsMatrixTable
+          currency={primaryCurrency}
+          headers={[t.yearLabel, t.lowLabel, t.mediumLabel, t.highLabel, t.totalLabel]}
+          rows={riskProfitRows}
+        />
+      </AccordionSection>
 
-      <Card style={{ padding:"16px" }}>
-        <h3 style={{ margin:"0 0 12px", color:T.textPrimary, fontSize:"0.95rem" }}>{bi(t.assetAllocationOverview, "نظرة توزيع الأصول")}</h3>
-        <div style={{ height:"300px" }}>
-          {allocationData.length ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={allocationData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label>
-                  {allocationData.map((_, idx) => (
-                    <Cell key={`alloc-${idx}`} fill={T.chart[idx % T.chart.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => fmtMoney(value, { currency:primaryCurrency })} />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : (
-            <div style={{ display:"grid", placeItems:"center", height:"100%", color:T.textMuted }}>{t.noAllocation}</div>
-          )}
-        </div>
-      </Card>
+      <AccordionSection title={t.annualProfitsByStatus} icon={<Layers size={14} color="#94a3b8" />}>
+        <StatisticsMatrixTable
+          currency={primaryCurrency}
+          headers={[t.yearLabel, ...statuses, t.totalLabel]}
+          rows={statusRows}
+        />
+      </AccordionSection>
+
+      <AccordionSection title={t.lossAnalysisMatrix} icon={<ArrowDownRight size={14} color="#94a3b8" />}>
+        <StatisticsMatrixTable
+          currency={primaryCurrency}
+          headers={[t.yearLabel, t.lowLabel, t.mediumLabel, t.highLabel, t.totalLabel]}
+          rows={lossRows}
+        />
+      </AccordionSection>
+
+      <AccordionSection title="Funding Source Breakdown" icon={<Landmark size={14} color="#94a3b8" />}>
+        <FundingSourceBreakdownTable rows={fundingRows} currency={primaryCurrency} />
+      </AccordionSection>
     </div>
   );
 }
@@ -2306,7 +2406,10 @@ function MainApp() {
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} isOpen={sidebarOpen} setIsOpen={setSidebarOpen} pinned={sidebarPinned} setPinned={setSidebarPinned}/>
 
       {!sidebarPinned && !sidebarOpen && (
-        <button onClick={()=>setSidebarOpen(true)} style={{ position:"fixed",left:"14px",top:"14px",zIndex:40,background:T.bgSidebar,color:"#fff",border:`1px solid ${T.borderDark}`,borderRadius:"8px",padding:"7px",display:"flex",cursor:"pointer" }}><PanelLeft size={14}/></button>
+        <div
+          onMouseEnter={()=>setSidebarOpen(true)}
+          style={{ position:"fixed", left:0, top:0, width:"14px", height:"100vh", zIndex:45 }}
+        />
       )}
 
       <main style={{ flex:1,overflowY:"auto",padding:"32px 36px",maxWidth:"100%" }}>
