@@ -90,6 +90,8 @@ const TRANSLATIONS = {
     totalLabel: "Total",
     investmentVolumeRiskMatrix: "Investment Volume vs Risk Matrix",
     annualProfitsByRiskLevel: "Annual Profits by Risk Level",
+    totalInvestmentByFundingSource: "Total Investment by Funding Source",
+    assetAllocationByPortfolio: "Asset Allocation (By Portfolio)",
     annualProfitsByStatus: "Annual Profits by Transaction Status",
     lossAnalysisMatrix: "Loss Analysis Matrix",
     assetAllocationOverview: "Asset Allocation Overview",
@@ -166,6 +168,8 @@ const TRANSLATIONS = {
     transactionCategories: "Transaction Categories",
     currencies: "Currencies",
     addItem: "Add",
+    renameItem: "Rename item",
+    noItemsYet: "No items yet",
     dataStorage: "Data stored in",
     language: "Language",
     selectPortfolio: "Select Portfolio",
@@ -245,6 +249,8 @@ const TRANSLATIONS = {
     totalLabel: "الإجمالي",
     investmentVolumeRiskMatrix: "مصفوفة حجم الاستثمار مقابل المخاطرة",
     annualProfitsByRiskLevel: "الأرباح السنوية حسب المخاطرة",
+    totalInvestmentByFundingSource: "إجمالي الاستثمار حسب مصدر التمويل",
+    assetAllocationByPortfolio: "توزيع الأصول (حسب المحفظة)",
     annualProfitsByStatus: "الأرباح السنوية حسب حالة المعاملة",
     lossAnalysisMatrix: "مصفوفة تحليل الخسائر",
     assetAllocationOverview: "نظرة توزيع الأصول",
@@ -321,6 +327,8 @@ const TRANSLATIONS = {
     transactionCategories: "فئات المعاملات",
     currencies: "العملات",
     addItem: "إضافة",
+    renameItem: "إعادة تسمية العنصر",
+    noItemsYet: "لا توجد عناصر بعد",
     dataStorage: "البيانات محفوظة في",
     language: "اللغة",
     selectPortfolio: "اختر المحفظة",
@@ -1046,7 +1054,7 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, pinned, setPinned
               background:active?T.emeraldBg:"transparent",
               color:active?T.emerald:T.textSidebarMuted,
               fontSize:"0.83rem",fontWeight:active?600:400,cursor:"pointer",
-              textAlign:"left",transition:"all 0.15s",marginBottom:"2px",
+              textAlign:isRTL?"right":"left",transition:"all 0.15s",marginBottom:"2px",
               borderLeft:active?`2px solid ${T.emerald}`:"2px solid transparent",
               justifyContent:showLabels?"flex-start":"center",
             }}
@@ -1732,6 +1740,19 @@ function TransactionsTab({ modalPrefill }) {
 
   const STATUS_COLORS = { recorded:T.positive, scheduled:T.warning, cancelled:T.negative };
   const typeOpts = [{value:"income",label:t.income},{value:"expense",label:t.expense}];
+  const dateFormatter = useMemo(() => new Intl.DateTimeFormat(isRTL ? "ar" : "en-GB", { day:"2-digit", month:"2-digit", year:"numeric" }), [isRTL]);
+
+  const formatShortDate = (value) => {
+    if (!value) return "—";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "—";
+    return dateFormatter.format(parsed);
+  };
+
+  const isScheduledOrPending = (status) => {
+    const normalized = String(status || "").toLowerCase();
+    return normalized.includes("schedule") || normalized.includes("pending") || normalized.includes("مجد") || normalized.includes("انتظار") || normalized.includes("قيد");
+  };
   const statusOpts = ((db?.settings?.transactionStatuses&&db.settings.transactionStatuses.length)?db.settings.transactionStatuses:["recorded","scheduled","cancelled"]).map(v=>({ value:v, label:v }));
 
   useEffect(() => {
@@ -1769,14 +1790,15 @@ function TransactionsTab({ modalPrefill }) {
       </div>
 
       <Card style={{ overflow:"hidden" }}>
+        <div style={{ overflowX:"auto" }}>
         {sorted.length===0
           ? <div style={{ padding:"32px" }}><EmptyState text={t.noRecords}/></div>
           : (
-            <table style={{ width:"100%",borderCollapse:"collapse",fontSize:"0.85rem" }}>
+            <table style={{ width:"100%",minWidth:"900px",borderCollapse:"collapse",fontSize:"0.85rem" }}>
               <thead>
                 <tr style={{ background:T.bgApp }}>
-                  {[t.date,t.category,t.portfolio,t.investment,t.amount,t.transactionType,t.status,""].map((h,i)=>(
-                    <th key={i} style={{ padding:"10px 14px",textAlign:"left",fontSize:"0.7rem",fontWeight:600,color:T.textMuted,borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap" }}>{h}</th>
+                  {[t.date,t.dueDate,t.category,t.portfolio,t.investment,t.amount,t.transactionType,t.status,""].map((h,i)=>(
+                    <th key={i} style={{ padding:"10px 14px",textAlign:isRTL?"right":"left",fontSize:"0.7rem",fontWeight:600,color:T.textMuted,borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -1790,6 +1812,7 @@ function TransactionsTab({ modalPrefill }) {
                       onMouseLeave={e=>e.currentTarget.style.background="transparent"}
                     >
                       <td style={{ padding:"11px 14px",color:T.textSecondary }}>{tx.date||"—"}</td>
+                      <td style={{ padding:"11px 14px",color:T.textSecondary }}>{isScheduledOrPending(tx.status) ? formatShortDate(tx.dueDate) : "—"}</td>
                       <td style={{ padding:"11px 14px",fontWeight:500,color:T.textPrimary }}>{tx.category||"—"}</td>
                       <td style={{ padding:"11px 14px",color:T.textSecondary }}>{ptf?.name||"—"}</td>
                       <td style={{ padding:"11px 14px",color:T.textSecondary }}>{inv?.name||"—"}</td>
@@ -1818,6 +1841,7 @@ function TransactionsTab({ modalPrefill }) {
             </table>
           )
         }
+        </div>
       </Card>
 
       {showModal && (
@@ -1892,6 +1916,7 @@ function TxActionMenu({ tx, onClose }) {
 function SettingsTab() {
   const { db, updateDb, t, isRTL, font } = useApp();
   const [newItems, setNewItems] = useState({});
+  const [editingItems, setEditingItems] = useState({});
 
   const sections = [
     { key:"portfolioTypes",        label:t.portfolioTypes,        icon:<FolderOpen size={15}/> },
@@ -1915,6 +1940,38 @@ function SettingsTab() {
     updateDb(prev=>({ ...prev, settings:{ ...prev.settings, [key]:prev.settings[key].filter((_,i)=>i!==idx) } }));
   };
 
+  const startEditItem = (key, idx, value) => {
+    setEditingItems((prev) => ({ ...prev, [`${key}-${idx}`]: value }));
+  };
+
+  const cancelEditItem = (key, idx) => {
+    setEditingItems((prev) => {
+      const next = { ...prev };
+      delete next[`${key}-${idx}`];
+      return next;
+    });
+  };
+
+  const saveEditItem = (key, idx) => {
+    const editKey = `${key}-${idx}`;
+    const nextValue = (editingItems[editKey] || "").trim();
+    if (!nextValue) return;
+
+    updateDb((prev) => {
+      const current = prev.settings[key] || [];
+      if (current.some((item, itemIdx) => itemIdx !== idx && item === nextValue)) return prev;
+      return {
+        ...prev,
+        settings: {
+          ...prev.settings,
+          [key]: current.map((item, itemIdx) => itemIdx === idx ? nextValue : item),
+        },
+      };
+    });
+
+    cancelEditItem(key, idx);
+  };
+
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font }}>
       <div style={{ marginBottom:"24px" }}>
@@ -1932,27 +1989,59 @@ function SettingsTab() {
 
             {/* Tags */}
             <div style={{ display:"flex",flexWrap:"wrap",gap:"6px",marginBottom:"12px",minHeight:"28px" }}>
-              {(db?.settings?.[key]||[]).map((item,i)=>(
-                <span key={i} style={{
-                  display:"inline-flex",alignItems:"center",gap:"4px",padding:"3px 10px",
-                  background:T.bgApp,border:`1px solid ${T.border}`,borderRadius:"100px",
-                  fontSize:"0.76rem",fontWeight:500,color:T.textSecondary,
-                }}>
-                  {item}
-                  <button onClick={()=>removeItem(key,i)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"0",lineHeight:1,display:"flex",marginLeft:"2px" }}
-                    onMouseEnter={e=>e.currentTarget.style.color=T.negative}
-                    onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}
-                  ><X size={11}/></button>
-                </span>
-              ))}
-              {(db?.settings?.[key]||[]).length===0 && <span style={{ fontSize:"0.74rem",color:T.textMuted,fontStyle:"italic" }}>No items yet</span>}
+              {(db?.settings?.[key]||[]).map((item,i)=>{
+                const editKey = `${key}-${i}`;
+                const isEditing = editingItems[editKey] !== undefined;
+                return (
+                  <span key={i} style={{
+                    display:"inline-flex",alignItems:"center",gap:"4px",padding:"3px 10px",
+                    background:T.bgApp,border:`1px solid ${isEditing ? T.emerald : T.border}`,borderRadius:"100px",
+                    fontSize:"0.76rem",fontWeight:500,color:T.textSecondary,
+                  }}>
+                    {isEditing ? (
+                      <input
+                        value={editingItems[editKey]}
+                        onChange={(e)=>setEditingItems((prev)=>({ ...prev, [editKey]:e.target.value }))}
+                        onKeyDown={(e)=>{
+                          if (e.key === "Enter") saveEditItem(key, i);
+                          if (e.key === "Escape") cancelEditItem(key, i);
+                        }}
+                        autoFocus
+                        style={{ width:"120px",maxWidth:"24vw",padding:"2px 6px",background:T.bgInput,border:`1px solid ${T.border}`,borderRadius:"6px",color:T.textPrimary,fontSize:"0.74rem",outline:"none",fontFamily:font }}
+                        dir={isRTL?"rtl":"ltr"}
+                        aria-label={t.renameItem}
+                      />
+                    ) : (
+                      <>{item}</>
+                    )}
+                    {isEditing ? (
+                      <>
+                        <button onClick={()=>saveEditItem(key,i)} style={{ background:"none",border:"none",cursor:"pointer",color:T.positive,padding:"0",lineHeight:1,display:"flex",marginInlineStart:"2px" }}><Check size={11}/></button>
+                        <button onClick={()=>cancelEditItem(key,i)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"0",lineHeight:1,display:"flex" }}><X size={11}/></button>
+                      </>
+                    ) : (
+                      <>
+                        <button onClick={()=>startEditItem(key,i,item)} title={t.edit} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"0",lineHeight:1,display:"flex",marginInlineStart:"2px" }}
+                          onMouseEnter={e=>e.currentTarget.style.color=T.emerald}
+                          onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}
+                        ><Edit3 size={11}/></button>
+                        <button onClick={()=>removeItem(key,i)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"0",lineHeight:1,display:"flex" }}
+                          onMouseEnter={e=>e.currentTarget.style.color=T.negative}
+                          onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}
+                        ><X size={11}/></button>
+                      </>
+                    )}
+                  </span>
+                );
+              })}
+              {(db?.settings?.[key]||[]).length===0 && <span style={{ fontSize:"0.74rem",color:T.textMuted,fontStyle:"italic" }}>{t.noItemsYet}</span>}
             </div>
 
             {/* Add new */}
             <div style={{ display:"flex",gap:"6px" }}>
               <input value={newItems[key]||""} onChange={e=>setNewItems(p=>({...p,[key]:e.target.value}))}
                 onKeyDown={e=>e.key==="Enter"&&addItem(key)}
-                placeholder={`Add ${label}...`} dir={isRTL?"rtl":"ltr"}
+                placeholder={`${t.addItem} ${label}...`} dir={isRTL?"rtl":"ltr"}
                 style={{ flex:1,padding:"7px 10px",background:T.bgInput,border:`1px solid ${T.border}`,borderRadius:"7px",color:T.textPrimary,fontSize:"0.82rem",outline:"none",fontFamily:font }}
                 onFocus={e=>e.currentTarget.style.borderColor=T.emerald}
                 onBlur={e=>e.currentTarget.style.borderColor=T.border}
@@ -2225,6 +2314,18 @@ function StatisticsTab() {
   const fundingChartTotal = fundingRows.reduce((sum, row) => sum + row.total, 0);
   const fundingChartData = fundingRows.filter((row) => row.total > 0).map((row, idx) => ({ ...row, pct:fundingChartTotal ? (row.total / fundingChartTotal) * 100 : 0, color:T.chart[idx % T.chart.length], name:row.source, value:row.total }));
 
+  const portfolioAllocationBase = portfolios.map((portfolio) => {
+    const portfolioInvestments = investments.filter((investment) => investment.portfolioId === portfolio.id);
+    const value = portfolioInvestments.reduce((sum, investment) => sum + curVal(investment), 0);
+    return { name:portfolio.name, value };
+  }).filter((row) => row.value > 0);
+  const portfolioAllocationTotal = portfolioAllocationBase.reduce((sum, row) => sum + row.value, 0);
+  const portfolioAllocationData = portfolioAllocationBase.map((row, idx) => ({
+    ...row,
+    pct:portfolioAllocationTotal ? (row.value / portfolioAllocationTotal) * 100 : 0,
+    color:T.chart[idx % T.chart.length],
+  }));
+
   const riskCapitalData = [
     { name:t.lowLabel, value:capitalByRisk.low, color:T.positive },
     { name:t.mediumLabel, value:capitalByRisk.medium, color:T.warning },
@@ -2255,7 +2356,7 @@ function StatisticsTab() {
         </div>
       </div>
 
-      <div style={{ display:"grid", gap:"14px", gridTemplateColumns:"repeat(auto-fit, minmax(300px, 1fr))", marginBottom:"16px" }}>
+      <div style={{ display:"grid", gap:"14px", gridTemplateColumns:"repeat(auto-fit, minmax(280px, 1fr))", marginBottom:"16px" }}>
         <Card style={{ padding:"14px", background:"#111c33", border:"1px solid rgba(148,163,184,0.24)" }}>
           <h3 style={{ margin:"0 0 10px", color:"#f8fafc", fontSize:"0.88rem" }}>{t.investmentVolumeRiskMatrix}</h3>
           <div style={{ display:"flex", gap:"10px", alignItems:"center", flexWrap:"wrap" }}>
@@ -2298,7 +2399,7 @@ function StatisticsTab() {
         </Card>
 
         <Card style={{ padding:"14px", background:"#111c33", border:"1px solid rgba(148,163,184,0.24)" }}>
-          <h3 style={{ margin:"0 0 10px", color:"#f8fafc", fontSize:"0.88rem" }}>Total Investment by Funding Source</h3>
+          <h3 style={{ margin:"0 0 10px", color:"#f8fafc", fontSize:"0.88rem" }}>{t.totalInvestmentByFundingSource}</h3>
           <div style={{ display:"flex", gap:"10px", alignItems:"center", flexWrap:"wrap" }}>
             <div style={{ flex:"1 1 180px", height:"220px" }}>
               {fundingChartData.length ? (
@@ -2313,6 +2414,25 @@ function StatisticsTab() {
               ) : <div style={{ display:"grid", placeItems:"center", height:"100%", color:"#64748b" }}>{t.noFunding}</div>}
             </div>
             <LegendList rows={fundingChartData} currency={primaryCurrency} />
+          </div>
+        </Card>
+
+        <Card style={{ padding:"14px", background:"#111c33", border:"1px solid rgba(148,163,184,0.24)" }}>
+          <h3 style={{ margin:"0 0 10px", color:"#f8fafc", fontSize:"0.88rem" }}>{t.assetAllocationByPortfolio}</h3>
+          <div style={{ display:"flex", gap:"10px", alignItems:"center", flexWrap:"wrap" }}>
+            <div style={{ flex:"1 1 180px", height:"220px" }}>
+              {portfolioAllocationData.length ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={portfolioAllocationData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={78}>
+                      {portfolioAllocationData.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
+                    </Pie>
+                    <Tooltip formatter={(value) => fmtMoney(value, { currency:primaryCurrency })} />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : <div style={{ display:"grid", placeItems:"center", height:"100%", color:"#64748b" }}>{t.noAllocation}</div>}
+            </div>
+            <LegendList rows={portfolioAllocationData} currency={primaryCurrency} />
           </div>
         </Card>
       </div>
