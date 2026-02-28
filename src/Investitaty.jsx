@@ -47,7 +47,7 @@ const TRANSLATIONS = {
     loadingApis: "Loading Google APIs...",
     privacyFirst: "Privacy-First",
     driveSynced: "Drive-Synced",
-    privacyNote: "Your data is stored exclusively in your own Google Drive. We never see your investments.",
+    privacyNote: "Your data is stored exclusively in your own Google Drive. We never see your investments. <br/> Developed and Owned by Wafiq Abdulrahman",
     loading: "LOADING YOUR PORTFOLIO...",
     synced: "SYNCED",
     syncing: "SYNCING...",
@@ -202,7 +202,7 @@ const TRANSLATIONS = {
     loadingApis: "تحميل واجهات Google...",
     privacyFirst: "خصوصية أولاً",
     driveSynced: "مزامنة Drive",
-    privacyNote: "بياناتك محفوظة في Google Drive الخاص بك فقط. نحن لا نرى استثماراتك.",
+    privacyNote: "بياناتك محفوظة في Google Drive الخاص بك فقط. نحن لا نرى استثماراتك. <br/> مطور ومملوك بواسطة وفيق عبد الرحمن",
     loading: "جارٍ تحميل محفظتك...",
     synced: "تمت المزامنة",
     syncing: "جارٍ المزامنة...",
@@ -987,7 +987,7 @@ function LoadingScreen({ message }) {
 // SIDEBAR
 // ═══════════════════════════════════════════════════════════════════════════════
 function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, pinned, setPinned }) {
-  const { user, signOut, syncing, t, font, lang, setLang } = useApp();
+  const { user, signOut, syncing, t, font, lang, setLang, isRTL } = useApp();
 
   const navItems = [
     { id:"dashboard",    label:t.dashboard,    icon:<BarChart2 size={17}/> },
