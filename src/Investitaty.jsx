@@ -4,7 +4,7 @@ import {
   X, Trash2, Check, Edit3, MoreVertical, Zap, BookOpen,
   RefreshCw, ChevronDown, ChevronRight, Plus, Settings,
   TrendingUp, Wallet, DollarSign, BarChart2, Globe, LogOut,
-  Cloud, Shield, Layers, Tag, FolderOpen, ArrowUpRight,
+  Cloud, Shield, Layers, Tag, FolderOpen, ArrowUpRight, PieChart as PieChartIcon,
   ArrowDownRight, Eye, EyeOff, AlertCircle, CheckCircle2, PanelLeft, Pin, PinOff,
 } from "lucide-react";
 
@@ -55,6 +55,7 @@ const TRANSLATIONS = {
     portfolios: "Portfolios",
     investments: "Investments",
     transactions: "Transactions",
+    statistics: "Statistics",
     settings: "Settings",
     goodMorning: "Good morning",
     goodAfternoon: "Good afternoon",
@@ -74,6 +75,28 @@ const TRANSLATIONS = {
     assetAllocation: "Asset Allocation",
     upcomingCashFlow: "Upcoming Cash Flow",
     fundingPerformance: "Funding Performance",
+    statisticsCenter: "Statistics Center",
+    yearFilter: "Year Filter",
+    allYears: "All Years",
+    yearLabel: "Year",
+    riskLevelLabel: "Risk Level",
+    lowLabel: "Low",
+    mediumLabel: "Medium",
+    highLabel: "High",
+    transactionStatusLabel: "Transaction Status",
+    totalCapitalLabel: "Total Capital",
+    grandTotalLabel: "Grand Total",
+    totalLabel: "Total",
+    investmentVolumeRiskMatrix: "Investment Volume vs Risk Matrix",
+    annualProfitsByRiskLevel: "Annual Profits by Risk Level",
+    annualProfitsByStatus: "Annual Profits by Transaction Status",
+    lossAnalysisMatrix: "Loss Analysis Matrix",
+    assetAllocationOverview: "Asset Allocation Overview",
+    centralizedCategoryAnalytics: "Centralized Item/Category Analytics",
+    categoryNameLabel: "Category Name",
+    breakdownByInvestment: "Breakdown by Investment",
+    uncategorized: "Uncategorized",
+    unassignedInvestment: "Unassigned Investment",
     noScheduled: "No scheduled transactions.",
     noFunding: "No funding records yet.",
     noAllocation: "No allocation data yet.",
@@ -187,6 +210,7 @@ const TRANSLATIONS = {
     portfolios: "المحافظ",
     investments: "الاستثمارات",
     transactions: "المعاملات",
+    statistics: "الإحصائيات",
     settings: "الإعدادات",
     goodMorning: "صباح الخير",
     goodAfternoon: "مساء الخير",
@@ -206,6 +230,28 @@ const TRANSLATIONS = {
     assetAllocation: "توزيع الأصول",
     upcomingCashFlow: "التدفق النقدي القادم",
     fundingPerformance: "أداء التمويل",
+    statisticsCenter: "مركز الإحصائيات",
+    yearFilter: "مرشح السنة",
+    allYears: "كل السنوات",
+    yearLabel: "السنة",
+    riskLevelLabel: "مستوى المخاطرة",
+    lowLabel: "منخفض",
+    mediumLabel: "متوسط",
+    highLabel: "مرتفع",
+    transactionStatusLabel: "حالة المعاملة",
+    totalCapitalLabel: "إجمالي رأس المال",
+    grandTotalLabel: "الإجمالي الكلي",
+    totalLabel: "الإجمالي",
+    investmentVolumeRiskMatrix: "مصفوفة حجم الاستثمار مقابل المخاطرة",
+    annualProfitsByRiskLevel: "الأرباح السنوية حسب المخاطرة",
+    annualProfitsByStatus: "الأرباح السنوية حسب حالة المعاملة",
+    lossAnalysisMatrix: "مصفوفة تحليل الخسائر",
+    assetAllocationOverview: "نظرة توزيع الأصول",
+    centralizedCategoryAnalytics: "تحليلات العناصر/الفئات المركزية",
+    categoryNameLabel: "اسم الفئة",
+    breakdownByInvestment: "تفصيل حسب الاستثمار",
+    uncategorized: "غير مصنف",
+    unassignedInvestment: "استثمار غير محدد",
     noScheduled: "لا توجد معاملات مجدولة.",
     noFunding: "لا توجد سجلات تمويل بعد.",
     noAllocation: "لا توجد بيانات توزيع بعد.",
@@ -947,6 +993,7 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, pinned, setPinned
     { id:"portfolios",   label:t.portfolios,   icon:<FolderOpen size={17}/> },
     { id:"investments",  label:t.investments,  icon:<Wallet size={17}/> },
     { id:"transactions", label:t.transactions, icon:<DollarSign size={17}/> },
+    { id:"statistics",   label:t.statistics,   icon:<PieChartIcon size={17}/> },
     { id:"settings",     label:t.settings,     icon:<Settings size={17}/> },
   ];
 
@@ -1924,6 +1971,291 @@ function SettingsTab() {
   );
 }
 
+function StatisticsMatrixTable({ title, headers, rows, currency = "USD" }) {
+  return (
+    <Card style={{ padding:"0", overflow:"hidden", marginBottom:"18px" }}>
+      <div style={{ padding:"14px 16px", borderBottom:`1px solid ${T.border}`, background:T.bgApp }}>
+        <h3 style={{ margin:0, color:T.textPrimary, fontSize:"0.95rem", fontWeight:700 }}>{title}</h3>
+      </div>
+      <div style={{ overflowX:"auto" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.82rem" }}>
+          <thead>
+            <tr style={{ background:T.bgApp }}>
+              {headers.map((h) => (
+                <th key={h} style={{ padding:"11px 12px", borderBottom:`1px solid ${T.border}`, color:T.textSecondary, fontWeight:700, textAlign:"start", whiteSpace:"nowrap" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, idx) => {
+              const isTotal = row.isTotal;
+              return (
+                <tr key={row.key || idx} style={{ background:isTotal?"rgba(16,185,129,0.08)":(idx % 2 ? "rgba(148,163,184,0.07)" : "transparent") }}>
+                  {row.values.map((cell, ci) => (
+                    <td key={`${row.key||idx}-${ci}`} style={{ padding:"10px 12px", borderTop:`1px solid ${T.border}`, color:isTotal?T.textPrimary:T.textSecondary, fontWeight:isTotal?700:500, whiteSpace:"nowrap" }}>
+                      {typeof cell === "number" ? fmtMoney(cell, { currency }) : cell}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+function CategoryAnalyticsTable({ title, rows, currency = "USD", t }) {
+  return (
+    <Card style={{ padding:"0", overflow:"hidden", marginBottom:"18px" }}>
+      <div style={{ padding:"14px 16px", borderBottom:`1px solid ${T.border}`, background:T.bgApp }}>
+        <h3 style={{ margin:0, color:T.textPrimary, fontSize:"0.95rem", fontWeight:700 }}>{title}</h3>
+      </div>
+      <div style={{ overflowX:"auto" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.82rem" }}>
+          <thead>
+            <tr style={{ background:T.bgApp }}>
+              <th style={{ padding:"11px 12px", borderBottom:`1px solid ${T.border}`, color:T.textSecondary, fontWeight:700, textAlign:"start" }}>{t.categoryNameLabel}</th>
+              <th style={{ padding:"11px 12px", borderBottom:`1px solid ${T.border}`, color:T.textSecondary, fontWeight:700, textAlign:"start" }}>{t.totalLabel}</th>
+              <th style={{ padding:"11px 12px", borderBottom:`1px solid ${T.border}`, color:T.textSecondary, fontWeight:700, textAlign:"start" }}>{t.breakdownByInvestment}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, idx) => (
+              <tr key={row.category} style={{ background:idx % 2 ? "rgba(148,163,184,0.07)" : "transparent" }}>
+                <td style={{ padding:"10px 12px", borderTop:`1px solid ${T.border}`, color:T.textPrimary, fontWeight:600, whiteSpace:"nowrap" }}>{row.category}</td>
+                <td style={{ padding:"10px 12px", borderTop:`1px solid ${T.border}`, color:T.textSecondary, fontWeight:600, whiteSpace:"nowrap" }}>{fmtMoney(row.total, { currency })}</td>
+                <td style={{ padding:"10px 12px", borderTop:`1px solid ${T.border}`, color:T.textSecondary }}>
+                  {row.breakdown.map((part, partIdx) => (
+                    <div key={`${row.category}-${partIdx}`} style={{ marginBottom:partIdx===row.breakdown.length-1?0:4 }}>
+                      {part.investment}: {fmtMoney(part.amount, { currency })}
+                    </div>
+                  ))}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+function StatisticsTab() {
+  const { db, t, isRTL, font } = useApp();
+  const [selectedYear, setSelectedYear] = useState("all");
+
+  const investments = visible(db?.investments || []);
+  const transactions = visible(db?.transactions || []);
+  const portfolios = visible(db?.portfolios || []);
+  const allCurrencies = portfolios.map(p=>p.currency).filter(Boolean);
+  const primaryCurrency = allCurrencies[0] || "USD";
+
+  const bi = (en, ar) => `${en} / ${ar}`;
+  const toRiskBucket = (risk) => {
+    const val = String(risk || "").toLowerCase();
+    if (val.includes("low") || val.includes("منخفض")) return "low";
+    if (val.includes("med") || val.includes("متوسط")) return "medium";
+    if (val.includes("high") || val.includes("مرتفع")) return "high";
+    return null;
+  };
+
+  const invById = new Map(investments.map((i) => [i.id, i]));
+  const invNameById = new Map(investments.map((i) => [i.id, i.name || t.unassignedInvestment]));
+  const yearlyRows = [...new Set(transactions.map((tx) => new Date(tx.date || tx.created_at || Date.now()).getFullYear()))]
+    .filter((y) => Number.isFinite(y))
+    .sort((a, b) => b - a);
+  const visibleYears = selectedYear === "all" ? yearlyRows : yearlyRows.filter((y) => String(y) === selectedYear);
+
+  const capitalByRisk = { low:0, medium:0, high:0 };
+  investments.forEach((inv) => {
+    const bucket = toRiskBucket(inv.risk);
+    if (!bucket) return;
+    capitalByRisk[bucket] += costBasis(inv);
+  });
+
+  const incomeByYearRisk = {};
+  const lossByYearRisk = {};
+  const incomeByYearStatus = {};
+  const statuses = db?.settings?.transactionStatuses?.length ? db.settings.transactionStatuses : ["recorded", "scheduled", "cancelled"];
+
+  transactions.forEach((tx) => {
+    const year = new Date(tx.date || tx.created_at || Date.now()).getFullYear();
+    if (!Number.isFinite(year)) return;
+    const inv = invById.get(tx.investmentId);
+    const risk = toRiskBucket(inv?.risk);
+    incomeByYearRisk[year] = incomeByYearRisk[year] || { low:0, medium:0, high:0 };
+    lossByYearRisk[year] = lossByYearRisk[year] || { low:0, medium:0, high:0 };
+    incomeByYearStatus[year] = incomeByYearStatus[year] || Object.fromEntries(statuses.map((s)=>[s,0]));
+
+    if (tx.type === "income" && tx.status !== "cancelled") {
+      if (risk) incomeByYearRisk[year][risk] += (parseFloat(tx.amount) || 0);
+      if (incomeByYearStatus[year][tx.status] === undefined) incomeByYearStatus[year][tx.status] = 0;
+      incomeByYearStatus[year][tx.status] += (parseFloat(tx.amount) || 0);
+    }
+
+    if (tx.type === "expense" && tx.status !== "cancelled" && risk) {
+      lossByYearRisk[year][risk] += (parseFloat(tx.amount) || 0);
+    }
+  });
+
+  const capitalRows = [
+    { key:"capital", values:[bi(t.totalCapitalLabel, "إجمالي رأس المال"), capitalByRisk.low, capitalByRisk.medium, capitalByRisk.high, capitalByRisk.low + capitalByRisk.medium + capitalByRisk.high] },
+  ];
+
+  const riskProfitRows = visibleYears.map((year) => {
+    const row = incomeByYearRisk[year] || { low:0, medium:0, high:0 };
+    return { key:`risk-profit-${year}`, values:[String(year), row.low, row.medium, row.high, row.low + row.medium + row.high] };
+  });
+  const riskProfitTotals = riskProfitRows.reduce((acc, row) => {
+    acc[0] += row.values[1]; acc[1] += row.values[2]; acc[2] += row.values[3];
+    return acc;
+  }, [0, 0, 0]);
+  riskProfitRows.push({ key:"risk-profit-total", isTotal:true, values:[bi(t.totalLabel, "الإجمالي"), riskProfitTotals[0], riskProfitTotals[1], riskProfitTotals[2], riskProfitTotals[0]+riskProfitTotals[1]+riskProfitTotals[2]] });
+
+  const statusRows = visibleYears.map((year) => {
+    const byStatus = incomeByYearStatus[year] || {};
+    const values = statuses.map((s) => byStatus[s] || 0);
+    return { key:`status-${year}`, values:[String(year), ...values, values.reduce((sum, n) => sum + n, 0)] };
+  });
+  const statusTotals = statuses.map((status, idx) => statusRows.reduce((sum, row) => sum + (row.values[idx + 1] || 0), 0));
+  statusRows.push({ key:"status-total", isTotal:true, values:[bi(t.totalLabel, "الإجمالي"), ...statusTotals, statusTotals.reduce((sum, n) => sum + n, 0)] });
+
+  const lossRows = visibleYears.map((year) => {
+    const row = lossByYearRisk[year] || { low:0, medium:0, high:0 };
+    return { key:`loss-${year}`, values:[String(year), row.low, row.medium, row.high, row.low + row.medium + row.high] };
+  });
+  const lossTotals = lossRows.reduce((acc, row) => {
+    acc[0] += row.values[1]; acc[1] += row.values[2]; acc[2] += row.values[3];
+    return acc;
+  }, [0, 0, 0]);
+  lossRows.push({ key:"loss-total", isTotal:true, values:[bi(t.totalLabel, "الإجمالي"), lossTotals[0], lossTotals[1], lossTotals[2], lossTotals[0]+lossTotals[1]+lossTotals[2]] });
+
+  const categoryUniverse = [...new Set([...(db?.settings?.transactionCategories || []), ...transactions.map((tx) => tx.category || t.uncategorized)])];
+  const categoryRows = categoryUniverse.map((category) => {
+    const relevant = transactions.filter((tx) => (tx.category || t.uncategorized) === category);
+    const total = relevant.reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0);
+    const byInvestment = {};
+    relevant.forEach((tx) => {
+      const key = tx.investmentId || "unassigned";
+      byInvestment[key] = (byInvestment[key] || 0) + (parseFloat(tx.amount) || 0);
+    });
+    const breakdown = Object.entries(byInvestment)
+      .map(([invId, amount]) => ({ investment: invNameById.get(invId) || t.unassignedInvestment, amount }))
+      .sort((a, b) => b.amount - a.amount);
+    if (!breakdown.length) {
+      breakdown.push({ investment:t.unassignedInvestment, amount:0 });
+    }
+    return { category, total, breakdown };
+  }).sort((a, b) => b.total - a.total);
+
+  const allocationData = portfolios.map((p) => {
+    const portfolioInv = inv_of_portfolio(db, p.id);
+    const value = portfolioInv.reduce((sum, inv) => sum + curVal(inv), 0);
+    return { name:p.name, value };
+  }).filter((item) => item.value > 0);
+
+  return (
+    <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font }}>
+      <div style={{ marginBottom:"18px", display:"flex", justifyContent:"space-between", gap:"10px", alignItems:"flex-end", flexWrap:"wrap" }}>
+        <div>
+          <h2 style={{ margin:0, fontSize:"1.45rem", color:T.textPrimary }}>{bi(t.statistics, "الإحصائيات")}</h2>
+          <div style={{ marginTop:"4px", fontSize:"0.82rem", color:T.textMuted }}>{bi(t.statisticsCenter, "مركز الإحصائيات")}</div>
+        </div>
+        <div>
+          <label style={{ display:"block", marginBottom:"6px", fontSize:"0.74rem", color:T.textMuted }}>{bi(t.yearFilter, "مرشح السنة")}</label>
+          <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} style={{ minWidth:"180px", padding:"8px 10px", border:`1px solid ${T.border}`, borderRadius:"8px", background:T.bgCard, color:T.textPrimary, fontFamily:font }}>
+            <option value="all">{bi(t.allYears, "كل السنوات")}</option>
+            {yearlyRows.map((year) => <option key={year} value={String(year)}>{year}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <StatisticsMatrixTable
+        title={bi(t.investmentVolumeRiskMatrix, "مصفوفة حجم الاستثمار مقابل المخاطرة")}
+        currency={primaryCurrency}
+        headers={[
+          bi(t.totalCapitalLabel, "إجمالي رأس المال"),
+          bi(t.lowLabel, "منخفض"),
+          bi(t.mediumLabel, "متوسط"),
+          bi(t.highLabel, "مرتفع"),
+          bi(t.grandTotalLabel, "الإجمالي الكلي"),
+        ]}
+        rows={capitalRows}
+      />
+
+      <StatisticsMatrixTable
+        title={bi(t.annualProfitsByRiskLevel, "الأرباح السنوية حسب المخاطرة")}
+        currency={primaryCurrency}
+        headers={[
+          bi(t.yearLabel, "السنة"),
+          bi(t.lowLabel, "منخفض"),
+          bi(t.mediumLabel, "متوسط"),
+          bi(t.highLabel, "مرتفع"),
+          bi(t.totalLabel, "الإجمالي"),
+        ]}
+        rows={riskProfitRows}
+      />
+
+      <StatisticsMatrixTable
+        title={bi(t.annualProfitsByStatus, "الأرباح السنوية حسب حالة المعاملة")}
+        currency={primaryCurrency}
+        headers={[
+          bi(t.yearLabel, "السنة"),
+          ...statuses.map((status) => status),
+          bi(t.totalLabel, "الإجمالي"),
+        ]}
+        rows={statusRows}
+      />
+
+      <StatisticsMatrixTable
+        title={bi(t.lossAnalysisMatrix, "مصفوفة تحليل الخسائر")}
+        currency={primaryCurrency}
+        headers={[
+          bi(t.yearLabel, "السنة"),
+          bi(t.lowLabel, "منخفض"),
+          bi(t.mediumLabel, "متوسط"),
+          bi(t.highLabel, "مرتفع"),
+          bi(t.totalLabel, "الإجمالي"),
+        ]}
+        rows={lossRows}
+      />
+
+      <CategoryAnalyticsTable
+        title={bi(t.centralizedCategoryAnalytics, "تحليلات العناصر/الفئات المركزية")}
+        rows={categoryRows}
+        currency={primaryCurrency}
+        t={{
+          categoryNameLabel: bi(t.categoryNameLabel, "اسم الفئة"),
+          totalLabel: bi(t.totalLabel, "الإجمالي"),
+          breakdownByInvestment: bi(t.breakdownByInvestment, "تفصيل حسب الاستثمار"),
+        }}
+      />
+
+      <Card style={{ padding:"16px" }}>
+        <h3 style={{ margin:"0 0 12px", color:T.textPrimary, fontSize:"0.95rem" }}>{bi(t.assetAllocationOverview, "نظرة توزيع الأصول")}</h3>
+        <div style={{ height:"300px" }}>
+          {allocationData.length ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={allocationData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label>
+                  {allocationData.map((_, idx) => (
+                    <Cell key={`alloc-${idx}`} fill={T.chart[idx % T.chart.length]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value) => fmtMoney(value, { currency:primaryCurrency })} />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ display:"grid", placeItems:"center", height:"100%", color:T.textMuted }}>{t.noAllocation}</div>
+          )}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN APP SHELL
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1954,6 +2286,7 @@ function MainApp() {
     portfolios:   <PortfoliosTab onQuickAddInvestment={quickAddInvestment} />,
     investments:  <InvestmentsTab onQuickAddTransaction={quickAddTransaction} modalPrefill={investmentPrefill} />,
     transactions: <TransactionsTab modalPrefill={transactionPrefill} />,
+    statistics:   <StatisticsTab />,
     settings:     <SettingsTab />,
   };
 
