@@ -1,6 +1,5 @@
 import { useState, useEffect, createContext, useContext, useCallback, useRef, useMemo } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
-import AssetAllocationChart from "./AssetAllocationChart";
 import {
   X, Trash2, Check, Edit3, MoreVertical, Zap, BookOpen,
   RefreshCw, ChevronDown, ChevronRight, Plus, Settings,
@@ -22,6 +21,7 @@ const REQUIRED_SCOPES = [
 ];
 const DB_FILENAME = "investitaty_db.json";
 const AUTH_STORAGE_KEY = "investitaty_auth_v1";
+const AUTH_CONSENT_STORAGE_KEY = "investitaty_auth_consent_v1";
 const TAB_STORAGE_KEY = "investitaty_active_tab_v1";
 const USERS_STORAGE_KEY = "investitaty_users_config_v1";
 const USERS_CONFIG_PATH = "/data/users.json";
@@ -627,6 +627,7 @@ function useGoogleAuth() {
   const [gapiReady, setGapiReady] = useState(false);
   const tokenClientRef = useRef(null);
   const authTimeoutRef = useRef(null);
+  const [hasGrantedConsent, setHasGrantedConsent] = useState(() => localStorage.getItem(AUTH_CONSENT_STORAGE_KEY) === "true");
 
   useEffect(() => {
     let gisLoaded = false;
@@ -666,11 +667,18 @@ function useGoogleAuth() {
       tokenClientRef.current = window.google.accounts.oauth2.initTokenClient({
         client_id: CLIENT_ID,
         scope: REQUIRED_SCOPES.join(" "),
-        include_granted_scopes: false,
-        prompt: "consent",
+        include_granted_scopes: true,
         callback: async (response) => {
           if (authTimeoutRef.current) clearTimeout(authTimeoutRef.current);
-          if (response.error) { setAuthLoading(false); setAuthError(`Auth error: ${response.error}`); return; }
+          if (response.error) {
+            if (response.error === "consent_required" || response.error === "interaction_required") {
+              tokenClientRef.current.requestAccessToken({ prompt: "consent" });
+              return;
+            }
+            setAuthLoading(false);
+            setAuthError(`Auth error: ${response.error}`);
+            return;
+          }
           const grantedAllScopes = window.google.accounts.oauth2.hasGrantedAllScopes(response, ...REQUIRED_SCOPES);
           if (!grantedAllScopes) {
             setAuthLoading(false);
@@ -678,8 +686,12 @@ function useGoogleAuth() {
             setUser(null);
             setToken(null);
             localStorage.removeItem(AUTH_STORAGE_KEY);
+            localStorage.removeItem(AUTH_CONSENT_STORAGE_KEY);
+            setHasGrantedConsent(false);
             return;
           }
+          localStorage.setItem(AUTH_CONSENT_STORAGE_KEY, "true");
+          setHasGrantedConsent(true);
           const accessToken = response.access_token;
           try {
             const userRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", { headers: { Authorization: `Bearer ${accessToken}` } });
@@ -693,12 +705,14 @@ function useGoogleAuth() {
         },
       });
     }
-    tokenClientRef.current.requestAccessToken({ prompt: "consent" });
-  }, [gapiReady]);
+    tokenClientRef.current.requestAccessToken({ prompt: hasGrantedConsent ? "none" : "consent" });
+  }, [gapiReady, hasGrantedConsent]);
 
   const signOut = useCallback(() => {
     if (token) { try { window.google.accounts.oauth2.revoke(token); } catch(_) {} }
     localStorage.removeItem(AUTH_STORAGE_KEY);
+    localStorage.removeItem(AUTH_CONSENT_STORAGE_KEY);
+    setHasGrantedConsent(false);
     setUser(null); setToken(null); setAuthError(null); tokenClientRef.current = null;
   }, [token]);
 
@@ -737,7 +751,7 @@ function AppProvider({ children }) {
     localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(nextConfig));
   }, []);
 
-  const fetchUsersConfig = useCallback(async () => {
+  const fetchUsersConfig = useCallback(async ({ requireRemote = false } = {}) => {
     try {
       const res = await fetch(`${USERS_CONFIG_PATH}?t=${Date.now()}`, { cache: "no-store" });
       if (!res.ok) throw new Error(`users config ${res.status}`);
@@ -746,6 +760,9 @@ function AppProvider({ children }) {
       persistUsersConfig(next);
       return next;
     } catch (_) {
+      if (requireRemote) {
+        throw new Error("Unable to verify user status from users.json");
+      }
       const localUsers = localStorage.getItem(USERS_STORAGE_KEY);
       if (localUsers) {
         try {
@@ -785,7 +802,15 @@ function AppProvider({ children }) {
 
     let isCancelled = false;
     const runGatekeeper = async () => {
-      const freshConfig = await fetchUsersConfig();
+      let freshConfig;
+      try {
+        freshConfig = await fetchUsersConfig({ requireRemote: true });
+      } catch {
+        setGatekeeperError({ ar: t.accountInactiveAr, en: t.accountInactiveEn });
+        auth.signOut();
+        setUserSyncDone(false);
+        return;
+      }
       if (isCancelled) return;
 
       const email = String(auth.user.email || "").toLowerCase();
@@ -2788,6 +2813,20 @@ function StatisticsTab() {
   }, [0, 0, 0]);
   lossRows.push({ key:"loss-total", isTotal:true, values:[t.totalLabel, lossTotals[0], lossTotals[1], lossTotals[2], lossTotals[0]+lossTotals[1]+lossTotals[2]] });
 
+  const allocationData = portfolios.map((portfolio) => {
+    const portfolioInvestments = inv_of_portfolio(db, portfolio.id);
+    return {
+      name: portfolio.name,
+      value: portfolioInvestments.reduce((sum, inv) => sum + toBaseAmount(db, curVal(inv), portfolio.currency || "USD"), 0),
+    };
+  }).filter((row) => row.value > 0);
+  const allocationTotal = allocationData.reduce((sum, row) => sum + row.value, 0);
+  const allocationChartData = allocationData.map((row, idx) => ({
+    ...row,
+    pct: allocationTotal ? (row.value / allocationTotal) * 100 : 0,
+    color: T.chart[idx % T.chart.length],
+  }));
+
   const fundingSourceUniverse = [...new Set([...(db?.settings?.fundingSources || []), ...investments.flatMap((inv) => (inv.funding || []).map((f) => f.source).filter(Boolean))])];
   const fundingRows = fundingSourceUniverse.map((source) => {
     const breakdown = [];
@@ -2839,8 +2878,20 @@ function StatisticsTab() {
       <div style={{ display:"grid", gap:"14px", gridTemplateColumns:"repeat(auto-fit, minmax(300px, 1fr))", marginBottom:"16px" }}>
         <Card style={{ padding:"14px", background:"#111c33", border:"1px solid rgba(148,163,184,0.24)" }}>
           <h3 style={{ margin:"0 0 10px", color:"#f8fafc", fontSize:"0.88rem" }}>{t.assetAllocation}</h3>
-          <div style={{ minHeight:"220px", display:"flex", alignItems:"center" }}>
-            <AssetAllocationChart db={db} />
+          <div style={{ display:"flex", gap:"10px", alignItems:"center", flexWrap:"wrap" }}>
+            <div style={{ flex:"1 1 180px", height:"220px" }}>
+              {allocationChartData.length ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={allocationChartData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={78}>
+                      {allocationChartData.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
+                    </Pie>
+                    <Tooltip formatter={(value) => fmtMoney(value, { currency:primaryCurrency })} />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : <div style={{ display:"grid", placeItems:"center", height:"100%", color:"#64748b" }}>{t.noAllocation}</div>}
+            </div>
+            <LegendList rows={allocationChartData} currency={primaryCurrency} textColor="#dbeafe" valueColor="#bfdbfe" />
           </div>
         </Card>
 
