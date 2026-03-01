@@ -25,13 +25,16 @@ const INITIAL_SCHEMA = {
     portfolioTypes:   ["Real Estate", "Stocks", "Crypto", "Bonds", "Commodities", "ETF", "Private Equity"],
     riskLevels:       ["Low", "Medium", "High", "Speculative"],
     fundingSources:   ["Personal Savings", "Bank Loan", "Brokerage", "Exchange", "Partner Capital"],
+    investmentMethods: ["Lump Sum", "DCA", "SIP", "Manual"],
     investmentStatuses: ["Active", "Paused", "Closed"],
     transactionStatuses: ["recorded", "scheduled", "cancelled"],
     transactionCategories: ["Rental Income", "Dividend", "Capital Gain", "Interest", "Maintenance", "Management Fee", "Tax", "Insurance", "Other"],
     currencies:       ["USD", "SAR", "AED", "EUR", "GBP"],
+    baseCurrency: "USD",
+    currencyRates: { USD: 1, SAR: 3.75, AED: 3.67, EUR: 0.92, GBP: 0.79 },
   },
   portfolios:   [],   // { id, name, type, currency, risk, notes, created_at, is_hidden }
-  investments:  [],   // { id, portfolioId, name, quantity, purchasePrice, currentPrice, purchaseDate, risk, funding:[{source,amount}], notes, status, is_hidden, created_at }
+  investments:  [],   // { id, portfolioId, name, quantity, purchasePrice, currentPrice, purchaseDate, startDate, endDate, investmentMethod, risk, funding:[{source,amount}], notes, status, is_hidden, created_at }
   transactions: [],   // { id, investmentId, portfolioId, category, amount, date, type:"income"|"expense", notes, status:"recorded"|"scheduled"|"cancelled", is_hidden, created_at }
 };
 
@@ -127,6 +130,12 @@ const TRANSLATIONS = {
     purchasePrice: "Purchase Price",
     currentPrice: "Current Price",
     purchaseDate: "Purchase Date",
+    startDate: "Start Date",
+    endDate: "End Date",
+    investmentMethod: "Investment Method",
+    year: "Year",
+    month: "Month",
+    allMonths: "All Months",
     status: "Status",
     category: "Category",
     amount: "Amount",
@@ -163,6 +172,7 @@ const TRANSLATIONS = {
     portfolioTypes: "Portfolio Types",
     riskLevels: "Risk Levels",
     fundingSources: "Funding Sources",
+    investmentMethods: "Investment Methods",
     transactionCategories: "Transaction Categories",
     currencies: "Currencies",
     addItem: "Add",
@@ -175,6 +185,7 @@ const TRANSLATIONS = {
     selectCategory: "Select category",
     selectCurrency: "Select currency",
     selectStatus: "Select status",
+    selectMethod: "Select method",
     optional: "optional",
     positions: "Positions",
     allocation: "Allocation",
@@ -195,7 +206,7 @@ const TRANSLATIONS = {
     deployed: "deployed",
   },
   ar: {
-    appName: "إستثماراتي",
+    appName: "Investaty",
     appTagline: "مدير الاستثمار الاحترافي",
     signIn: "تسجيل الدخول بجوجل",
     connecting: "جارٍ الاتصال...",
@@ -282,6 +293,12 @@ const TRANSLATIONS = {
     purchasePrice: "سعر الشراء",
     currentPrice: "السعر الحالي",
     purchaseDate: "تاريخ الشراء",
+    startDate: "تاريخ البداية",
+    endDate: "تاريخ النهاية",
+    investmentMethod: "طريقة الاستثمار",
+    year: "السنة",
+    month: "الشهر",
+    allMonths: "كل الأشهر",
     status: "الحالة",
     category: "الفئة",
     amount: "المبلغ",
@@ -318,6 +335,7 @@ const TRANSLATIONS = {
     portfolioTypes: "أنواع المحافظ",
     riskLevels: "مستويات المخاطرة",
     fundingSources: "مصادر التمويل",
+    investmentMethods: "طرق الاستثمار",
     transactionCategories: "فئات المعاملات",
     currencies: "العملات",
     addItem: "إضافة",
@@ -330,6 +348,7 @@ const TRANSLATIONS = {
     selectCategory: "اختر الفئة",
     selectCurrency: "اختر العملة",
     selectStatus: "اختر الحالة",
+    selectMethod: "اختر الطريقة",
     optional: "اختياري",
     positions: "مراكز",
     allocation: "التخصيص",
@@ -449,6 +468,9 @@ function migrateSchema(data) {
   for (const k of Object.keys(INITIAL_SCHEMA.settings)) {
     if (!out.settings[k]) out.settings[k] = INITIAL_SCHEMA.settings[k];
   }
+  if (!out.settings.baseCurrency) out.settings.baseCurrency = "USD";
+  const existingRates = out.settings.currencyRates && typeof out.settings.currencyRates === "object" ? out.settings.currencyRates : {};
+  out.settings.currencyRates = { ...INITIAL_SCHEMA.settings.currencyRates, ...existingRates };
 
   // Migrate old flat investments → new investments (no portfolioId = they become orphans in a "Migrated" portfolio)
   if (data.investments && data.investments.length > 0 && out.portfolios.length === 0) {
@@ -506,6 +528,9 @@ function migrateSchema(data) {
   out.investments = (out.investments || []).map(inv => ({
     ...inv,
     risk: inv.risk || "Medium",
+    startDate: inv.startDate || inv.purchaseDate || "",
+    endDate: inv.endDate || "",
+    investmentMethod: inv.investmentMethod || "",
     funding: Array.isArray(inv.funding)
       ? inv.funding
       : (inv.source ? [{ source: inv.source, amount: "" }] : []),
@@ -986,7 +1011,7 @@ function LoadingScreen({ message }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // SIDEBAR
 // ═══════════════════════════════════════════════════════════════════════════════
-function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, pinned, setPinned }) {
+function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen }) {
   const { user, signOut, syncing, t, font, lang, setLang, isRTL } = useApp();
 
   const navItems = [
@@ -998,27 +1023,19 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, pinned, setPinned
     { id:"settings",     label:t.settings,     icon:<Settings size={17}/> },
   ];
 
-  const showLabels = pinned || isOpen;
+  const showLabels = isOpen;
 
-  const handleHamburger = () => {
-    if (pinned) {
-      setPinned(false);
-      setIsOpen(false);
-      return;
-    }
-    setPinned(true);
-    setIsOpen(true);
-  };
+  const handleHamburger = () => setIsOpen((prev) => !prev);
 
   return (
     <aside dir="ltr" style={{
       width:showLabels?"220px":"72px",minHeight:"100vh",background:T.bgSidebar,
       borderRight:"none",display:"flex",flexDirection:"column",flexShrink:0,
       fontFamily:font,transition:"width 0.2s ease",
-    }} onMouseEnter={() => { if (!pinned) setIsOpen(true); }} onMouseLeave={() => { if (!pinned) setIsOpen(false); }}>
+    }}>
       <div style={{ padding:showLabels?"24px 20px 18px":"16px 10px",borderBottom:`1px solid ${T.borderDark}` }}>
         <div style={{ display:"flex",alignItems:"center",gap:"10px",justifyContent:showLabels?"flex-start":"center" }}>
-          <button onClick={handleHamburger} title={pinned?t.unpinSidebar:t.pinSidebar} style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", width:"28px", height:"28px", borderRadius:"6px", border:`1px solid ${T.borderDark}`, background:"transparent", color:T.textSidebar, cursor:"pointer", flexShrink:0 }}>
+          <button onClick={handleHamburger} title={t.collapseSidebar} style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", width:"28px", height:"28px", borderRadius:"6px", border:`1px solid ${T.borderDark}`, background:"transparent", color:T.textSidebar, cursor:"pointer", flexShrink:0 }}>
             <Menu size={14} />
           </button>
           <div style={{ width:"32px",height:"32px",borderRadius:"8px",background:T.emeraldBg,border:`1px solid ${T.emeraldBorder}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
@@ -1040,7 +1057,7 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, pinned, setPinned
         {navItems.map(({ id, label, icon }) => {
           const active = activeTab === id;
           return (
-            <button key={id} onClick={() => { setActiveTab(id); if (!pinned) setIsOpen(false); }} style={{
+            <button key={id} onClick={() => setActiveTab(id)} style={{
               display:"flex",alignItems:"center",gap:"10px",width:"100%",
               padding:"9px 12px",borderRadius:"8px",border:"none",
               background:active?T.emeraldBg:"transparent",
@@ -1058,7 +1075,7 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, pinned, setPinned
       </nav>
 
       <div style={{ padding:"12px" }}>
-        {showLabels && <div style={{ color:T.textSidebarMuted, fontSize:"0.7rem", marginBottom:"2px" }}>{pinned?t.unpinSidebar:t.pinSidebar}</div>}
+        {showLabels && <div style={{ color:T.textSidebarMuted, fontSize:"0.7rem", marginBottom:"2px" }}>{t.collapseSidebar}</div>}
       </div>
 
       {showLabels && (
@@ -1430,7 +1447,7 @@ function InvestmentsTab({ onQuickAddTransaction, modalPrefill }) {
   const [editingPrice, setEditingPrice] = useState(null);
   const [expandedRow, setExpandedRow] = useState(null);
 
-  const EMPTY = { portfolioId:"",name:"",quantity:"",purchasePrice:"",currentPrice:"",purchaseDate:"",risk:"",funding:[{source:"",amount:""}],status:"Active",notes:"" };
+  const EMPTY = { portfolioId:"",name:"",quantity:"",purchasePrice:"",currentPrice:"",purchaseDate:"",startDate:"",endDate:"",investmentMethod:"",risk:"",funding:[{source:"",amount:""}],status:"Active",notes:"" };
   const [form, setForm] = useState(EMPTY);
   const f = k => v => setForm(p=>({...p,[k]:v}));
 
@@ -1447,7 +1464,7 @@ function InvestmentsTab({ onQuickAddTransaction, modalPrefill }) {
 
   const openEdit = (inv) => {
     setForm({ portfolioId:inv.portfolioId,name:inv.name,quantity:inv.quantity||"",purchasePrice:inv.purchasePrice||"",
-      currentPrice:inv.currentPrice||"",purchaseDate:inv.purchaseDate||"",risk:inv.risk||"",funding:(inv.funding&&inv.funding.length?inv.funding:[{source:inv.source||"",amount:""}]),status:inv.status||"Active",notes:inv.notes||"" });
+      currentPrice:inv.currentPrice||"",purchaseDate:inv.purchaseDate||"",startDate:inv.startDate||"",endDate:inv.endDate||"",investmentMethod:inv.investmentMethod||"",risk:inv.risk||"",funding:(inv.funding&&inv.funding.length?inv.funding:[{source:inv.source||"",amount:""}]),status:inv.status||"Active",notes:inv.notes||"" });
     setEditItem(inv); setShowModal(true);
   };
 
@@ -1466,22 +1483,52 @@ function InvestmentsTab({ onQuickAddTransaction, modalPrefill }) {
   }, [modalPrefill]);
 
   const statusOpts = ((db?.settings?.investmentStatuses&&db.settings.investmentStatuses.length)?db.settings.investmentStatuses:["Active","Paused","Closed"]).map((v)=>({ value:v, label:v }));
+  const methodOpts = (db?.settings?.investmentMethods || []).map((v)=>({ value:v, label:v }));
+  const monthOptions = [{ value:"", label:t.allMonths }, ...Array.from({ length:12 }, (_,i)=>({ value:String(i+1).padStart(2,"0"), label:String(i+1).padStart(2,"0") }))];
+  const yearOptions = Array.from(new Set(investments.flatMap((inv) => [inv.startDate, inv.endDate, inv.purchaseDate].filter(Boolean).map((d) => String(d).slice(0, 4))))).filter(Boolean).sort((a,b)=>Number(b)-Number(a));
+  const [filterStartYear, setFilterStartYear] = useState("");
+  const [filterStartMonth, setFilterStartMonth] = useState("");
+  const [filterEndYear, setFilterEndYear] = useState("");
+  const [filterEndMonth, setFilterEndMonth] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+
+  const filteredInvestments = investments.filter((inv) => {
+    const startRaw = inv.startDate || inv.purchaseDate || "";
+    const endRaw = inv.endDate || "";
+    const startYear = startRaw ? String(startRaw).slice(0, 4) : "";
+    const startMonth = startRaw ? String(startRaw).slice(5, 7) : "";
+    const endYear = endRaw ? String(endRaw).slice(0, 4) : "";
+    const endMonth = endRaw ? String(endRaw).slice(5, 7) : "";
+    const startMatch = (!filterStartYear || startYear === filterStartYear) && (!filterStartMonth || startMonth === filterStartMonth);
+    const endMatch = (!filterEndYear || endYear === filterEndYear) && (!filterEndMonth || endMonth === filterEndMonth);
+    const statusMatch = !filterStatus || inv.status === filterStatus;
+    return startMatch && endMatch && statusMatch;
+  });
 
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font }}>
       <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"24px" }}>
         <div>
           <h2 style={{ margin:0,fontSize:"1.4rem",fontWeight:700,color:T.textPrimary }}>{t.investments}</h2>
-          <div style={{ fontSize:"0.8rem",color:T.textMuted,marginTop:"2px" }}>{investments.length} {t.investments.toLowerCase()}</div>
+          <div style={{ fontSize:"0.8rem",color:T.textMuted,marginTop:"2px" }}>{filteredInvestments.length} {t.investments.toLowerCase()}</div>
         </div>
         <Btn icon={<Plus size={15}/>} onClick={()=>{setForm(EMPTY);setEditItem(null);setShowModal(true);}}>{t.addInvestment}</Btn>
+      </div>
+
+
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))", gap:"10px", marginBottom:"16px", padding:"12px", background:T.bgCard, border:`1px solid ${T.border}`, borderRadius:"10px" }}>
+        <Select value={filterStartYear} onChange={e=>setFilterStartYear(e.target.value)} options={[{ value:"", label:`${t.startDate} · ${t.year}` }, ...yearOptions.map((y)=>({ value:y, label:y }))]} isRTL={isRTL}/>
+        <Select value={filterStartMonth} onChange={e=>setFilterStartMonth(e.target.value)} options={monthOptions.map((m)=>({ value:m.value, label:`${t.startDate} · ${m.label}` }))} isRTL={isRTL}/>
+        <Select value={filterEndYear} onChange={e=>setFilterEndYear(e.target.value)} options={[{ value:"", label:`${t.endDate} · ${t.year}` }, ...yearOptions.map((y)=>({ value:y, label:y }))]} isRTL={isRTL}/>
+        <Select value={filterEndMonth} onChange={e=>setFilterEndMonth(e.target.value)} options={monthOptions.map((m)=>({ value:m.value, label:`${t.endDate} · ${m.label}` }))} isRTL={isRTL}/>
+        <Select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} options={[{ value:"", label:t.investmentStatuses }, ...statusOpts]} isRTL={isRTL}/>
       </div>
 
       {/* Grouped by portfolio */}
       {portfolios.length === 0
         ? <EmptyState text={t.noPortfolioData}/>
         : portfolios.map(p => {
-          const invs = inv_of_portfolio(db, p.id);
+          const invs = filteredInvestments.filter(i=>i.portfolioId===p.id);
           if (invs.length === 0) return null;
           return (
             <div key={p.id} style={{ marginBottom:"24px" }}>
@@ -1494,8 +1541,8 @@ function InvestmentsTab({ onQuickAddTransaction, modalPrefill }) {
                 <table style={{ width:"100%",borderCollapse:"collapse",fontSize:"0.85rem" }}>
                   <thead>
                     <tr style={{ background:T.bgApp }}>
-                      {[t.name,t.principal,t.currentValue,t.roi,t.currentPrice,t.risk,t.status,""].map((h,i)=>(
-                        <th key={i} style={{ padding:"10px 14px",textAlign:isRTL&&i<7?"right":"left",fontSize:"0.7rem",fontWeight:600,color:T.textMuted,whiteSpace:"nowrap",borderBottom:`1px solid ${T.border}` }}>{h}</th>
+                      {[t.name,t.startDate,t.endDate,t.investmentMethod,t.principal,t.currentValue,t.roi,t.currentPrice,t.risk,t.status,""].map((h,i)=>(
+                        <th key={i} style={{ padding:"10px 14px",textAlign:isRTL?"right":"left",fontSize:"0.7rem",fontWeight:600,color:T.textMuted,whiteSpace:"nowrap",borderBottom:`1px solid ${T.border}` }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -1519,6 +1566,9 @@ function InvestmentsTab({ onQuickAddTransaction, modalPrefill }) {
                                 <span style={{ fontWeight:500,color:T.textPrimary }}>{inv.name}</span>
                               </div>
                             </td>
+                            <td style={{ padding:"12px 14px",color:T.textSecondary }}>{inv.startDate || inv.purchaseDate || "—"}</td>
+                            <td style={{ padding:"12px 14px",color:T.textSecondary }}>{inv.endDate || "—"}</td>
+                            <td style={{ padding:"12px 14px",color:T.textSecondary }}>{inv.investmentMethod || "—"}</td>
                             <td style={{ padding:"12px 14px",color:T.textSecondary }}>{fmtMoney(cbVal,{currency:portfolioCurrency(db, inv.portfolioId)})}</td>
                             <td style={{ padding:"12px 14px",fontWeight:600,color:T.textPrimary }}>{fmtMoney(cvVal,{currency:portfolioCurrency(db, inv.portfolioId)})}</td>
                             <td style={{ padding:"12px 14px" }}>
@@ -1589,7 +1639,15 @@ function InvestmentsTab({ onQuickAddTransaction, modalPrefill }) {
           </div>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
             <FormField label={t.purchaseDate}><Input type="date" value={form.purchaseDate} onChange={e=>f("purchaseDate")(e.target.value)} isRTL={isRTL}/></FormField>
+            <FormField label={t.startDate}><Input type="date" value={form.startDate} onChange={e=>f("startDate")(e.target.value)} isRTL={isRTL}/></FormField>
+          </div>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
+            <FormField label={t.endDate}><Input type="date" value={form.endDate} onChange={e=>f("endDate")(e.target.value)} isRTL={isRTL}/></FormField>
+            <FormField label={t.investmentMethod}><Select value={form.investmentMethod} onChange={e=>f("investmentMethod")(e.target.value)} options={methodOpts} placeholder={t.selectMethod} isRTL={isRTL}/></FormField>
+          </div>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
             <FormField label={t.risk}><Select value={form.risk} onChange={e=>f("risk")(e.target.value)} options={db?.settings?.riskLevels||[]} placeholder={t.selectRisk} isRTL={isRTL}/></FormField>
+            <div />
           </div>
           <FormField label={t.splitFunding}>
             <div style={{ display:"flex",flexDirection:"column",gap:"8px" }}>
@@ -1701,6 +1759,11 @@ function TransactionsTab({ modalPrefill }) {
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [filterPortfolio, setFilterPortfolio] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const [filterStartYear, setFilterStartYear] = useState("");
+  const [filterStartMonth, setFilterStartMonth] = useState("");
+  const [filterEndYear, setFilterEndYear] = useState("");
+  const [filterEndMonth, setFilterEndMonth] = useState("");
   const [openMenu, setOpenMenu] = useState(null);
 
   const EMPTY = { portfolioId:"",investmentId:"",category:"",amount:"",date:"",dueDate:"",type:"income",status:"recorded",notes:"" };
@@ -1709,7 +1772,21 @@ function TransactionsTab({ modalPrefill }) {
 
   const portfolios = visible(db?.portfolios||[]);
   const allTx = visible(db?.transactions||[]);
-  const filtered = filterPortfolio ? allTx.filter(tx=>tx.portfolioId===filterPortfolio) : allTx;
+  const yearOptions = Array.from(new Set(allTx.flatMap((tx) => [tx.date, tx.dueDate].filter(Boolean).map((d) => String(d).slice(0, 4))))).filter(Boolean).sort((a,b)=>Number(b)-Number(a));
+  const monthOptions = [{ value:"", label:t.allMonths }, ...Array.from({ length:12 }, (_,i)=>({ value:String(i+1).padStart(2,"0"), label:String(i+1).padStart(2,"0") }))];
+  const filtered = allTx.filter((tx) => {
+    const txDate = tx.date || tx.created_at || "";
+    const dateYear = txDate ? String(txDate).slice(0, 4) : "";
+    const dateMonth = txDate ? String(txDate).slice(5, 7) : "";
+    const due = tx.dueDate || "";
+    const dueYear = due ? String(due).slice(0, 4) : "";
+    const dueMonth = due ? String(due).slice(5, 7) : "";
+    const portfolioMatch = !filterPortfolio || tx.portfolioId===filterPortfolio;
+    const statusMatch = !filterStatus || tx.status===filterStatus;
+    const startMatch = (!filterStartYear || dateYear===filterStartYear) && (!filterStartMonth || dateMonth===filterStartMonth);
+    const endMatch = (!filterEndYear || dueYear===filterEndYear) && (!filterEndMonth || dueMonth===filterEndMonth);
+    return portfolioMatch && statusMatch && startMatch && endMatch;
+  });
   const sorted = [...filtered].sort((a,b)=>new Date(b.date||b.created_at||0)-new Date(a.date||a.created_at||0));
 
   const investmentsForPortfolio = form.portfolioId ? visible(db?.investments||[]).filter(i=>i.portfolioId===form.portfolioId) : [];
@@ -1752,7 +1829,7 @@ function TransactionsTab({ modalPrefill }) {
       </div>
 
       {/* Summary + filter */}
-      <div style={{ display:"flex",gap:"12px",alignItems:"center",marginBottom:"20px",flexWrap:"wrap" }}>
+      <div style={{ display:"flex",gap:"12px",alignItems:"center",marginBottom:"12px",flexWrap:"wrap" }}>
         <div style={{ padding:"8px 16px",background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:"8px",fontSize:"0.82rem",fontWeight:500 }}>
           <span style={{ color:T.textMuted,marginRight:"6px" }}>{t.totalIncome}:</span>
           <span style={{ color:T.positive }}>+{fmtMoney(totalInc,{currency:"USD"})}</span>
@@ -1761,11 +1838,14 @@ function TransactionsTab({ modalPrefill }) {
           <span style={{ color:T.textMuted,marginRight:"6px" }}>Expenses:</span>
           <span style={{ color:T.negative }}>-{fmtMoney(totalExp,{currency:"USD"})}</span>
         </div>
-        <div style={{ marginLeft:"auto" }}>
-          <Select value={filterPortfolio} onChange={e=>setFilterPortfolio(e.target.value)}
-            options={[{value:"",label:"All Portfolios"},...portfolios.map(p=>({value:p.id,label:p.name}))]}
-            isRTL={isRTL}/>
-        </div>
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))", gap:"10px", marginBottom:"20px", padding:"12px", background:T.bgCard, border:`1px solid ${T.border}`, borderRadius:"10px" }}>
+        <Select value={filterPortfolio} onChange={e=>setFilterPortfolio(e.target.value)} options={[{value:"",label:"All Portfolios"},...portfolios.map(p=>({value:p.id,label:p.name}))]} isRTL={isRTL}/>
+        <Select value={filterStartYear} onChange={e=>setFilterStartYear(e.target.value)} options={[{ value:"", label:`${t.date} · ${t.year}` }, ...yearOptions.map((y)=>({ value:y, label:y }))]} isRTL={isRTL}/>
+        <Select value={filterStartMonth} onChange={e=>setFilterStartMonth(e.target.value)} options={monthOptions.map((m)=>({ value:m.value, label:`${t.date} · ${m.label}` }))} isRTL={isRTL}/>
+        <Select value={filterEndYear} onChange={e=>setFilterEndYear(e.target.value)} options={[{ value:"", label:`${t.dueDate} · ${t.year}` }, ...yearOptions.map((y)=>({ value:y, label:y }))]} isRTL={isRTL}/>
+        <Select value={filterEndMonth} onChange={e=>setFilterEndMonth(e.target.value)} options={monthOptions.map((m)=>({ value:m.value, label:`${t.dueDate} · ${m.label}` }))} isRTL={isRTL}/>
+        <Select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} options={[{ value:"", label:t.transactionStatusLabel }, ...statusOpts]} isRTL={isRTL}/>
       </div>
 
       <Card style={{ overflow:"hidden" }}>
@@ -1776,7 +1856,7 @@ function TransactionsTab({ modalPrefill }) {
               <thead>
                 <tr style={{ background:T.bgApp }}>
                   {[t.date,t.category,t.portfolio,t.investment,t.amount,t.transactionType,t.status,""].map((h,i)=>(
-                    <th key={i} style={{ padding:"10px 14px",textAlign:"left",fontSize:"0.7rem",fontWeight:600,color:T.textMuted,borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap" }}>{h}</th>
+                    <th key={i} style={{ padding:"10px 14px",textAlign:isRTL?"right":"left",fontSize:"0.7rem",fontWeight:600,color:T.textMuted,borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -1897,6 +1977,7 @@ function SettingsTab() {
     { key:"portfolioTypes",        label:t.portfolioTypes,        icon:<FolderOpen size={15}/> },
     { key:"riskLevels",            label:t.riskLevels,            icon:<AlertCircle size={15}/> },
     { key:"fundingSources",        label:t.fundingSources,        icon:<Wallet size={15}/> },
+    { key:"investmentMethods",    label:t.investmentMethods,    icon:<Landmark size={15}/> },
     { key:"investmentStatuses",   label:t.investmentStatuses,   icon:<CheckCircle2 size={15}/> },
     { key:"transactionStatuses",  label:t.transactionStatuses,  icon:<Layers size={15}/> },
     { key:"transactionCategories", label:t.transactionCategories, icon:<Tag size={15}/> },
@@ -1915,6 +1996,29 @@ function SettingsTab() {
     updateDb(prev=>({ ...prev, settings:{ ...prev.settings, [key]:prev.settings[key].filter((_,i)=>i!==idx) } }));
   };
 
+
+  const baseCurrency = db?.settings?.baseCurrency || "USD";
+  const currencyRates = db?.settings?.currencyRates || {};
+  const setBaseCurrency = (value) => {
+    updateDb((prev) => ({
+      ...prev,
+      settings: {
+        ...prev.settings,
+        baseCurrency: value,
+        currencyRates: { ...(prev.settings.currencyRates || {}), [value]: 1 },
+      },
+    }));
+  };
+  const setCurrencyRate = (currency, value) => {
+    updateDb((prev) => ({
+      ...prev,
+      settings: {
+        ...prev.settings,
+        currencyRates: { ...(prev.settings.currencyRates || {}), [currency]: Number(value) || 0 },
+      },
+    }));
+  };
+
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font }}>
       <div style={{ marginBottom:"24px" }}>
@@ -1924,38 +2028,49 @@ function SettingsTab() {
 
       <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:"16px" }}>
         {sections.map(({ key, label, icon }) => (
-          <Card key={key} style={{ padding:"18px" }}>
-            <div style={{ display:"flex",alignItems:"center",gap:"8px",marginBottom:"14px" }}>
-              <div style={{ width:"30px",height:"30px",borderRadius:"7px",background:T.emeraldBg,display:"flex",alignItems:"center",justifyContent:"center",color:T.emerald,flexShrink:0 }}>{icon}</div>
-              <h4 style={{ margin:0,fontSize:"0.85rem",fontWeight:600,color:T.textPrimary }}>{label}</h4>
+          <Card key={key} style={{ padding:"14px" }}>
+            <div style={{ display:"flex",alignItems:"center",gap:"8px",marginBottom:"12px" }}>
+              <div style={{ width:"28px",height:"28px",borderRadius:"7px",background:T.emeraldBg,display:"flex",alignItems:"center",justifyContent:"center",color:T.emerald,flexShrink:0 }}>{icon}</div>
+              <h4 style={{ margin:0,fontSize:"0.82rem",fontWeight:600,color:T.textPrimary }}>{label}</h4>
             </div>
 
-            {/* Tags */}
-            <div style={{ display:"flex",flexWrap:"wrap",gap:"6px",marginBottom:"12px",minHeight:"28px" }}>
-              {(db?.settings?.[key]||[]).map((item,i)=>(
-                <span key={i} style={{
-                  display:"inline-flex",alignItems:"center",gap:"4px",padding:"3px 10px",
-                  background:T.bgApp,border:`1px solid ${T.border}`,borderRadius:"100px",
-                  fontSize:"0.76rem",fontWeight:500,color:T.textSecondary,
-                }}>
-                  {item}
-                  <button onClick={()=>removeItem(key,i)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"0",lineHeight:1,display:"flex",marginLeft:"2px" }}
-                    onMouseEnter={e=>e.currentTarget.style.color=T.negative}
-                    onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}
-                  ><X size={11}/></button>
-                </span>
-              ))}
-              {(db?.settings?.[key]||[]).length===0 && <span style={{ fontSize:"0.74rem",color:T.textMuted,fontStyle:"italic" }}>No items yet</span>}
-            </div>
+            {key === "currencies" ? (
+              <>
+                <div style={{ marginBottom:"10px" }}>
+                  <Select value={baseCurrency} onChange={(e)=>setBaseCurrency(e.target.value)} options={(db?.settings?.currencies||[]).map((c)=>({ value:c, label:`Base · ${c}` }))} isRTL={isRTL} />
+                </div>
+                <div style={{ display:"grid",gap:"8px",marginBottom:"12px" }}>
+                  {(db?.settings?.currencies||[]).map((currency, i) => (
+                    <div key={`${currency}-${i}`} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"8px", padding:"7px 9px", border:`1px solid ${T.border}`, borderRadius:"8px", background:T.bgApp, color:T.textPrimary }}>
+                      <span style={{ fontSize:"0.78rem", fontWeight:600, color:T.textPrimary }}>{currency}</span>
+                      {currency === baseCurrency ? (
+                        <span style={{ fontSize:"0.75rem", color:T.textMuted }}>1.00 (Base)</span>
+                      ) : (
+                        <input type="number" min="0" step="0.0001" value={currencyRates[currency] ?? ""} onChange={(e)=>setCurrencyRate(currency, e.target.value)} style={{ width:"110px", padding:"5px 8px", background:T.bgInput, border:`1px solid ${T.border}`, borderRadius:"6px", color:T.textPrimary, fontSize:"0.76rem" }} />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ display:"flex",flexWrap:"wrap",gap:"6px",marginBottom:"12px",minHeight:"28px" }}>
+                  {(db?.settings?.[key]||[]).map((item,i)=>(
+                    <span key={i} style={{ display:"inline-flex",alignItems:"center",gap:"4px",padding:"3px 10px", background:T.bgApp,border:`1px solid ${T.border}`,borderRadius:"100px", fontSize:"0.76rem",fontWeight:500,color:T.textSecondary }}>
+                      {item}
+                      <button onClick={()=>removeItem(key,i)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"0",lineHeight:1,display:"flex",marginLeft:"2px" }}><X size={11}/></button>
+                    </span>
+                  ))}
+                  {(db?.settings?.[key]||[]).length===0 && <span style={{ fontSize:"0.74rem",color:T.textMuted,fontStyle:"italic" }}>No items yet</span>}
+                </div>
+              </>
+            )}
 
-            {/* Add new */}
             <div style={{ display:"flex",gap:"6px" }}>
               <input value={newItems[key]||""} onChange={e=>setNewItems(p=>({...p,[key]:e.target.value}))}
                 onKeyDown={e=>e.key==="Enter"&&addItem(key)}
                 placeholder={`Add ${label}...`} dir={isRTL?"rtl":"ltr"}
                 style={{ flex:1,padding:"7px 10px",background:T.bgInput,border:`1px solid ${T.border}`,borderRadius:"7px",color:T.textPrimary,fontSize:"0.82rem",outline:"none",fontFamily:font }}
-                onFocus={e=>e.currentTarget.style.borderColor=T.emerald}
-                onBlur={e=>e.currentTarget.style.borderColor=T.border}
               />
               <button onClick={()=>addItem(key)} style={{ padding:"7px 12px",background:T.emerald,border:"none",borderRadius:"7px",color:"#fff",cursor:"pointer",display:"flex",alignItems:"center" }}>
                 <Plus size={14}/>
@@ -2059,13 +2174,14 @@ function LegendList({ rows, currency = "USD" }) {
 }
 
 function StatisticsMatrixTable({ title, headers, rows, currency = "USD" }) {
+  const { isRTL } = useApp();
   return (
     <div style={{ overflowX:"auto" }}>
       <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.8rem" }}>
         <thead>
           <tr style={{ background:"rgba(15,23,42,0.85)" }}>
             {headers.map((h) => (
-              <th key={h} style={{ padding:"10px 12px", borderBottom:"1px solid rgba(148,163,184,0.24)", color:"#94a3b8", fontWeight:700, textAlign:"start", whiteSpace:"nowrap" }}>{h}</th>
+              <th key={h} style={{ padding:"10px 12px", borderBottom:"1px solid rgba(148,163,184,0.24)", color:"#94a3b8", fontWeight:700, textAlign:isRTL?"right":"left", whiteSpace:"nowrap" }}>{h}</th>
             ))}
           </tr>
         </thead>
@@ -2075,7 +2191,7 @@ function StatisticsMatrixTable({ title, headers, rows, currency = "USD" }) {
             return (
               <tr key={row.key || idx} style={{ background:isTotal?"rgba(16,185,129,0.16)":(idx % 2 ? "rgba(148,163,184,0.07)" : "transparent") }}>
                 {row.values.map((cell, ci) => (
-                  <td key={`${row.key||idx}-${ci}`} style={{ padding:"10px 12px", borderTop:"1px solid rgba(148,163,184,0.16)", color:isTotal?"#f8fafc":"#cbd5e1", fontWeight:isTotal?700:500, whiteSpace:"nowrap" }}>
+                  <td key={`${row.key||idx}-${ci}`} style={{ padding:"10px 12px", borderTop:"1px solid rgba(148,163,184,0.16)", color:isTotal?"#f8fafc":"#cbd5e1", fontWeight:isTotal?700:500, whiteSpace:"nowrap", textAlign:isRTL?"right":"left" }}>
                     {typeof cell === "number" ? fmtMoney(cell, { currency }) : cell}
                   </td>
                 ))}
@@ -2089,22 +2205,23 @@ function StatisticsMatrixTable({ title, headers, rows, currency = "USD" }) {
 }
 
 function FundingSourceBreakdownTable({ rows, currency }) {
+  const { isRTL } = useApp();
   return (
     <div style={{ overflowX:"auto" }}>
       <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.8rem" }}>
         <thead>
           <tr style={{ background:"rgba(15,23,42,0.85)" }}>
-            <th style={{ padding:"10px 12px", borderBottom:"1px solid rgba(148,163,184,0.24)", color:"#94a3b8", textAlign:"start" }}><span style={{ display:"inline-flex", alignItems:"center", gap:"6px" }}><Landmark size={14}/>Source Name</span></th>
-            <th style={{ padding:"10px 12px", borderBottom:"1px solid rgba(148,163,184,0.24)", color:"#94a3b8", textAlign:"start" }}><span style={{ display:"inline-flex", alignItems:"center", gap:"6px" }}><CircleDollarSign size={14}/>Total Allocated Amount</span></th>
-            <th style={{ padding:"10px 12px", borderBottom:"1px solid rgba(148,163,184,0.24)", color:"#94a3b8", textAlign:"start" }}><span style={{ display:"inline-flex", alignItems:"center", gap:"6px" }}><ListTree size={14}/>Investments List</span></th>
+            <th style={{ padding:"10px 12px", borderBottom:"1px solid rgba(148,163,184,0.24)", color:"#94a3b8", textAlign:isRTL?"right":"left" }}><span style={{ display:"inline-flex", alignItems:"center", gap:"6px" }}><Landmark size={14}/>Source Name</span></th>
+            <th style={{ padding:"10px 12px", borderBottom:"1px solid rgba(148,163,184,0.24)", color:"#94a3b8", textAlign:isRTL?"right":"left" }}><span style={{ display:"inline-flex", alignItems:"center", gap:"6px" }}><CircleDollarSign size={14}/>Total Allocated Amount</span></th>
+            <th style={{ padding:"10px 12px", borderBottom:"1px solid rgba(148,163,184,0.24)", color:"#94a3b8", textAlign:isRTL?"right":"left" }}><span style={{ display:"inline-flex", alignItems:"center", gap:"6px" }}><ListTree size={14}/>Investments List</span></th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row, idx) => (
             <tr key={row.source} style={{ background:idx % 2 ? "rgba(148,163,184,0.07)" : "transparent" }}>
               <td style={{ padding:"10px 12px", borderTop:"1px solid rgba(148,163,184,0.16)", color:"#f8fafc", fontWeight:600 }}>{row.source}</td>
-              <td style={{ padding:"10px 12px", borderTop:"1px solid rgba(148,163,184,0.16)", color:"#cbd5e1" }}>{fmtMoney(row.total, { currency })}</td>
-              <td style={{ padding:"10px 12px", borderTop:"1px solid rgba(148,163,184,0.16)", color:"#cbd5e1" }}>
+              <td style={{ padding:"10px 12px", borderTop:"1px solid rgba(148,163,184,0.16)", color:"#cbd5e1", textAlign:isRTL?"right":"left" }}>{fmtMoney(row.total, { currency })}</td>
+              <td style={{ padding:"10px 12px", borderTop:"1px solid rgba(148,163,184,0.16)", color:"#cbd5e1", textAlign:isRTL?"right":"left" }}>
                 {row.breakdown.map((item, i) => (
                   <div key={`${row.source}-${i}`} style={{ marginBottom:i===row.breakdown.length-1?0:4 }}>
                     {item.investment}: {fmtMoney(item.amount, { currency })}
@@ -2362,14 +2479,10 @@ function StatisticsTab() {
 function MainApp() {
   const { syncError, t, isRTL, font } = useApp();
   const [activeTab, setActiveTab] = useState("dashboard");
-  const [sidebarPinned, setSidebarPinned] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [investmentPrefill, setInvestmentPrefill] = useState(null);
   const [transactionPrefill, setTransactionPrefill] = useState(null);
 
-  useEffect(() => {
-    setSidebarOpen(sidebarPinned);
-  }, [sidebarPinned]);
 
   const quickAddInvestment = (portfolioId) => {
     setActiveTab("investments");
@@ -2403,14 +2516,8 @@ function MainApp() {
         body { margin: 0; }
       `}</style>
 
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} isOpen={sidebarOpen} setIsOpen={setSidebarOpen} pinned={sidebarPinned} setPinned={setSidebarPinned}/>
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} isOpen={sidebarOpen} setIsOpen={setSidebarOpen}/>
 
-      {!sidebarPinned && !sidebarOpen && (
-        <div
-          onMouseEnter={()=>setSidebarOpen(true)}
-          style={{ position:"fixed", left:0, top:0, width:"14px", height:"100vh", zIndex:45 }}
-        />
-      )}
 
       <main style={{ flex:1,overflowY:"auto",padding:"32px 36px",maxWidth:"100%" }}>
         {syncError && (
