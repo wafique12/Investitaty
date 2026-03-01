@@ -1,5 +1,6 @@
 import { useState, useEffect, createContext, useContext, useCallback, useRef, useMemo } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+import AssetAllocationChart from "./AssetAllocationChart";
 import {
   X, Trash2, Check, Edit3, MoreVertical, Zap, BookOpen,
   RefreshCw, ChevronDown, ChevronRight, Plus, Settings,
@@ -2837,6 +2838,13 @@ function StatisticsTab() {
 
       <div style={{ display:"grid", gap:"14px", gridTemplateColumns:"repeat(auto-fit, minmax(300px, 1fr))", marginBottom:"16px" }}>
         <Card style={{ padding:"14px", background:"#111c33", border:"1px solid rgba(148,163,184,0.24)" }}>
+          <h3 style={{ margin:"0 0 10px", color:"#f8fafc", fontSize:"0.88rem" }}>{t.assetAllocation}</h3>
+          <div style={{ minHeight:"220px", display:"flex", alignItems:"center" }}>
+            <AssetAllocationChart db={db} />
+          </div>
+        </Card>
+
+        <Card style={{ padding:"14px", background:"#111c33", border:"1px solid rgba(148,163,184,0.24)" }}>
           <h3 style={{ margin:"0 0 10px", color:"#f8fafc", fontSize:"0.88rem" }}>{t.investmentVolumeRiskMatrix}</h3>
           <div style={{ display:"flex", gap:"10px", alignItems:"center", flexWrap:"wrap" }}>
             <div style={{ flex:"1 1 180px", height:"220px" }}>
@@ -2878,7 +2886,7 @@ function StatisticsTab() {
         </Card>
 
         <Card style={{ padding:"14px", background:"#111c33", border:"1px solid rgba(148,163,184,0.24)" }}>
-          <h3 style={{ margin:"0 0 10px", color:"#f8fafc", fontSize:"0.88rem" }}>Total Investment by Funding Source</h3>
+          <h3 style={{ margin:"0 0 10px", color:"#f8fafc", fontSize:"0.88rem" }}>{t.fundingSourcesDistribution}</h3>
           <div style={{ display:"flex", gap:"10px", alignItems:"center", flexWrap:"wrap" }}>
             <div style={{ flex:"1 1 180px", height:"220px" }}>
               {fundingChartData.length ? (
@@ -2892,7 +2900,7 @@ function StatisticsTab() {
                 </ResponsiveContainer>
               ) : <div style={{ display:"grid", placeItems:"center", height:"100%", color:"#64748b" }}>{t.noFunding}</div>}
             </div>
-            <LegendList rows={fundingChartData} currency={primaryCurrency} />
+            <LegendList rows={fundingChartData} currency={primaryCurrency} textColor="#dbeafe" valueColor="#bfdbfe" />
           </div>
         </Card>
       </div>
