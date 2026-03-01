@@ -1,0 +1,24 @@
+{
+  "ownerEmail": "wafique22@gmail.com",
+  "roles": {
+    "Owner": {
+      "permissions": ["block_user", "unblock_user", "assign_role", "manage_everything"]
+    },
+    "Supervisor": {
+      "permissions": ["block_user", "unblock_user"]
+    },
+    "Admin": {
+      "permissions": ["block_user"]
+    },
+    "Member": {
+      "permissions": []
+    }
+  },
+  "users": [
+    {
+      "email": "wafique22@gmail.com",
+      "role": "Owner",
+      "blocked": false
+    }
+  ]
+}
