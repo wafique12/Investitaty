@@ -16,6 +16,8 @@ const CLIENT_ID = "535223974831-1h74evq1hj8o493p66e6090h47ttrael.apps.googleuser
 const API_KEY = "AIzaSyDx1Oy9_0OwRa_CMKNL8wzxdfVOl5S3-gQ";
 const SCOPES = "https://www.googleapis.com/auth/drive.file";
 const DB_FILENAME = "investitaty_db.json";
+const AUTH_STORAGE_KEY = "investitaty_auth_v1";
+const TAB_STORAGE_KEY = "investitaty_active_tab_v1";
 
 // ─── New nested schema ────────────────────────────────────────────────────────
 // portfolios[]  → investments[]  → transactions[]
@@ -78,7 +80,8 @@ const TRANSLATIONS = {
     noPortfolioData: "No portfolios yet. Create your first portfolio below.",
     assetAllocation: "Asset Allocation",
     upcomingCashFlow: "Upcoming Cash Flow",
-    fundingPerformance: "Funding Performance",
+    fundingSourcesDistribution: "Funding Sources Distribution",
+    activeInvestments: "Active Investments",
     statisticsCenter: "Statistics Center",
     yearFilter: "Year Filter",
     allYears: "All Years",
@@ -247,7 +250,8 @@ const TRANSLATIONS = {
     noPortfolioData: "لا توجد محافظ بعد. أنشئ محفظتك الأولى أدناه.",
     assetAllocation: "توزيع الأصول",
     upcomingCashFlow: "التدفق النقدي القادم",
-    fundingPerformance: "أداء التمويل",
+    fundingSourcesDistribution: "توزيع مصادر التمويل",
+    activeInvestments: "الاستثمارات النشطة",
     statisticsCenter: "مركز الإحصائيات",
     yearFilter: "مرشح السنة",
     allYears: "كل السنوات",
@@ -378,7 +382,7 @@ const TRANSLATIONS = {
     overdue: "متأخر",
     today: "اليوم",
     deployed: "مُودَع",
-    footerBranding: "© 2026 Investaty. تم التطوير والمملوك بواسطة وفيق عبد الرحمن. جميع الحقوق محفوظة.",
+    footerBranding: "© 2026 Investaty. مطور ومملوك بواسطة وفيق عبد الرحمن. جميع الحقوق محفوظة.",
   },
 };
 
@@ -569,8 +573,26 @@ async function saveDB(token, fileId, data) {
 // AUTH HOOK (unchanged from Sprint 3 — battle-tested)
 // ═══════════════════════════════════════════════════════════════════════════════
 function useGoogleAuth() {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(null);
+  const [user, setUser] = useState(() => {
+    try {
+      const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed?.user || null;
+    } catch (_) {
+      return null;
+    }
+  });
+  const [token, setToken] = useState(() => {
+    try {
+      const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed?.token || null;
+    } catch (_) {
+      return null;
+    }
+  });
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState(null);
   const [gapiReady, setGapiReady] = useState(false);
@@ -637,8 +659,15 @@ function useGoogleAuth() {
 
   const signOut = useCallback(() => {
     if (token) { try { window.google.accounts.oauth2.revoke(token); } catch(_) {} }
+    localStorage.removeItem(AUTH_STORAGE_KEY);
     setUser(null); setToken(null); setAuthError(null); tokenClientRef.current = null;
   }, [token]);
+
+  useEffect(() => {
+    if (user && token) {
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ user, token }));
+    }
+  }, [user, token]);
 
   return { user, token, authLoading, authError, gapiReady, signIn, signOut };
 }
@@ -996,10 +1025,7 @@ function LoginPage() {
       <div style={{ position:"relative",zIndex:1,textAlign:"center",maxWidth:"400px",width:"100%",animation:"fadeUp 0.4s ease both" }}>
         {/* Logo */}
         <div style={{ display:"flex",justifyContent:"center",marginBottom:"24px" }}>
-          <div style={{ width:"68px",height:"68px",borderRadius:"18px",background:T.emeraldBg,border:`1.5px solid ${T.emeraldBorder}`,
-            display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 0 40px ${T.emerald}20` }}>
-            <TrendingUp size={32} color={T.emerald} />
-          </div>
+          <img src="/images/logo.svg" alt="Investaty logo" style={{ width:"68px",height:"68px",borderRadius:"18px",boxShadow:`0 0 40px ${T.emerald}20` }} />
         </div>
         <h1 style={{ fontSize:"2rem",fontWeight:700,letterSpacing:isRTL?"0.02em":"0.12em",color:"#f8fafc",marginBottom:"6px" }}>
           {t.appName}
@@ -1109,9 +1135,7 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen }) {
           <button onClick={handleHamburger} title={t.collapseSidebar} style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", width:"28px", height:"28px", borderRadius:"6px", border:`1px solid ${T.borderDark}`, background:"transparent", color:T.textSidebar, cursor:"pointer", flexShrink:0 }}>
             <Menu size={14} />
           </button>
-          <div style={{ width:"32px",height:"32px",borderRadius:"8px",background:T.emeraldBg,border:`1px solid ${T.emeraldBorder}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
-            <TrendingUp size={16} color={T.emerald} />
-          </div>
+          <img src="/images/logo.svg" alt="Investaty" style={{ width:"32px",height:"32px",borderRadius:"8px",flexShrink:0 }} />
           {showLabels && <span style={{ color:"#f1f5f9",fontSize:"0.85rem",fontWeight:700,letterSpacing:"0.08em" }}>INVESTATY</span>}
         </div>
         {showLabels && (
@@ -1217,6 +1241,7 @@ const statusColor = (status) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 function Dashboard() {
   const { db, t, isRTL, font } = useApp();
+  const [sourceModal, setSourceModal] = useState(null);
   if (!db) return null;
 
   const portfolios = visible(db.portfolios);
@@ -1248,13 +1273,32 @@ function Dashboard() {
     .sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate))
     .slice(0,5);
 
-  // Portfolio performance bar chart
-  const perfData = portfolios.map(p=>{
-    const pvInvs = inv_of_portfolio(db,p.id);
-    const value = pvInvs.reduce((s,i)=>s+curVal(i),0);
-    const cost  = pvInvs.reduce((s,i)=>s+costBasis(i),0);
-    return { name:p.name.length>10?p.name.slice(0,10)+"…":p.name, value, cost, gain:value-cost };
-  }).filter(d=>d.value>0);
+  // Funding source distribution chart + modal dataset
+  const fundingDistribution = [...new Set([...(db?.settings?.fundingSources || []), ...investments.flatMap((inv) => (inv.funding || []).map((f) => f.source).filter(Boolean))])]
+    .map((source, idx) => {
+      const activeInvestments = investments.filter((inv) => (inv.status || "Active") === "Active");
+      const items = activeInvestments
+        .map((inv) => {
+          const amount = (inv.funding || [])
+            .filter((f) => f.source === source)
+            .reduce((sum, f) => sum + (parseFloat(f.amount) || 0), 0);
+          return amount > 0 ? { id: inv.id, name: inv.name, amount, currency: portfolioCurrency(db, inv.portfolioId) } : null;
+        })
+        .filter(Boolean);
+      const total = items.reduce((sum, item) => sum + item.amount, 0);
+      return {
+        name: source,
+        value: total,
+        pct: 0,
+        color: T.chart[idx % T.chart.length],
+        investments: items,
+      };
+    })
+    .filter((row) => row.value > 0);
+  const totalFunding = fundingDistribution.reduce((sum, row) => sum + row.value, 0);
+  fundingDistribution.forEach((row) => {
+    row.pct = totalFunding ? (row.value / totalFunding) * 100 : 0;
+  });
 
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font }}>
@@ -1337,26 +1381,53 @@ function Dashboard() {
           }
         </Card>
 
-        {/* Portfolio performance bar */}
+        {/* Funding source distribution */}
         <Card style={{ padding:"18px" }}>
-          <SectionHeader title={t.fundingPerformance} />
-          {perfData.length === 0
+          <SectionHeader title={t.fundingSourcesDistribution} />
+          {fundingDistribution.length === 0
             ? <EmptyState text={t.noFunding} />
             : (
-              <ResponsiveContainer width="100%" height={180}>
-                <BarChart data={perfData} margin={{ top:0,right:0,bottom:0,left:-20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={T.border} vertical={false}/>
-                  <XAxis dataKey="name" tick={{ fontSize:10,fill:T.textMuted }} axisLine={false} tickLine={false}/>
-                  <YAxis tick={{ fontSize:10,fill:T.textMuted }} axisLine={false} tickLine={false}/>
-                  <Tooltip formatter={(v)=>[fmtMoney(v)]} contentStyle={{ background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:"8px",fontSize:"0.78rem" }}/>
-                  <Bar dataKey="value" name="Value" fill={T.emerald} radius={[4,4,0,0]} maxBarSize={32}/>
-                  <Bar dataKey="cost" name="Cost" fill="#cbd5e1" radius={[4,4,0,0]} maxBarSize={32}/>
-                </BarChart>
-              </ResponsiveContainer>
+              <div style={{ display:"flex", gap:"10px", alignItems:"center", flexWrap:"wrap" }}>
+                <div style={{ flex:"1 1 180px", height:"180px" }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={fundingDistribution}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius={45}
+                        outerRadius={72}
+                        onClick={(_, idx) => setSourceModal(fundingDistribution[idx] || null)}
+                      >
+                        {fundingDistribution.map((entry) => <Cell key={entry.name} fill={entry.color} style={{ cursor:"pointer" }} />)}
+                      </Pie>
+                      <Tooltip formatter={(value, _name, props) => [`${fmtMoney(value)} · ${props?.payload?.pct?.toFixed(1) || 0}%`, props?.payload?.name || ""]} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <LegendList rows={fundingDistribution} />
+              </div>
             )
           }
         </Card>
       </div>
+
+      {sourceModal && (
+        <Modal title={`${sourceModal.name} · ${t.activeInvestments}`} onClose={() => setSourceModal(null)} maxWidth="560px">
+          {sourceModal.investments.length ? (
+            <div style={{ display:"grid", gap:"10px" }}>
+              {sourceModal.investments.map((inv) => (
+                <div key={inv.id} style={{ padding:"10px 12px", border:`1px solid ${T.border}`, borderRadius:"10px", background:"#ffffff" }}>
+                  <div style={{ fontSize:"0.86rem", fontWeight:600, color:T.textPrimary }}>{inv.name}</div>
+                  <div style={{ fontSize:"0.78rem", color:T.textSecondary }}>{fmtMoney(inv.amount, { currency:inv.currency || "USD" })}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState text={t.noInvestments} />
+          )}
+        </Modal>
+      )}
 
       {/* Portfolio cards */}
       <SectionHeader title={t.portfolioList} />
@@ -1558,24 +1629,52 @@ function InvestmentsTab({ onQuickAddTransaction, modalPrefill }) {
   const [filterStartDate, setFilterStartDate] = useState("");
   const [filterEndDate, setFilterEndDate] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
 
   const filteredInvestments = investments.filter((inv) => {
     const startRaw = inv.startDate || inv.purchaseDate || "";
     const endRaw = inv.endDate || "";
+    const normalizedTitle = (inv.name || "").toLowerCase();
     const startMatch = !filterStartDate || startRaw === filterStartDate;
     const endMatch = !filterEndDate || endRaw === filterEndDate;
     const statusMatch = !filterStatus || inv.status === filterStatus;
-    return startMatch && endMatch && statusMatch;
+    const searchMatch = !searchTerm.trim() || normalizedTitle.includes(searchTerm.toLowerCase().trim());
+    return startMatch && endMatch && statusMatch && searchMatch;
   });
 
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font }}>
-      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"24px" }}>
+      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"24px",gap:"12px",flexWrap:"wrap" }}>
         <div>
           <h2 style={{ margin:0,fontSize:"1.4rem",fontWeight:700,color:T.textPrimary }}>{t.investments}</h2>
           <div style={{ fontSize:"0.8rem",color:T.textMuted,marginTop:"2px" }}>{filteredInvestments.length} {t.investments.toLowerCase()}</div>
         </div>
-        <Btn icon={<Plus size={15}/>} onClick={()=>{setForm(EMPTY);setEditItem(null);setShowModal(true);}}>{t.addInvestment}</Btn>
+        <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:"6px", background:"#f8fafc", border:`1px solid ${T.border}`, borderRadius:"10px", padding:"4px 6px", overflow:"hidden" }}>
+            <button onClick={() => setSearchOpen((v) => !v)} style={{ border:"none", background:"transparent", color:T.textSecondary, cursor:"pointer", display:"flex", padding:"4px" }}>
+              <Search size={14} />
+            </button>
+            <input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={isRTL ? "ابحث بالعنوان..." : "Search title..."}
+              style={{
+                width: searchOpen ? "180px" : "0px",
+                opacity: searchOpen ? 1 : 0,
+                transition: "all 0.25s ease",
+                border: "none",
+                outline: "none",
+                background: "transparent",
+                color: T.textPrimary,
+                fontSize: "0.8rem",
+                padding: searchOpen ? "4px" : "0",
+                textAlign: isRTL ? "right" : "left",
+              }}
+            />
+          </div>
+          <Btn icon={<Plus size={15}/>} onClick={()=>{setForm(EMPTY);setEditItem(null);setShowModal(true);}}>{t.addInvestment}</Btn>
+        </div>
       </div>
 
 
@@ -2023,6 +2122,7 @@ function TxActionMenu({ tx, onClose }) {
 function SettingsTab() {
   const { db, updateDb, t, isRTL, font } = useApp();
   const [newItems, setNewItems] = useState({});
+  const [editingItems, setEditingItems] = useState({});
   const [currencyError, setCurrencyError] = useState("");
   const [editingCurrency, setEditingCurrency] = useState(null);
 
@@ -2049,6 +2149,26 @@ function SettingsTab() {
     updateDb(prev=>({ ...prev, settings:{ ...prev.settings, [key]:prev.settings[key].filter((_,i)=>i!==idx) } }));
   };
 
+  const startEditItem = (key, idx, value) => {
+    setEditingItems((prev) => ({ ...prev, [`${key}-${idx}`]: value }));
+  };
+
+  const saveEditItem = (key, idx) => {
+    const editKey = `${key}-${idx}`;
+    const nextVal = (editingItems[editKey] || "").trim();
+    if (!nextVal) return;
+    if ((db?.settings?.[key] || []).some((item, i) => i !== idx && item === nextVal)) return;
+    updateDb((prev) => {
+      const list = [...(prev.settings[key] || [])];
+      list[idx] = nextVal;
+      return { ...prev, settings: { ...prev.settings, [key]: list } };
+    });
+    setEditingItems((prev) => {
+      const out = { ...prev };
+      delete out[editKey];
+      return out;
+    });
+  };
 
   const baseCurrency = db?.settings?.baseCurrency || "USD";
   const currencyRates = db?.settings?.currencyRates || {};
@@ -2143,7 +2263,7 @@ function SettingsTab() {
                     const isBase = currency === baseCurrency;
                     const isEditing = editingCurrency?.index === i;
                     return (
-                      <div key={`${currency}-${i}`} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"8px", padding:"8px 10px", border:`1px solid ${isBase ? T.emerald : T.border}`, borderRadius:"9px", background:isBase ? "rgba(16,185,129,0.12)" : "rgba(15,23,42,0.7)", color:T.textPrimary }}>
+                      <div key={`${currency}-${i}`} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"8px", padding:"8px 10px", border:`1px solid ${isBase ? T.emerald : T.border}`, borderRadius:"9px", background:isBase ? "rgba(16,185,129,0.12)" : "#f8fafc", color:T.textPrimary }}>
                         <div style={{ display:"flex", alignItems:"center", gap:"6px", minWidth:0 }}>
                           {isEditing ? (
                             <input value={editingCurrency.value} onChange={(e)=>setEditingCurrency({ index:i, value:e.target.value })} style={{ width:"90px", padding:"4px 6px", background:T.bgInput, border:`1px solid ${T.border}`, borderRadius:"6px", color:T.textPrimary, fontSize:"0.75rem" }} />
@@ -2176,12 +2296,31 @@ function SettingsTab() {
             ) : (
               <>
                 <div style={{ display:"flex",flexWrap:"wrap",gap:"6px",marginBottom:"12px",minHeight:"28px" }}>
-                  {(db?.settings?.[key]||[]).map((item,i)=>(
-                    <span key={i} style={{ display:"inline-flex",alignItems:"center",gap:"4px",padding:"3px 10px", background:T.bgApp,border:`1px solid ${T.border}`,borderRadius:"100px", fontSize:"0.76rem",fontWeight:500,color:T.textSecondary }}>
-                      {item}
-                      <button onClick={()=>removeItem(key,i)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"0",lineHeight:1,display:"flex",marginLeft:"2px" }}><X size={11}/></button>
-                    </span>
-                  ))}
+                  {(db?.settings?.[key]||[]).map((item,i)=>{
+                    const editKey = `${key}-${i}`;
+                    const isEditing = Object.prototype.hasOwnProperty.call(editingItems, editKey);
+                    return (
+                      <span key={i} style={{ display:"inline-flex",alignItems:"center",gap:"4px",padding:"3px 10px", background:T.bgApp,border:`1px solid ${T.border}`,borderRadius:"100px", fontSize:"0.76rem",fontWeight:500,color:T.textSecondary }}>
+                        {isEditing ? (
+                          <input
+                            value={editingItems[editKey]}
+                            onChange={(e)=>setEditingItems((prev)=>({ ...prev, [editKey]:e.target.value }))}
+                            onKeyDown={(e)=>e.key==="Enter"&&saveEditItem(key,i)}
+                            style={{ width:"98px", padding:"3px 6px", border:`1px solid ${T.border}`, borderRadius:"6px", background:"#ffffff", color:T.textPrimary, fontSize:"0.72rem" }}
+                          />
+                        ) : item}
+                        {isEditing ? (
+                          <>
+                            <button onClick={()=>saveEditItem(key,i)} style={{ background:"none",border:"none",cursor:"pointer",color:T.positive,padding:"0",lineHeight:1,display:"flex" }}><Check size={11}/></button>
+                            <button onClick={()=>setEditingItems((prev)=>{ const out={...prev}; delete out[editKey]; return out; })} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"0",lineHeight:1,display:"flex" }}><X size={11}/></button>
+                          </>
+                        ) : (
+                          <button onClick={()=>startEditItem(key,i,item)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"0",lineHeight:1,display:"flex" }}><Edit3 size={11}/></button>
+                        )}
+                        <button onClick={()=>removeItem(key,i)} style={{ background:"none",border:"none",cursor:"pointer",color:T.negative,padding:"0",lineHeight:1,display:"flex" }}><Trash2 size={11}/></button>
+                      </span>
+                    );
+                  })}
                   {(db?.settings?.[key]||[]).length===0 && <span style={{ fontSize:"0.74rem",color:T.textMuted,fontStyle:"italic" }}>No items yet</span>}
                 </div>
               </>
@@ -2326,7 +2465,7 @@ function StatisticsMatrixTable({ title, headers, rows, currency = "USD" }) {
 }
 
 function FundingSourceBreakdownTable({ rows, currency }) {
-  const { isRTL } = useApp();
+  const { isRTL, t } = useApp();
   return (
     <div style={{ overflowX:"auto" }}>
       <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.8rem" }}>
@@ -2343,8 +2482,8 @@ function FundingSourceBreakdownTable({ rows, currency }) {
               <td style={{ padding:"10px 12px", borderTop:"1px solid rgba(148,163,184,0.16)", color:"#f8fafc", fontWeight:600, textAlign:isRTL?"right":"left" }}>{row.source}</td>
               <td style={{ padding:"10px 12px", borderTop:"1px solid rgba(148,163,184,0.16)", color:"#cbd5e1", textAlign:isRTL?"right":"left" }}>{fmtMoney(row.total, { currency })}</td>
               <td style={{ padding:"10px 12px", borderTop:"1px solid rgba(148,163,184,0.16)", color:"#cbd5e1", textAlign:isRTL?"right":"left" }}>
-                {row.breakdown.map((item, i) => (
-                  <div key={`${row.source}-${i}`} style={{ marginBottom:i===row.breakdown.length-1?0:4 }}>
+                {(row.breakdown || []).map((item, i) => (
+                  <div key={`${row.source}-${i}`} style={{ marginBottom:i===((row.breakdown||[]).length-1)?0:4 }}>
                     {item.investment}: {fmtMoney(item.amount, { currency })}
                   </div>
                 ))}
@@ -2599,11 +2738,14 @@ function StatisticsTab() {
 // ═══════════════════════════════════════════════════════════════════════════════
 function MainApp() {
   const { syncError, t, isRTL, font } = useApp();
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem(TAB_STORAGE_KEY) || "dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [investmentPrefill, setInvestmentPrefill] = useState(null);
   const [transactionPrefill, setTransactionPrefill] = useState(null);
 
+  useEffect(() => {
+    localStorage.setItem(TAB_STORAGE_KEY, activeTab);
+  }, [activeTab]);
 
   const quickAddInvestment = (portfolioId) => {
     setActiveTab("investments");
