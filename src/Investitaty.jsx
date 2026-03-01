@@ -1,5 +1,6 @@
 import { useState, useEffect, createContext, useContext, useCallback, useRef, useMemo } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+import AssetAllocationChart from "./AssetAllocationChart";
 import {
   X, Trash2, Check, Edit3, MoreVertical, Zap, BookOpen,
   RefreshCw, ChevronDown, ChevronRight, Plus, Settings,
@@ -14,12 +15,17 @@ import {
 // ═══════════════════════════════════════════════════════════════════════════════
 const CLIENT_ID = "535223974831-1h74evq1hj8o493p66e6090h47ttrael.apps.googleusercontent.com";
 const API_KEY = "AIzaSyDx1Oy9_0OwRa_CMKNL8wzxdfVOl5S3-gQ";
-const SCOPES = "https://www.googleapis.com/auth/drive.file";
+const REQUIRED_SCOPES = [
+  "https://www.googleapis.com/auth/drive.file",
+  "https://www.googleapis.com/auth/userinfo.profile",
+  "https://www.googleapis.com/auth/userinfo.email",
+];
 const DB_FILENAME = "investitaty_db.json";
 const AUTH_STORAGE_KEY = "investitaty_auth_v1";
 const TAB_STORAGE_KEY = "investitaty_active_tab_v1";
 const USERS_STORAGE_KEY = "investitaty_users_config_v1";
 const USERS_CONFIG_PATH = "/data/users.json";
+const OWNER_PROTECTED_EMAIL = "wafique22@gmail.com";
 
 // ─── New nested schema ────────────────────────────────────────────────────────
 // portfolios[]  → investments[]  → transactions[]
@@ -218,7 +224,7 @@ const TRANSLATIONS = {
     blockedTitle: "Account access blocked",
     blockedMessage: "Your account has been blocked by an administrator. You cannot access investment data until your account is unblocked.",
     accountInactiveAr: "عذراً، حسابك غير مفعل حالياً. يرجى التواصل مع إدارة التطبيق.",
-    accountInactiveEn: "Sorry, your account is not active. Please contact the administration.",
+    accountInactiveEn: "Your account is currently inactive. Please contact administration.",
   },
   ar: {
     appName: "Investaty",
@@ -392,12 +398,12 @@ const TRANSLATIONS = {
     blockedTitle: "تم حظر الوصول للحساب",
     blockedMessage: "تم حظر حسابك من قبل الإدارة. لا يمكنك الوصول إلى بيانات الاستثمار حتى يتم إلغاء الحظر.",
     accountInactiveAr: "عذراً، حسابك غير مفعل حالياً. يرجى التواصل مع إدارة التطبيق.",
-    accountInactiveEn: "Sorry, your account is not active. Please contact the administration.",
+    accountInactiveEn: "Your account is currently inactive. Please contact administration.",
   },
 };
 
 const DEFAULT_USERS_CONFIG = {
-  ownerEmail: "wafique22@gmail.com",
+  ownerEmail: OWNER_PROTECTED_EMAIL,
   roles: {
     Owner: { permissions: ["block_user", "unblock_user", "assign_role", "manage_everything"] },
     Supervisor: { permissions: ["block_user", "unblock_user"] },
@@ -405,7 +411,7 @@ const DEFAULT_USERS_CONFIG = {
     Member: { permissions: [] },
   },
   users: [
-    { email: "wafique22@gmail.com", role: "Owner", blocked: false },
+    { email: OWNER_PROTECTED_EMAIL, role: "Owner", blocked: false },
   ],
 };
 
@@ -659,11 +665,21 @@ function useGoogleAuth() {
     if (!tokenClientRef.current) {
       tokenClientRef.current = window.google.accounts.oauth2.initTokenClient({
         client_id: CLIENT_ID,
-        scope: [SCOPES, "https://www.googleapis.com/auth/userinfo.profile", "https://www.googleapis.com/auth/userinfo.email"].join(" "),
-        prompt: "",
+        scope: REQUIRED_SCOPES.join(" "),
+        include_granted_scopes: false,
+        prompt: "consent",
         callback: async (response) => {
           if (authTimeoutRef.current) clearTimeout(authTimeoutRef.current);
           if (response.error) { setAuthLoading(false); setAuthError(`Auth error: ${response.error}`); return; }
+          const grantedAllScopes = window.google.accounts.oauth2.hasGrantedAllScopes(response, ...REQUIRED_SCOPES);
+          if (!grantedAllScopes) {
+            setAuthLoading(false);
+            setAuthError("Required permissions were not granted. Please allow full access to continue.");
+            setUser(null);
+            setToken(null);
+            localStorage.removeItem(AUTH_STORAGE_KEY);
+            return;
+          }
           const accessToken = response.access_token;
           try {
             const userRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", { headers: { Authorization: `Bearer ${accessToken}` } });
@@ -677,7 +693,7 @@ function useGoogleAuth() {
         },
       });
     }
-    tokenClientRef.current.requestAccessToken({ prompt: "" });
+    tokenClientRef.current.requestAccessToken({ prompt: "consent" });
   }, [gapiReady]);
 
   const signOut = useCallback(() => {
@@ -721,30 +737,36 @@ function AppProvider({ children }) {
     localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(nextConfig));
   }, []);
 
-  useEffect(() => {
-    const localUsers = localStorage.getItem(USERS_STORAGE_KEY);
-    if (localUsers) {
-      try {
-        const parsed = JSON.parse(localUsers);
-        if (parsed && typeof parsed === "object") {
-          setUsersConfig(parsed);
-          setUsersConfigReady(true);
-          return;
-        }
-      } catch (_) {}
+  const fetchUsersConfig = useCallback(async () => {
+    try {
+      const res = await fetch(`${USERS_CONFIG_PATH}?t=${Date.now()}`, { cache: "no-store" });
+      if (!res.ok) throw new Error(`users config ${res.status}`);
+      const data = await res.json();
+      const next = data && typeof data === "object" ? data : DEFAULT_USERS_CONFIG;
+      persistUsersConfig(next);
+      return next;
+    } catch (_) {
+      const localUsers = localStorage.getItem(USERS_STORAGE_KEY);
+      if (localUsers) {
+        try {
+          const parsed = JSON.parse(localUsers);
+          if (parsed && typeof parsed === "object") {
+            setUsersConfig(parsed);
+            return parsed;
+          }
+        } catch (_) {}
+      }
+      persistUsersConfig(DEFAULT_USERS_CONFIG);
+      return DEFAULT_USERS_CONFIG;
     }
-    fetch(USERS_CONFIG_PATH)
-      .then((res) => res.ok ? res.json() : DEFAULT_USERS_CONFIG)
-      .then((data) => {
-        const next = data && typeof data === "object" ? data : DEFAULT_USERS_CONFIG;
-        persistUsersConfig(next);
-      })
-      .catch(() => persistUsersConfig(DEFAULT_USERS_CONFIG))
-      .finally(() => setUsersConfigReady(true));
   }, [persistUsersConfig]);
 
+  useEffect(() => {
+    fetchUsersConfig().finally(() => setUsersConfigReady(true));
+  }, [fetchUsersConfig]);
+
   const currentEmail = String(auth?.user?.email || "").toLowerCase();
-  const ownerEmail = String(usersConfig?.ownerEmail || DEFAULT_USERS_CONFIG.ownerEmail).toLowerCase();
+  const ownerEmail = String(usersConfig?.ownerEmail || OWNER_PROTECTED_EMAIL).toLowerCase();
   const listedUser = (usersConfig?.users || []).find((u) => String(u.email || "").toLowerCase() === currentEmail) || null;
   const currentRole = listedUser?.role || (currentEmail && currentEmail === ownerEmail ? "Owner" : "Member");
   const userStatus = String(listedUser?.status || (listedUser?.blocked ? "blocked" : "active")).toLowerCase();
@@ -757,50 +779,59 @@ function AppProvider({ children }) {
   useEffect(() => {
     if (!usersConfigReady) return;
     if (!auth.user || !auth.token) {
+      setUserSyncDone(false);
+      return;
+    }
+
+    let isCancelled = false;
+    const runGatekeeper = async () => {
+      const freshConfig = await fetchUsersConfig();
+      if (isCancelled) return;
+
+      const email = String(auth.user.email || "").toLowerCase();
+      const protectedOwnerEmail = OWNER_PROTECTED_EMAIL.toLowerCase();
+      const ownerFromConfig = String(freshConfig?.ownerEmail || protectedOwnerEmail).toLowerCase();
+      const isOwner = email === protectedOwnerEmail || email === ownerFromConfig;
+      const now = new Date().toISOString().slice(0, 16).replace("T", " ");
+      const users = [...(freshConfig?.users || [])];
+      const idx = users.findIndex((u) => String(u.email || "").toLowerCase() === email);
+      const existing = idx >= 0 ? users[idx] : null;
+      const status = String(existing?.status || (existing?.blocked ? "blocked" : "active")).toLowerCase();
+
+      if (!isOwner && ["blocked", "paused", "deleted"].includes(status)) {
+        setGatekeeperError({ ar: t.accountInactiveAr, en: t.accountInactiveEn });
+        auth.signOut();
+        setUserSyncDone(false);
+        return;
+      }
+
+      if (existing) {
+        users[idx] = {
+          ...existing,
+          role: existing.role || (isOwner ? "Owner" : "Member"),
+          status: existing.status || "active",
+          blocked: Boolean(existing.blocked),
+          lastLogin: now,
+        };
+      } else {
+        users.push({
+          name: auth.user.name || String(email).split("@")[0],
+          email,
+          role: isOwner ? "Owner" : "Member",
+          status: "active",
+          blocked: false,
+          lastLogin: now,
+        });
+      }
+
+      persistUsersConfig({ ...freshConfig, users });
       setGatekeeperError(null);
-      setUserSyncDone(false);
-      return;
-    }
-    if (userSyncDone) return;
+      setUserSyncDone(true);
+    };
 
-    const email = String(auth.user.email || "").toLowerCase();
-    const isOwner = email === ownerEmail;
-    const now = new Date().toISOString().slice(0, 16).replace("T", " ");
-    const users = [...(usersConfig?.users || [])];
-    const idx = users.findIndex((u) => String(u.email || "").toLowerCase() === email);
-    const existing = idx >= 0 ? users[idx] : null;
-    const status = String(existing?.status || (existing?.blocked ? "blocked" : "active")).toLowerCase();
-
-    if (!isOwner && ["blocked", "paused", "deleted"].includes(status)) {
-      setGatekeeperError({ ar: t.accountInactiveAr, en: t.accountInactiveEn });
-      auth.signOut();
-      setUserSyncDone(false);
-      return;
-    }
-
-    if (existing) {
-      users[idx] = {
-        ...existing,
-        status: "active",
-        blocked: false,
-        role: existing.role || "Member",
-        lastLogin: now,
-      };
-    } else {
-      users.push({
-        name: auth.user.name || String(email).split("@")[0],
-        email,
-        role: isOwner ? "Owner" : "Member",
-        status: "active",
-        blocked: false,
-        lastLogin: now,
-      });
-    }
-
-    persistUsersConfig({ ...usersConfig, users });
-    setGatekeeperError(null);
-    setUserSyncDone(true);
-  }, [auth.user, auth.token, auth.signOut, ownerEmail, usersConfig, usersConfigReady, persistUsersConfig, t.accountInactiveAr, t.accountInactiveEn, userSyncDone]);
+    runGatekeeper();
+    return () => { isCancelled = true; };
+  }, [auth.user, auth.token, auth.signOut, fetchUsersConfig, usersConfigReady, persistUsersConfig, t.accountInactiveAr, t.accountInactiveEn]);
 
   useEffect(() => {
     if (!auth.token || isBlocked || !userSyncDone) return;
@@ -1208,6 +1239,34 @@ function LoginPage() {
   );
 }
 
+function InactiveAccountScreen({ message }) {
+  return (
+    <div style={{
+      minHeight:"100vh",
+      display:"flex",
+      alignItems:"center",
+      justifyContent:"center",
+      background:"linear-gradient(135deg, #3b0a0a 0%, #7f1d1d 45%, #2b0606 100%)",
+      color:"#fee2e2",
+      padding:"24px",
+      textAlign:"center",
+    }}>
+      <div style={{
+        width:"min(620px, 100%)",
+        border:"1px solid rgba(254, 202, 202, 0.35)",
+        background:"rgba(127, 29, 29, 0.48)",
+        borderRadius:"16px",
+        padding:"28px 26px",
+        boxShadow:"0 30px 90px rgba(0, 0, 0, 0.4)",
+      }}>
+        <h2 style={{ margin:"0 0 14px", fontSize:"1.15rem", letterSpacing:"0.03em" }}>Account Inactive • الحساب غير مفعل</h2>
+        <p style={{ margin:"0 0 8px", fontSize:"1rem", lineHeight:1.8 }}>{message?.ar}</p>
+        <p style={{ margin:0, fontSize:"0.95rem", opacity:0.92 }}>{message?.en}</p>
+      </div>
+    </div>
+  );
+}
+
 function GoogleIcon() {
   return (
     <svg viewBox="0 0 24 24" style={{width:18,height:18}} fill="none">
@@ -1319,6 +1378,7 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen }) {
             </div>
             <div style={{ overflow:"hidden",flex:1 }}>
               <div style={{ color:"rgba(255,255,255,0.75)",fontSize:"0.76rem",fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{user?.name}</div>
+              <div style={{ color:"rgba(255,255,255,0.48)",fontSize:"0.66rem",fontWeight:300,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:"2px" }}>{user?.email}</div>
             </div>
           </div>
           <button onClick={signOut} style={{ display:"flex",alignItems:"center",gap:"6px",width:"100%",padding:"7px 10px",background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.2)",borderRadius:"7px",color:"rgba(255,100,100,0.8)",fontSize:"0.76rem",cursor:"pointer",fontFamily:font }}>
@@ -2778,6 +2838,13 @@ function StatisticsTab() {
 
       <div style={{ display:"grid", gap:"14px", gridTemplateColumns:"repeat(auto-fit, minmax(300px, 1fr))", marginBottom:"16px" }}>
         <Card style={{ padding:"14px", background:"#111c33", border:"1px solid rgba(148,163,184,0.24)" }}>
+          <h3 style={{ margin:"0 0 10px", color:"#f8fafc", fontSize:"0.88rem" }}>{t.assetAllocation}</h3>
+          <div style={{ minHeight:"220px", display:"flex", alignItems:"center" }}>
+            <AssetAllocationChart db={db} />
+          </div>
+        </Card>
+
+        <Card style={{ padding:"14px", background:"#111c33", border:"1px solid rgba(148,163,184,0.24)" }}>
           <h3 style={{ margin:"0 0 10px", color:"#f8fafc", fontSize:"0.88rem" }}>{t.investmentVolumeRiskMatrix}</h3>
           <div style={{ display:"flex", gap:"10px", alignItems:"center", flexWrap:"wrap" }}>
             <div style={{ flex:"1 1 180px", height:"220px" }}>
@@ -2819,7 +2886,7 @@ function StatisticsTab() {
         </Card>
 
         <Card style={{ padding:"14px", background:"#111c33", border:"1px solid rgba(148,163,184,0.24)" }}>
-          <h3 style={{ margin:"0 0 10px", color:"#f8fafc", fontSize:"0.88rem" }}>Total Investment by Funding Source</h3>
+          <h3 style={{ margin:"0 0 10px", color:"#f8fafc", fontSize:"0.88rem" }}>{t.fundingSourcesDistribution}</h3>
           <div style={{ display:"flex", gap:"10px", alignItems:"center", flexWrap:"wrap" }}>
             <div style={{ flex:"1 1 180px", height:"220px" }}>
               {fundingChartData.length ? (
@@ -2833,7 +2900,7 @@ function StatisticsTab() {
                 </ResponsiveContainer>
               ) : <div style={{ display:"grid", placeItems:"center", height:"100%", color:"#64748b" }}>{t.noFunding}</div>}
             </div>
-            <LegendList rows={fundingChartData} currency={primaryCurrency} />
+            <LegendList rows={fundingChartData} currency={primaryCurrency} textColor="#dbeafe" valueColor="#bfdbfe" />
           </div>
         </Card>
       </div>
@@ -3036,7 +3103,8 @@ export default function App() {
 }
 
 function AppContent() {
-  const { user, token, dbLoading, db, t, usersConfigReady, userSyncDone } = useApp();
+  const { user, token, dbLoading, db, t, usersConfigReady, userSyncDone, gatekeeperError } = useApp();
+  if (gatekeeperError) return <InactiveAccountScreen message={gatekeeperError} />;
   if (!user || !token) return <LoginPage/>;
   if (!usersConfigReady || !userSyncDone) return <LoadingScreen message={t?.loading||"LOADING..."}/>;
   if (dbLoading || !db) return <LoadingScreen message={t?.loading||"LOADING..."}/>;
