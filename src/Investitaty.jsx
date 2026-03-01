@@ -18,6 +18,7 @@ const SCOPES = "https://www.googleapis.com/auth/drive.file";
 const DB_FILENAME = "investitaty_db.json";
 const AUTH_STORAGE_KEY = "investitaty_auth_v1";
 const TAB_STORAGE_KEY = "investitaty_active_tab_v1";
+const USERS_STORAGE_KEY = "investitaty_users_config_v1";
 const USERS_CONFIG_PATH = "/data/users.json";
 
 // ─── New nested schema ────────────────────────────────────────────────────────
@@ -216,6 +217,8 @@ const TRANSLATIONS = {
     footerBranding: "© 2026 Investaty. Developed and Owned by Wafiq Abdulrahman. All rights reserved.",
     blockedTitle: "Account access blocked",
     blockedMessage: "Your account has been blocked by an administrator. You cannot access investment data until your account is unblocked.",
+    accountInactiveAr: "عذراً، حسابك غير مفعل حالياً. يرجى التواصل مع إدارة التطبيق.",
+    accountInactiveEn: "Sorry, your account is not active. Please contact the administration.",
   },
   ar: {
     appName: "Investaty",
@@ -388,6 +391,8 @@ const TRANSLATIONS = {
     footerBranding: "© 2026 Investaty. مطور ومملوك بواسطة وفيق عبد الرحمن. جميع الحقوق محفوظة.",
     blockedTitle: "تم حظر الوصول للحساب",
     blockedMessage: "تم حظر حسابك من قبل الإدارة. لا يمكنك الوصول إلى بيانات الاستثمار حتى يتم إلغاء الحظر.",
+    accountInactiveAr: "عذراً، حسابك غير مفعل حالياً. يرجى التواصل مع إدارة التطبيق.",
+    accountInactiveEn: "Sorry, your account is not active. Please contact the administration.",
   },
 };
 
@@ -697,6 +702,8 @@ function AppProvider({ children }) {
   const auth = useGoogleAuth();
   const [usersConfig, setUsersConfig] = useState(DEFAULT_USERS_CONFIG);
   const [usersConfigReady, setUsersConfigReady] = useState(false);
+  const [gatekeeperError, setGatekeeperError] = useState(null);
+  const [userSyncDone, setUserSyncDone] = useState(false);
   const [db, setDb] = useState(null);
   const [fileId, setFileId] = useState(null);
   const [syncing, setSyncing] = useState(false);
@@ -709,31 +716,99 @@ function AppProvider({ children }) {
   const isRTL = lang === "ar";
   const font = isRTL ? T.fontAr : T.fontSans;
 
+  const persistUsersConfig = useCallback((nextConfig) => {
+    setUsersConfig(nextConfig);
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(nextConfig));
+  }, []);
+
   useEffect(() => {
+    const localUsers = localStorage.getItem(USERS_STORAGE_KEY);
+    if (localUsers) {
+      try {
+        const parsed = JSON.parse(localUsers);
+        if (parsed && typeof parsed === "object") {
+          setUsersConfig(parsed);
+          setUsersConfigReady(true);
+          return;
+        }
+      } catch (_) {}
+    }
     fetch(USERS_CONFIG_PATH)
       .then((res) => res.ok ? res.json() : DEFAULT_USERS_CONFIG)
-      .then((data) => setUsersConfig(data && typeof data === "object" ? data : DEFAULT_USERS_CONFIG))
-      .catch(() => setUsersConfig(DEFAULT_USERS_CONFIG))
+      .then((data) => {
+        const next = data && typeof data === "object" ? data : DEFAULT_USERS_CONFIG;
+        persistUsersConfig(next);
+      })
+      .catch(() => persistUsersConfig(DEFAULT_USERS_CONFIG))
       .finally(() => setUsersConfigReady(true));
-  }, []);
+  }, [persistUsersConfig]);
 
   const currentEmail = String(auth?.user?.email || "").toLowerCase();
   const ownerEmail = String(usersConfig?.ownerEmail || DEFAULT_USERS_CONFIG.ownerEmail).toLowerCase();
   const listedUser = (usersConfig?.users || []).find((u) => String(u.email || "").toLowerCase() === currentEmail) || null;
   const currentRole = listedUser?.role || (currentEmail && currentEmail === ownerEmail ? "Owner" : "Member");
-  const isBlocked = currentEmail && currentEmail !== ownerEmail ? Boolean(listedUser?.blocked) : false;
+  const userStatus = String(listedUser?.status || (listedUser?.blocked ? "blocked" : "active")).toLowerCase();
+  const isBlocked = currentEmail && currentEmail !== ownerEmail ? ["blocked", "paused", "deleted"].includes(userStatus) : false;
   const hasPermission = useCallback((permission) => {
     const rolePerms = usersConfig?.roles?.[currentRole]?.permissions || [];
     return rolePerms.includes("manage_everything") || rolePerms.includes(permission);
   }, [usersConfig, currentRole]);
 
   useEffect(() => {
-    if (!auth.token || isBlocked) return;
+    if (!usersConfigReady) return;
+    if (!auth.user || !auth.token) {
+      setGatekeeperError(null);
+      setUserSyncDone(false);
+      return;
+    }
+    if (userSyncDone) return;
+
+    const email = String(auth.user.email || "").toLowerCase();
+    const isOwner = email === ownerEmail;
+    const now = new Date().toISOString().slice(0, 16).replace("T", " ");
+    const users = [...(usersConfig?.users || [])];
+    const idx = users.findIndex((u) => String(u.email || "").toLowerCase() === email);
+    const existing = idx >= 0 ? users[idx] : null;
+    const status = String(existing?.status || (existing?.blocked ? "blocked" : "active")).toLowerCase();
+
+    if (!isOwner && ["blocked", "paused", "deleted"].includes(status)) {
+      setGatekeeperError({ ar: t.accountInactiveAr, en: t.accountInactiveEn });
+      auth.signOut();
+      setUserSyncDone(false);
+      return;
+    }
+
+    if (existing) {
+      users[idx] = {
+        ...existing,
+        status: "active",
+        blocked: false,
+        role: existing.role || "Member",
+        lastLogin: now,
+      };
+    } else {
+      users.push({
+        name: auth.user.name || String(email).split("@")[0],
+        email,
+        role: isOwner ? "Owner" : "Member",
+        status: "active",
+        blocked: false,
+        lastLogin: now,
+      });
+    }
+
+    persistUsersConfig({ ...usersConfig, users });
+    setGatekeeperError(null);
+    setUserSyncDone(true);
+  }, [auth.user, auth.token, auth.signOut, ownerEmail, usersConfig, usersConfigReady, persistUsersConfig, t.accountInactiveAr, t.accountInactiveEn, userSyncDone]);
+
+  useEffect(() => {
+    if (!auth.token || isBlocked || !userSyncDone) return;
     setDbLoading(true);
     findOrCreateDB(auth.token)
       .then(({ fileId: fid, data }) => { setFileId(fid); setDb(data); setDbLoading(false); })
       .catch(() => { setSyncError("Failed to access Google Drive."); setDbLoading(false); });
-  }, [auth.token, isBlocked]);
+  }, [auth.token, isBlocked, userSyncDone]);
 
   const updateDb = useCallback((updater) => {
     setDb((prev) => {
@@ -770,11 +845,22 @@ function AppProvider({ children }) {
     return newItem;
   }, [updateDb]);
 
+  const updateUserEntry = useCallback((email, updater) => {
+    const normalized = String(email || "").toLowerCase();
+    const users = [...(usersConfig?.users || [])];
+    const idx = users.findIndex((u) => String(u.email || "").toLowerCase() === normalized);
+    if (idx < 0) return;
+    const nextUser = typeof updater === "function" ? updater(users[idx]) : { ...users[idx], ...updater };
+    users[idx] = nextUser;
+    persistUsersConfig({ ...usersConfig, users });
+  }, [usersConfig, persistUsersConfig]);
+
   const value = {
     ...auth, db, fileId, syncing, syncError, dbLoading,
     updateDb, softDelete, patchItem, addItem,
     lang, setLang, t, isRTL, font,
     usersConfig, usersConfigReady, currentRole, isBlocked, hasPermission,
+    updateUserEntry, gatekeeperError, userSyncDone,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
@@ -1026,7 +1112,7 @@ function BrandingFooter({ text, isDark = false }) {
 // LOGIN PAGE
 // ═══════════════════════════════════════════════════════════════════════════════
 function LoginPage() {
-  const { signIn, authLoading, gapiReady, authError, lang, setLang, t, isRTL, font } = useApp();
+  const { signIn, authLoading, gapiReady, authError, gatekeeperError, lang, setLang, t, isRTL, font } = useApp();
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{
       minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",
@@ -1102,9 +1188,14 @@ function LoginPage() {
         {!gapiReady && !authError && (
           <p style={{ marginTop:"12px",fontSize:"0.74rem",color:`${T.emerald}80` }}>{t.loadingApis}</p>
         )}
-        {authError && (
+        {(authError || gatekeeperError) && (
           <div style={{ marginTop:"14px",padding:"10px 14px",background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.25)",borderRadius:"8px",color:"rgba(255,100,100,0.9)",fontSize:"0.76rem" }}>
-            ⚠ {authError}
+            ⚠ {authError || (
+            <div style={{ display:"grid", gap:"4px" }}>
+              <span>{gatekeeperError?.ar}</span>
+              <span>{gatekeeperError?.en}</span>
+            </div>
+          )}
           </div>
         )}
         <p style={{ marginTop:"24px",fontSize:"0.72rem",lineHeight:1.7,color:"rgba(255,255,255,0.3)" }}>{t.privacyNote}</p>
@@ -2787,11 +2878,20 @@ function StatisticsTab() {
 }
 
 function UserManagementTab() {
-  const { usersConfig, hasPermission, currentRole, isRTL, font } = useApp();
+  const { usersConfig, updateUserEntry, hasPermission, currentRole, isRTL, font } = useApp();
   const users = usersConfig?.users || [];
   const roleOptions = Object.keys(usersConfig?.roles || {});
   const canBlock = currentRole === "Owner" || hasPermission("block_user") || hasPermission("unblock_user");
   const canAssignRole = currentRole === "Owner" || hasPermission("assign_role");
+
+  const handleToggleBlock = (entry) => {
+    const nextStatus = String(entry?.status || (entry?.blocked ? "blocked" : "active")).toLowerCase() === "blocked" ? "active" : "blocked";
+    updateUserEntry(entry.email, { status: nextStatus, blocked: nextStatus === "blocked" });
+  };
+
+  const handleRoleChange = (entry, role) => {
+    updateUserEntry(entry.email, { role });
+  };
 
   const formatName = (entry) => {
     if (entry?.name) return entry.name;
@@ -2821,7 +2921,9 @@ function UserManagementTab() {
           <tbody>
             {users.map((entry, index) => {
               const isOwner = entry.role === "Owner";
-              const blocked = Boolean(entry.blocked);
+              const status = String(entry.status || (entry.blocked ? "blocked" : "active")).toLowerCase();
+              const blocked = status === "blocked";
+              const statusColorMap = { active: T.positive, blocked: T.negative, paused: T.warning, deleted: "#475569" };
               return (
                 <tr key={`${entry.email}-${index}`} style={{ borderBottom:`1px solid ${T.border}` }}>
                   <td style={{ padding:"12px 14px", color:T.textPrimary, fontWeight:600 }}>{formatName(entry)}</td>
@@ -2829,14 +2931,14 @@ function UserManagementTab() {
                   <td style={{ padding:"12px 14px", color:T.textSecondary }}>{entry.lastLogin || "—"}</td>
                   <td style={{ padding:"12px 14px", color:T.textPrimary }}>{entry.role || "Member"}</td>
                   <td style={{ padding:"12px 14px" }}>
-                    <Chip color={blocked ? T.negative : T.positive}>{blocked ? "Blocked" : "Active"}</Chip>
+                    <Chip color={statusColorMap[status] || T.textMuted}>{status[0]?.toUpperCase() + status.slice(1)}</Chip>
                   </td>
                   <td style={{ padding:"12px 14px" }}>
-                    <div style={{ display:"flex", gap:"8px", flexWrap:"wrap" }}>
-                      <Btn size="sm" variant="danger" disabled={!canBlock || isOwner}>{blocked ? "Unblock" : "Block"}</Btn>
+                    <div style={{ display:"flex", gap:"8px", flexWrap:"wrap", alignItems:"center" }}>
+                      <Btn size="sm" variant="danger" disabled={!canBlock || isOwner} onClick={() => handleToggleBlock(entry)}>{blocked ? "Unblock" : "Block"}</Btn>
                       <Select
                         value={entry.role || "Member"}
-                        onChange={() => {}}
+                        onChange={(e) => handleRoleChange(entry, e.target.value)}
                         options={roleOptions.map((role) => ({ value:role, label:role }))}
                         isRTL={isRTL}
                         disabled={!canAssignRole || isOwner}
@@ -2934,20 +3036,9 @@ export default function App() {
 }
 
 function AppContent() {
-  const { user, token, dbLoading, db, t, signOut, isBlocked, usersConfigReady } = useApp();
+  const { user, token, dbLoading, db, t, usersConfigReady, userSyncDone } = useApp();
   if (!user || !token) return <LoginPage/>;
-  if (!usersConfigReady) return <LoadingScreen message={t?.loading||"LOADING..."}/>;
-  if (isBlocked) {
-    return (
-      <div style={{ minHeight:"100vh", display:"grid", placeItems:"center", background:T.bgApp, padding:"20px" }}>
-        <Card style={{ maxWidth:"520px", width:"100%", padding:"22px", textAlign:"center" }}>
-          <h2 style={{ margin:"0 0 10px", color:T.negative }}>{t.blockedTitle}</h2>
-          <p style={{ margin:"0 0 16px", color:T.textSecondary, lineHeight:1.6 }}>{t.blockedMessage}</p>
-          <Btn variant="secondary" onClick={signOut}>{t.signOut}</Btn>
-        </Card>
-      </div>
-    );
-  }
+  if (!usersConfigReady || !userSyncDone) return <LoadingScreen message={t?.loading||"LOADING..."}/>;
   if (dbLoading || !db) return <LoadingScreen message={t?.loading||"LOADING..."}/>;
   return <MainApp/>;
 }
