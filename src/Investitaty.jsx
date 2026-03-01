@@ -88,6 +88,7 @@ const TRANSLATIONS = {
     mediumLabel: "Medium",
     highLabel: "High",
     transactionStatusLabel: "Transaction Status",
+    allPortfolios: "All Portfolios",
     totalCapitalLabel: "Total Capital",
     grandTotalLabel: "Grand Total",
     totalLabel: "Total",
@@ -97,6 +98,10 @@ const TRANSLATIONS = {
     lossAnalysisMatrix: "Loss Analysis Matrix",
     assetAllocationOverview: "Asset Allocation Overview",
     centralizedCategoryAnalytics: "Centralized Item/Category Analytics",
+    fundingSourceBreakdown: "Funding Source Breakdown",
+    sourceName: "Source Name",
+    totalAllocatedAmount: "Total Allocated Amount",
+    investmentsList: "Investments List",
     categoryNameLabel: "Category Name",
     breakdownByInvestment: "Breakdown by Investment",
     uncategorized: "Uncategorized",
@@ -204,6 +209,7 @@ const TRANSLATIONS = {
     overdue: "Overdue",
     today: "Today",
     deployed: "deployed",
+    footerBranding: "© 2026 Investaty. Developed and Owned by Wafiq Abdulrahman. All rights reserved.",
   },
   ar: {
     appName: "Investaty",
@@ -251,6 +257,7 @@ const TRANSLATIONS = {
     mediumLabel: "متوسط",
     highLabel: "مرتفع",
     transactionStatusLabel: "حالة المعاملة",
+    allPortfolios: "كل المحافظ",
     totalCapitalLabel: "إجمالي رأس المال",
     grandTotalLabel: "الإجمالي الكلي",
     totalLabel: "الإجمالي",
@@ -260,6 +267,10 @@ const TRANSLATIONS = {
     lossAnalysisMatrix: "مصفوفة تحليل الخسائر",
     assetAllocationOverview: "نظرة توزيع الأصول",
     centralizedCategoryAnalytics: "تحليلات العناصر/الفئات المركزية",
+    fundingSourceBreakdown: "تفصيل مصادر التمويل",
+    sourceName: "اسم المصدر",
+    totalAllocatedAmount: "إجمالي المبلغ المخصص",
+    investmentsList: "قائمة الاستثمارات",
     categoryNameLabel: "اسم الفئة",
     breakdownByInvestment: "تفصيل حسب الاستثمار",
     uncategorized: "غير مصنف",
@@ -367,6 +378,7 @@ const TRANSLATIONS = {
     overdue: "متأخر",
     today: "اليوم",
     deployed: "مُودَع",
+    footerBranding: "© 2026 Investaty. تم التطوير والمملوك بواسطة وفيق عبد الرحمن. جميع الحقوق محفوظة.",
   },
 };
 
@@ -802,23 +814,25 @@ const inputCss = (isRTL) => ({
 });
 
 const filterBarCss = {
-  display:"grid",
-  gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",
-  gap:"10px",
+  display:"flex",
+  alignItems:"center",
+  gap:"12px",
+  flexWrap:"wrap",
   marginBottom:"16px",
-  padding:"10px",
-  background:"rgba(15,23,42,0.5)",
-  border:"1px solid rgba(148,163,184,0.22)",
+  padding:"12px",
+  background:"#e2e8f0",
+  border:"1px solid rgba(148,163,184,0.32)",
   borderRadius:"12px",
 };
 
 const filterInputCss = (isRTL) => ({
   ...inputCss(isRTL),
-  background:"rgba(15,23,42,0.75)",
-  border:"1px solid rgba(148,163,184,0.3)",
+  flex:"1 1 180px",
+  background:"#ffffff",
+  border:"1px solid rgba(148,163,184,0.46)",
   minHeight:"38px",
   fontSize:"0.82rem",
-  colorScheme:"dark",
+  colorScheme:"light",
 });
 
 function FilterDateInput({ value, onChange, isRTL }) {
@@ -924,6 +938,23 @@ function KPICard({ label, value, sub, trend, accent = T.emerald, icon: Icon_ }) 
   );
 }
 
+function BrandingFooter({ text, isDark = false }) {
+  return (
+    <footer style={{
+      width:"100%",
+      textAlign:"center",
+      fontSize:"0.7rem",
+      lineHeight:1.5,
+      letterSpacing:"0.01em",
+      color:isDark ? "rgba(241,245,249,0.58)" : "rgba(15,23,42,0.52)",
+      padding:"8px 0",
+      userSelect:"none",
+    }}>
+      {text}
+    </footer>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // LOGIN PAGE
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1014,6 +1045,10 @@ function LoginPage() {
         )}
         <p style={{ marginTop:"24px",fontSize:"0.72rem",lineHeight:1.7,color:"rgba(255,255,255,0.3)" }}>{t.privacyNote}</p>
       </div>
+
+      <div style={{ position:"absolute",left:"20px",right:"20px",bottom:"10px" }}>
+        <BrandingFooter text={t.footerBranding} isDark />
+      </div>
     </div>
   );
 }
@@ -1033,10 +1068,12 @@ function GoogleIcon() {
 // LOADING SCREEN
 // ═══════════════════════════════════════════════════════════════════════════════
 function LoadingScreen({ message }) {
+  const { t, isRTL } = useApp();
   return (
-    <div style={{ minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:T.bgSidebar,fontFamily:T.fontSans }}>
+    <div dir={isRTL ? "rtl" : "ltr"} style={{ minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:T.bgSidebar,fontFamily:T.fontSans,padding:"24px" }}>
       <div style={{ width:"40px",height:"40px",border:`2px solid ${T.emerald}30`,borderTopColor:T.emerald,borderRadius:"50%",animation:"spin 0.9s linear infinite",marginBottom:"16px" }}/>
       <p style={{ color:`${T.emerald}99`,fontSize:"0.8rem",letterSpacing:"0.12em" }}>{message||"LOADING..."}</p>
+      <div style={{ marginTop:"24px" }}><BrandingFooter text={t.footerBranding} isDark /></div>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
@@ -1856,7 +1893,7 @@ function TransactionsTab({ modalPrefill }) {
         </div>
       </div>
       <div style={{ ...filterBarCss, marginBottom:"20px" }}>
-        <Select value={filterPortfolio} onChange={e=>setFilterPortfolio(e.target.value)} options={[{value:"",label:"All Portfolios"},...portfolios.map(p=>({value:p.id,label:p.name}))]} isRTL={isRTL} style={filterInputCss(isRTL)} />
+        <Select value={filterPortfolio} onChange={e=>setFilterPortfolio(e.target.value)} options={[{value:"",label:t.allPortfolios},...portfolios.map(p=>({value:p.id,label:p.name}))]} isRTL={isRTL} style={filterInputCss(isRTL)} />
         <FilterDateInput value={filterStartDate} onChange={(e)=>setFilterStartDate(e.target.value)} isRTL={isRTL} />
         <FilterDateInput value={filterEndDate} onChange={(e)=>setFilterEndDate(e.target.value)} isRTL={isRTL} />
         <Select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} options={[{ value:"", label:t.transactionStatusLabel }, ...statusOpts]} isRTL={isRTL} style={filterInputCss(isRTL)} />
@@ -2295,9 +2332,9 @@ function FundingSourceBreakdownTable({ rows, currency }) {
       <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.8rem" }}>
         <thead>
           <tr style={{ background:"rgba(15,23,42,0.85)" }}>
-            <th style={{ padding:"10px 12px", borderBottom:"1px solid rgba(148,163,184,0.24)", color:"#94a3b8", textAlign:isRTL?"right":"left" }}><span style={{ display:"inline-flex", alignItems:"center", gap:"6px" }}><Landmark size={14}/>Source Name</span></th>
-            <th style={{ padding:"10px 12px", borderBottom:"1px solid rgba(148,163,184,0.24)", color:"#94a3b8", textAlign:isRTL?"right":"left" }}><span style={{ display:"inline-flex", alignItems:"center", gap:"6px" }}><CircleDollarSign size={14}/>Total Allocated Amount</span></th>
-            <th style={{ padding:"10px 12px", borderBottom:"1px solid rgba(148,163,184,0.24)", color:"#94a3b8", textAlign:isRTL?"right":"left" }}><span style={{ display:"inline-flex", alignItems:"center", gap:"6px" }}><ListTree size={14}/>Investments List</span></th>
+            <th style={{ padding:"10px 12px", borderBottom:"1px solid rgba(148,163,184,0.24)", color:"#94a3b8", textAlign:isRTL?"right":"left" }}><span style={{ display:"inline-flex", alignItems:"center", gap:"6px" }}><Landmark size={14}/>{t.sourceName}</span></th>
+            <th style={{ padding:"10px 12px", borderBottom:"1px solid rgba(148,163,184,0.24)", color:"#94a3b8", textAlign:isRTL?"right":"left" }}><span style={{ display:"inline-flex", alignItems:"center", gap:"6px" }}><CircleDollarSign size={14}/>{t.totalAllocatedAmount}</span></th>
+            <th style={{ padding:"10px 12px", borderBottom:"1px solid rgba(148,163,184,0.24)", color:"#94a3b8", textAlign:isRTL?"right":"left" }}><span style={{ display:"inline-flex", alignItems:"center", gap:"6px" }}><ListTree size={14}/>{t.investmentsList}</span></th>
           </tr>
         </thead>
         <tbody>
@@ -2550,7 +2587,7 @@ function StatisticsTab() {
         />
       </AccordionSection>
 
-      <AccordionSection title="Funding Source Breakdown" icon={<Landmark size={14} color="#94a3b8" />}>
+      <AccordionSection title={t.fundingSourceBreakdown} icon={<Landmark size={14} color="#94a3b8" />}>
         <FundingSourceBreakdownTable rows={fundingRows} currency={primaryCurrency} />
       </AccordionSection>
     </div>
@@ -2603,13 +2640,14 @@ function MainApp() {
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} isOpen={sidebarOpen} setIsOpen={setSidebarOpen}/>
 
 
-      <main style={{ flex:1,overflowY:"auto",padding:"32px 36px",maxWidth:"100%" }}>
+      <main style={{ flex:1,overflowY:"auto",padding:"32px 36px",maxWidth:"100%",display:"flex",flexDirection:"column" }}>
         {syncError && (
           <div style={{ marginBottom:"16px",padding:"10px 16px",background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.2)",borderRadius:"8px",color:T.negative,fontSize:"0.8rem",display:"flex",alignItems:"center",gap:"8px" }}>
             <AlertCircle size={14}/>{syncError}
           </div>
         )}
-        {tabs[activeTab]}
+        <div style={{ flex:1 }}>{tabs[activeTab]}</div>
+        <BrandingFooter text={t.footerBranding} />
       </main>
     </div>
   );
