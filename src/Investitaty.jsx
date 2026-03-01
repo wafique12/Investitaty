@@ -696,6 +696,7 @@ function useGoogleAuth() {
 function AppProvider({ children }) {
   const auth = useGoogleAuth();
   const [usersConfig, setUsersConfig] = useState(DEFAULT_USERS_CONFIG);
+  const [usersConfigReady, setUsersConfigReady] = useState(false);
   const [db, setDb] = useState(null);
   const [fileId, setFileId] = useState(null);
   const [syncing, setSyncing] = useState(false);
@@ -712,13 +713,14 @@ function AppProvider({ children }) {
     fetch(USERS_CONFIG_PATH)
       .then((res) => res.ok ? res.json() : DEFAULT_USERS_CONFIG)
       .then((data) => setUsersConfig(data && typeof data === "object" ? data : DEFAULT_USERS_CONFIG))
-      .catch(() => setUsersConfig(DEFAULT_USERS_CONFIG));
+      .catch(() => setUsersConfig(DEFAULT_USERS_CONFIG))
+      .finally(() => setUsersConfigReady(true));
   }, []);
 
   const currentEmail = String(auth?.user?.email || "").toLowerCase();
   const ownerEmail = String(usersConfig?.ownerEmail || DEFAULT_USERS_CONFIG.ownerEmail).toLowerCase();
-  const listedUser = (usersConfig?.users || []).find((u) => String(u.email || "").toLowerCase() === currentEmail);
-  const currentRole = currentEmail && currentEmail === ownerEmail ? "Owner" : (listedUser?.role || "Member");
+  const listedUser = (usersConfig?.users || []).find((u) => String(u.email || "").toLowerCase() === currentEmail) || null;
+  const currentRole = listedUser?.role || (currentEmail && currentEmail === ownerEmail ? "Owner" : "Member");
   const isBlocked = currentEmail && currentEmail !== ownerEmail ? Boolean(listedUser?.blocked) : false;
   const hasPermission = useCallback((permission) => {
     const rolePerms = usersConfig?.roles?.[currentRole]?.permissions || [];
@@ -772,7 +774,7 @@ function AppProvider({ children }) {
     ...auth, db, fileId, syncing, syncError, dbLoading,
     updateDb, softDelete, patchItem, addItem,
     lang, setLang, t, isRTL, font,
-    usersConfig, currentRole, isBlocked, hasPermission,
+    usersConfig, usersConfigReady, currentRole, isBlocked, hasPermission,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
@@ -925,11 +927,11 @@ function Input({ value, onChange, type="text", placeholder, isRTL }) {
   );
 }
 
-function Select({ value, onChange, options, placeholder, isRTL, style }) {
+function Select({ value, onChange, options, placeholder, isRTL, style, disabled = false }) {
   const [focused, setFocused] = useState(false);
   return (
-    <select value={value} onChange={onChange}
-      style={{ ...inputCss(isRTL), borderColor:focused?T.emerald:T.border, cursor:"pointer", ...style }}
+    <select value={value} onChange={onChange} disabled={disabled}
+      style={{ ...inputCss(isRTL), borderColor:focused?T.emerald:T.border, cursor:disabled?"not-allowed":"pointer", opacity:disabled?0.7:1, ...style }}
       onFocus={()=>setFocused(true)} onBlur={()=>setFocused(false)}
     >
       {placeholder && <option value="">{placeholder}</option>}
@@ -1145,7 +1147,8 @@ function LoadingScreen({ message }) {
 // SIDEBAR
 // ═══════════════════════════════════════════════════════════════════════════════
 function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen }) {
-  const { user, signOut, syncing, t, font, lang, setLang, isRTL } = useApp();
+  const { user, signOut, syncing, t, font, lang, setLang, hasPermission, currentRole } = useApp();
+  const canManageUsers = currentRole === "Owner" || hasPermission("assign_role") || hasPermission("block_user") || hasPermission("unblock_user");
 
   const navItems = [
     { id:"dashboard",    label:t.dashboard,    icon:<BarChart2 size={17}/> },
@@ -1153,6 +1156,7 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen }) {
     { id:"investments",  label:t.investments,  icon:<Wallet size={17}/> },
     { id:"transactions", label:t.transactions, icon:<DollarSign size={17}/> },
     { id:"statistics",   label:t.statistics,   icon:<PieChartIcon size={17}/> },
+    ...(canManageUsers ? [{ id:"users", label:"Users & Permissions", icon:<Shield size={17}/> }] : []),
     { id:"settings",     label:t.settings,     icon:<Settings size={17}/> },
   ];
 
@@ -1250,13 +1254,21 @@ const roi = (inv) => { const c=costBasis(inv); return c>0?((curVal(inv)-c)/c)*10
 const txIncome = (txs) => txs.filter(t=>t.type==="income").reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
 const txExpense = (txs) => txs.filter(t=>t.type==="expense").reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
 const baseCurrencyCode = (db) => db?.settings?.baseCurrency || "USD";
-const currencyRate = (db, currency="USD") => {
-  const base = baseCurrencyCode(db);
-  if (currency === base) return 1;
+const currencyRateFromUSD = (db, currency="USD") => {
   const parsed = Number(db?.settings?.currencyRates?.[currency]);
-  return Number.isFinite(parsed) ? parsed : 0;
+  if (!Number.isFinite(parsed) || parsed <= 0) return currency === "USD" ? 1 : 0;
+  return parsed;
 };
-const toBaseAmount = (db, amount, sourceCurrency="USD") => (Number(amount) || 0) * currencyRate(db, sourceCurrency);
+const convertCurrency = (db, amount, sourceCurrency="USD", targetCurrency="USD") => {
+  const safeAmount = Number(amount) || 0;
+  if (sourceCurrency === targetCurrency) return safeAmount;
+  const sourceRate = currencyRateFromUSD(db, sourceCurrency);
+  const targetRate = currencyRateFromUSD(db, targetCurrency);
+  if (!sourceRate || !targetRate) return 0;
+  const amountInUsd = safeAmount / sourceRate;
+  return amountInUsd * targetRate;
+};
+const toBaseAmount = (db, amount, sourceCurrency="USD") => convertCurrency(db, amount, sourceCurrency, baseCurrencyCode(db));
 const currencySymbol = (currency="USD") => ({ USD:"$", EUR:"€", GBP:"£", SAR:"﷼", AED:"د.إ" }[currency] || currency);
 const fmtMoney = (v, { compact=false, currency="USD" } = {}) => {
   const n = Number(v||0);
@@ -2224,7 +2236,6 @@ function SettingsTab() {
       settings: {
         ...prev.settings,
         baseCurrency: value,
-        currencyRates: { ...(prev.settings.currencyRates || {}), [value]: 1 },
       },
     }));
   };
@@ -2319,11 +2330,8 @@ function SettingsTab() {
                           {isBase && <span style={{ fontSize:"0.68rem", color:T.emerald, fontWeight:700, letterSpacing:"0.05em" }}>BASE</span>}
                         </div>
                         <div style={{ display:"flex", alignItems:"center", gap:"6px" }}>
-                          {isBase ? (
-                            <span style={{ fontSize:"0.72rem", color:T.textSecondary, fontWeight:600 }}>Base currency</span>
-                          ) : (
-                            <input type="number" min="0" step="0.0001" value={currencyRates[currency] ?? ""} onChange={(e)=>setCurrencyRate(currency, e.target.value)} style={{ width:"102px", padding:"5px 8px", background:T.bgInput, border:`1px solid ${T.border}`, borderRadius:"6px", color:T.textPrimary, fontSize:"0.76rem" }} />
-                          )}
+                          <span style={{ fontSize:"0.7rem", color:T.textMuted, fontWeight:600 }}>1 USD =</span>
+                          <input type="number" min="0" step="0.0001" value={currencyRates[currency] ?? ""} onChange={(e)=>setCurrencyRate(currency, e.target.value)} style={{ width:"102px", padding:"5px 8px", background:T.bgInput, border:`1px solid ${T.border}`, borderRadius:"6px", color:T.textPrimary, fontSize:"0.76rem" }} />
                           {isEditing ? (
                             <>
                               <button onClick={()=>renameCurrency(i)} style={{ border:"none", background:"none", color:T.positive, cursor:"pointer", display:"flex" }}><Check size={13}/></button>
@@ -2778,11 +2786,78 @@ function StatisticsTab() {
   );
 }
 
+function UserManagementTab() {
+  const { usersConfig, hasPermission, currentRole, isRTL, font } = useApp();
+  const users = usersConfig?.users || [];
+  const roleOptions = Object.keys(usersConfig?.roles || {});
+  const canBlock = currentRole === "Owner" || hasPermission("block_user") || hasPermission("unblock_user");
+  const canAssignRole = currentRole === "Owner" || hasPermission("assign_role");
+
+  const formatName = (entry) => {
+    if (entry?.name) return entry.name;
+    const emailPrefix = String(entry?.email || "").split("@")[0] || "user";
+    return emailPrefix.replace(/[._-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  };
+
+  return (
+    <div dir={isRTL ? "rtl" : "ltr"} style={{ fontFamily:font }}>
+      <div style={{ marginBottom:"16px" }}>
+        <h2 style={{ margin:0, fontSize:"1.4rem", fontWeight:700, color:T.textPrimary }}>Users & Permissions</h2>
+        <p style={{ margin:"4px 0 0", color:T.textSecondary, fontSize:"0.82rem" }}>Manage user access, account status, and role assignments.</p>
+      </div>
+
+      <Card style={{ padding:0, overflow:"hidden" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.82rem" }}>
+          <thead>
+            <tr style={{ background:"#f8fafc", borderBottom:`1px solid ${T.border}` }}>
+              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>Name</th>
+              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>Email</th>
+              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>Last Login</th>
+              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>Role</th>
+              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>Status</th>
+              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((entry, index) => {
+              const isOwner = entry.role === "Owner";
+              const blocked = Boolean(entry.blocked);
+              return (
+                <tr key={`${entry.email}-${index}`} style={{ borderBottom:`1px solid ${T.border}` }}>
+                  <td style={{ padding:"12px 14px", color:T.textPrimary, fontWeight:600 }}>{formatName(entry)}</td>
+                  <td style={{ padding:"12px 14px", color:T.textSecondary }}>{entry.email}</td>
+                  <td style={{ padding:"12px 14px", color:T.textSecondary }}>{entry.lastLogin || "—"}</td>
+                  <td style={{ padding:"12px 14px", color:T.textPrimary }}>{entry.role || "Member"}</td>
+                  <td style={{ padding:"12px 14px" }}>
+                    <Chip color={blocked ? T.negative : T.positive}>{blocked ? "Blocked" : "Active"}</Chip>
+                  </td>
+                  <td style={{ padding:"12px 14px" }}>
+                    <div style={{ display:"flex", gap:"8px", flexWrap:"wrap" }}>
+                      <Btn size="sm" variant="danger" disabled={!canBlock || isOwner}>{blocked ? "Unblock" : "Block"}</Btn>
+                      <Select
+                        value={entry.role || "Member"}
+                        onChange={() => {}}
+                        options={roleOptions.map((role) => ({ value:role, label:role }))}
+                        isRTL={isRTL}
+                        disabled={!canAssignRole || isOwner}
+                      />
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </Card>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN APP SHELL
 // ═══════════════════════════════════════════════════════════════════════════════
 function MainApp() {
-  const { syncError, t, isRTL, font } = useApp();
+  const { syncError, t, isRTL, font, hasPermission, currentRole } = useApp();
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem(TAB_STORAGE_KEY) || "dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [investmentPrefill, setInvestmentPrefill] = useState(null);
@@ -2791,6 +2866,12 @@ function MainApp() {
   useEffect(() => {
     localStorage.setItem(TAB_STORAGE_KEY, activeTab);
   }, [activeTab]);
+
+  const canManageUsers = currentRole === "Owner" || hasPermission("assign_role") || hasPermission("block_user") || hasPermission("unblock_user");
+
+  useEffect(() => {
+    if (!canManageUsers && activeTab === "users") setActiveTab("dashboard");
+  }, [canManageUsers, activeTab]);
 
   const quickAddInvestment = (portfolioId) => {
     setActiveTab("investments");
@@ -2808,6 +2889,7 @@ function MainApp() {
     investments:  <InvestmentsTab onQuickAddTransaction={quickAddTransaction} modalPrefill={investmentPrefill} />,
     transactions: <TransactionsTab modalPrefill={transactionPrefill} />,
     statistics:   <StatisticsTab />,
+    users:        canManageUsers ? <UserManagementTab /> : <Dashboard />,
     settings:     <SettingsTab />,
   };
 
@@ -2852,8 +2934,9 @@ export default function App() {
 }
 
 function AppContent() {
-  const { user, token, dbLoading, db, t, signOut, isBlocked } = useApp();
+  const { user, token, dbLoading, db, t, signOut, isBlocked, usersConfigReady } = useApp();
   if (!user || !token) return <LoginPage/>;
+  if (!usersConfigReady) return <LoadingScreen message={t?.loading||"LOADING..."}/>;
   if (isBlocked) {
     return (
       <div style={{ minHeight:"100vh", display:"grid", placeItems:"center", background:T.bgApp, padding:"20px" }}>
