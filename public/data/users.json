@@ -16,7 +16,9 @@
   },
   "users": [
     {
+      "name": "Wafique Abdulrahman",
       "email": "wafique22@gmail.com",
+      "lastLogin": "2026-01-16 09:42",
       "role": "Owner",
       "blocked": false
     }
