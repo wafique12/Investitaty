@@ -1484,23 +1484,15 @@ function InvestmentsTab({ onQuickAddTransaction, modalPrefill }) {
 
   const statusOpts = ((db?.settings?.investmentStatuses&&db.settings.investmentStatuses.length)?db.settings.investmentStatuses:["Active","Paused","Closed"]).map((v)=>({ value:v, label:v }));
   const methodOpts = (db?.settings?.investmentMethods || []).map((v)=>({ value:v, label:v }));
-  const monthOptions = [{ value:"", label:t.allMonths }, ...Array.from({ length:12 }, (_,i)=>({ value:String(i+1).padStart(2,"0"), label:String(i+1).padStart(2,"0") }))];
-  const yearOptions = Array.from(new Set(investments.flatMap((inv) => [inv.startDate, inv.endDate, inv.purchaseDate].filter(Boolean).map((d) => String(d).slice(0, 4))))).filter(Boolean).sort((a,b)=>Number(b)-Number(a));
-  const [filterStartYear, setFilterStartYear] = useState("");
-  const [filterStartMonth, setFilterStartMonth] = useState("");
-  const [filterEndYear, setFilterEndYear] = useState("");
-  const [filterEndMonth, setFilterEndMonth] = useState("");
+  const [filterStartDate, setFilterStartDate] = useState("");
+  const [filterEndDate, setFilterEndDate] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
 
   const filteredInvestments = investments.filter((inv) => {
     const startRaw = inv.startDate || inv.purchaseDate || "";
     const endRaw = inv.endDate || "";
-    const startYear = startRaw ? String(startRaw).slice(0, 4) : "";
-    const startMonth = startRaw ? String(startRaw).slice(5, 7) : "";
-    const endYear = endRaw ? String(endRaw).slice(0, 4) : "";
-    const endMonth = endRaw ? String(endRaw).slice(5, 7) : "";
-    const startMatch = (!filterStartYear || startYear === filterStartYear) && (!filterStartMonth || startMonth === filterStartMonth);
-    const endMatch = (!filterEndYear || endYear === filterEndYear) && (!filterEndMonth || endMonth === filterEndMonth);
+    const startMatch = !filterStartDate || startRaw === filterStartDate;
+    const endMatch = !filterEndDate || endRaw === filterEndDate;
     const statusMatch = !filterStatus || inv.status === filterStatus;
     return startMatch && endMatch && statusMatch;
   });
@@ -1516,11 +1508,9 @@ function InvestmentsTab({ onQuickAddTransaction, modalPrefill }) {
       </div>
 
 
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))", gap:"10px", marginBottom:"16px", padding:"12px", background:T.bgCard, border:`1px solid ${T.border}`, borderRadius:"10px" }}>
-        <Select value={filterStartYear} onChange={e=>setFilterStartYear(e.target.value)} options={[{ value:"", label:`${t.startDate} · ${t.year}` }, ...yearOptions.map((y)=>({ value:y, label:y }))]} isRTL={isRTL}/>
-        <Select value={filterStartMonth} onChange={e=>setFilterStartMonth(e.target.value)} options={monthOptions.map((m)=>({ value:m.value, label:`${t.startDate} · ${m.label}` }))} isRTL={isRTL}/>
-        <Select value={filterEndYear} onChange={e=>setFilterEndYear(e.target.value)} options={[{ value:"", label:`${t.endDate} · ${t.year}` }, ...yearOptions.map((y)=>({ value:y, label:y }))]} isRTL={isRTL}/>
-        <Select value={filterEndMonth} onChange={e=>setFilterEndMonth(e.target.value)} options={monthOptions.map((m)=>({ value:m.value, label:`${t.endDate} · ${m.label}` }))} isRTL={isRTL}/>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))", gap:"10px", marginBottom:"16px", padding:"12px", background:"rgba(148,163,184,0.12)", border:`1px solid ${T.border}`, borderRadius:"10px" }}>
+        <input type="date" value={filterStartDate} onChange={(e)=>setFilterStartDate(e.target.value)} style={{ ...inputCss(isRTL), background:"#0f172a", color:"#e2e8f0", borderColor:"rgba(16,185,129,0.35)", colorScheme:"dark" }} />
+        <input type="date" value={filterEndDate} onChange={(e)=>setFilterEndDate(e.target.value)} style={{ ...inputCss(isRTL), background:"#0f172a", color:"#e2e8f0", borderColor:"rgba(16,185,129,0.35)", colorScheme:"dark" }} />
         <Select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} options={[{ value:"", label:t.investmentStatuses }, ...statusOpts]} isRTL={isRTL}/>
       </div>
 
@@ -1760,10 +1750,8 @@ function TransactionsTab({ modalPrefill }) {
   const [editItem, setEditItem] = useState(null);
   const [filterPortfolio, setFilterPortfolio] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
-  const [filterStartYear, setFilterStartYear] = useState("");
-  const [filterStartMonth, setFilterStartMonth] = useState("");
-  const [filterEndYear, setFilterEndYear] = useState("");
-  const [filterEndMonth, setFilterEndMonth] = useState("");
+  const [filterStartDate, setFilterStartDate] = useState("");
+  const [filterEndDate, setFilterEndDate] = useState("");
   const [openMenu, setOpenMenu] = useState(null);
 
   const EMPTY = { portfolioId:"",investmentId:"",category:"",amount:"",date:"",dueDate:"",type:"income",status:"recorded",notes:"" };
@@ -1772,19 +1760,13 @@ function TransactionsTab({ modalPrefill }) {
 
   const portfolios = visible(db?.portfolios||[]);
   const allTx = visible(db?.transactions||[]);
-  const yearOptions = Array.from(new Set(allTx.flatMap((tx) => [tx.date, tx.dueDate].filter(Boolean).map((d) => String(d).slice(0, 4))))).filter(Boolean).sort((a,b)=>Number(b)-Number(a));
-  const monthOptions = [{ value:"", label:t.allMonths }, ...Array.from({ length:12 }, (_,i)=>({ value:String(i+1).padStart(2,"0"), label:String(i+1).padStart(2,"0") }))];
   const filtered = allTx.filter((tx) => {
-    const txDate = tx.date || tx.created_at || "";
-    const dateYear = txDate ? String(txDate).slice(0, 4) : "";
-    const dateMonth = txDate ? String(txDate).slice(5, 7) : "";
+    const txDate = tx.date || "";
     const due = tx.dueDate || "";
-    const dueYear = due ? String(due).slice(0, 4) : "";
-    const dueMonth = due ? String(due).slice(5, 7) : "";
     const portfolioMatch = !filterPortfolio || tx.portfolioId===filterPortfolio;
     const statusMatch = !filterStatus || tx.status===filterStatus;
-    const startMatch = (!filterStartYear || dateYear===filterStartYear) && (!filterStartMonth || dateMonth===filterStartMonth);
-    const endMatch = (!filterEndYear || dueYear===filterEndYear) && (!filterEndMonth || dueMonth===filterEndMonth);
+    const startMatch = !filterStartDate || txDate === filterStartDate;
+    const endMatch = !filterEndDate || due === filterEndDate;
     return portfolioMatch && statusMatch && startMatch && endMatch;
   });
   const sorted = [...filtered].sort((a,b)=>new Date(b.date||b.created_at||0)-new Date(a.date||a.created_at||0));
@@ -1839,12 +1821,10 @@ function TransactionsTab({ modalPrefill }) {
           <span style={{ color:T.negative }}>-{fmtMoney(totalExp,{currency:"USD"})}</span>
         </div>
       </div>
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))", gap:"10px", marginBottom:"20px", padding:"12px", background:T.bgCard, border:`1px solid ${T.border}`, borderRadius:"10px" }}>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))", gap:"10px", marginBottom:"20px", padding:"12px", background:"rgba(148,163,184,0.12)", border:`1px solid ${T.border}`, borderRadius:"10px" }}>
         <Select value={filterPortfolio} onChange={e=>setFilterPortfolio(e.target.value)} options={[{value:"",label:"All Portfolios"},...portfolios.map(p=>({value:p.id,label:p.name}))]} isRTL={isRTL}/>
-        <Select value={filterStartYear} onChange={e=>setFilterStartYear(e.target.value)} options={[{ value:"", label:`${t.date} · ${t.year}` }, ...yearOptions.map((y)=>({ value:y, label:y }))]} isRTL={isRTL}/>
-        <Select value={filterStartMonth} onChange={e=>setFilterStartMonth(e.target.value)} options={monthOptions.map((m)=>({ value:m.value, label:`${t.date} · ${m.label}` }))} isRTL={isRTL}/>
-        <Select value={filterEndYear} onChange={e=>setFilterEndYear(e.target.value)} options={[{ value:"", label:`${t.dueDate} · ${t.year}` }, ...yearOptions.map((y)=>({ value:y, label:y }))]} isRTL={isRTL}/>
-        <Select value={filterEndMonth} onChange={e=>setFilterEndMonth(e.target.value)} options={monthOptions.map((m)=>({ value:m.value, label:`${t.dueDate} · ${m.label}` }))} isRTL={isRTL}/>
+        <input type="date" value={filterStartDate} onChange={(e)=>setFilterStartDate(e.target.value)} style={{ ...inputCss(isRTL), background:"#0f172a", color:"#e2e8f0", borderColor:"rgba(16,185,129,0.35)", colorScheme:"dark" }} />
+        <input type="date" value={filterEndDate} onChange={(e)=>setFilterEndDate(e.target.value)} style={{ ...inputCss(isRTL), background:"#0f172a", color:"#e2e8f0", borderColor:"rgba(16,185,129,0.35)", colorScheme:"dark" }} />
         <Select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} options={[{ value:"", label:t.transactionStatusLabel }, ...statusOpts]} isRTL={isRTL}/>
       </div>
 
@@ -1972,6 +1952,8 @@ function TxActionMenu({ tx, onClose }) {
 function SettingsTab() {
   const { db, updateDb, t, isRTL, font } = useApp();
   const [newItems, setNewItems] = useState({});
+  const [currencyError, setCurrencyError] = useState("");
+  const [editingCurrency, setEditingCurrency] = useState(null);
 
   const sections = [
     { key:"portfolioTypes",        label:t.portfolioTypes,        icon:<FolderOpen size={15}/> },
@@ -2019,6 +2001,51 @@ function SettingsTab() {
     }));
   };
 
+  const renameCurrency = (idx) => {
+    if (!editingCurrency || editingCurrency.index !== idx) return;
+    const nextName = (editingCurrency.value || "").trim();
+    if (!nextName) return;
+    const current = (db?.settings?.currencies || [])[idx];
+    if (!current) return;
+    if ((db?.settings?.currencies || []).some((c, i) => i !== idx && c === nextName)) {
+      setCurrencyError("Currency already exists.");
+      return;
+    }
+    updateDb((prev) => {
+      const list = [...(prev.settings.currencies || [])];
+      list[idx] = nextName;
+      const rates = { ...(prev.settings.currencyRates || {}) };
+      const existingRate = rates[current] ?? 0;
+      delete rates[current];
+      rates[nextName] = existingRate;
+      return {
+        ...prev,
+        settings: {
+          ...prev.settings,
+          currencies: list,
+          baseCurrency: prev.settings.baseCurrency === current ? nextName : prev.settings.baseCurrency,
+          currencyRates: rates,
+        },
+      };
+    });
+    setEditingCurrency(null);
+    setCurrencyError("");
+  };
+
+  const deleteCurrency = (currency) => {
+    if (currency === baseCurrency) {
+      setCurrencyError("Please assign another base currency before deleting this one.");
+      return;
+    }
+    updateDb((prev) => {
+      const list = (prev.settings.currencies || []).filter((c) => c !== currency);
+      const rates = { ...(prev.settings.currencyRates || {}) };
+      delete rates[currency];
+      return { ...prev, settings: { ...prev.settings, currencies: list, currencyRates: rates } };
+    });
+    setCurrencyError("");
+  };
+
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font }}>
       <div style={{ marginBottom:"24px" }}>
@@ -2039,17 +2066,40 @@ function SettingsTab() {
                 <div style={{ marginBottom:"10px" }}>
                   <Select value={baseCurrency} onChange={(e)=>setBaseCurrency(e.target.value)} options={(db?.settings?.currencies||[]).map((c)=>({ value:c, label:`Base · ${c}` }))} isRTL={isRTL} />
                 </div>
+                {currencyError && <div style={{ marginBottom:"8px", fontSize:"0.75rem", color:T.negative }}>{currencyError}</div>}
                 <div style={{ display:"grid",gap:"8px",marginBottom:"12px" }}>
-                  {(db?.settings?.currencies||[]).map((currency, i) => (
-                    <div key={`${currency}-${i}`} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"8px", padding:"7px 9px", border:`1px solid ${T.border}`, borderRadius:"8px", background:T.bgApp, color:T.textPrimary }}>
-                      <span style={{ fontSize:"0.78rem", fontWeight:600, color:T.textPrimary }}>{currency}</span>
-                      {currency === baseCurrency ? (
-                        <span style={{ fontSize:"0.75rem", color:T.textMuted }}>1.00 (Base)</span>
-                      ) : (
-                        <input type="number" min="0" step="0.0001" value={currencyRates[currency] ?? ""} onChange={(e)=>setCurrencyRate(currency, e.target.value)} style={{ width:"110px", padding:"5px 8px", background:T.bgInput, border:`1px solid ${T.border}`, borderRadius:"6px", color:T.textPrimary, fontSize:"0.76rem" }} />
-                      )}
-                    </div>
-                  ))}
+                  {(db?.settings?.currencies||[]).map((currency, i) => {
+                    const isBase = currency === baseCurrency;
+                    const isEditing = editingCurrency?.index === i;
+                    return (
+                      <div key={`${currency}-${i}`} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"8px", padding:"7px 9px", border:`1px solid ${isBase ? T.emerald : T.border}`, borderRadius:"8px", background:isBase ? "rgba(16,185,129,0.1)" : T.bgApp, color:T.textPrimary }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:"6px", minWidth:0 }}>
+                          {isEditing ? (
+                            <input value={editingCurrency.value} onChange={(e)=>setEditingCurrency({ index:i, value:e.target.value })} style={{ width:"90px", padding:"4px 6px", background:T.bgInput, border:`1px solid ${T.border}`, borderRadius:"6px", color:T.textPrimary, fontSize:"0.75rem" }} />
+                          ) : (
+                            <span style={{ fontSize:"0.78rem", fontWeight:600, color:T.textPrimary }}>{currency}</span>
+                          )}
+                          {isBase && <span style={{ fontSize:"0.7rem", color:T.emerald, fontWeight:700 }}>BASE</span>}
+                        </div>
+                        <div style={{ display:"flex", alignItems:"center", gap:"6px" }}>
+                          {isBase ? (
+                            <span style={{ fontSize:"0.75rem", color:T.textSecondary }}>1.00</span>
+                          ) : (
+                            <input type="number" min="0" step="0.0001" value={currencyRates[currency] ?? ""} onChange={(e)=>setCurrencyRate(currency, e.target.value)} style={{ width:"92px", padding:"5px 8px", background:T.bgInput, border:`1px solid ${T.border}`, borderRadius:"6px", color:T.textPrimary, fontSize:"0.76rem" }} />
+                          )}
+                          {isEditing ? (
+                            <>
+                              <button onClick={()=>renameCurrency(i)} style={{ border:"none", background:"none", color:T.positive, cursor:"pointer", display:"flex" }}><Check size={13}/></button>
+                              <button onClick={()=>setEditingCurrency(null)} style={{ border:"none", background:"none", color:T.textMuted, cursor:"pointer", display:"flex" }}><X size={13}/></button>
+                            </>
+                          ) : (
+                            <button onClick={()=>{setEditingCurrency({ index:i, value:currency }); setCurrencyError("");}} style={{ border:"none", background:"none", color:T.textSecondary, cursor:"pointer", display:"flex" }}><Edit3 size={13}/></button>
+                          )}
+                          <button onClick={()=>deleteCurrency(currency)} style={{ border:"none", background:"none", color:T.negative, cursor:"pointer", display:"flex" }}><Trash2 size={13}/></button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </>
             ) : (
@@ -2219,7 +2269,7 @@ function FundingSourceBreakdownTable({ rows, currency }) {
         <tbody>
           {rows.map((row, idx) => (
             <tr key={row.source} style={{ background:idx % 2 ? "rgba(148,163,184,0.07)" : "transparent" }}>
-              <td style={{ padding:"10px 12px", borderTop:"1px solid rgba(148,163,184,0.16)", color:"#f8fafc", fontWeight:600 }}>{row.source}</td>
+              <td style={{ padding:"10px 12px", borderTop:"1px solid rgba(148,163,184,0.16)", color:"#f8fafc", fontWeight:600, textAlign:isRTL?"right":"left" }}>{row.source}</td>
               <td style={{ padding:"10px 12px", borderTop:"1px solid rgba(148,163,184,0.16)", color:"#cbd5e1", textAlign:isRTL?"right":"left" }}>{fmtMoney(row.total, { currency })}</td>
               <td style={{ padding:"10px 12px", borderTop:"1px solid rgba(148,163,184,0.16)", color:"#cbd5e1", textAlign:isRTL?"right":"left" }}>
                 {row.breakdown.map((item, i) => (
