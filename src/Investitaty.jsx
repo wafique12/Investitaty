@@ -18,6 +18,7 @@ const SCOPES = "https://www.googleapis.com/auth/drive.file";
 const DB_FILENAME = "investitaty_db.json";
 const AUTH_STORAGE_KEY = "investitaty_auth_v1";
 const TAB_STORAGE_KEY = "investitaty_active_tab_v1";
+const USERS_CONFIG_PATH = "/data/users.json";
 
 // ─── New nested schema ────────────────────────────────────────────────────────
 // portfolios[]  → investments[]  → transactions[]
@@ -213,6 +214,8 @@ const TRANSLATIONS = {
     today: "Today",
     deployed: "deployed",
     footerBranding: "© 2026 Investaty. Developed and Owned by Wafiq Abdulrahman. All rights reserved.",
+    blockedTitle: "Account access blocked",
+    blockedMessage: "Your account has been blocked by an administrator. You cannot access investment data until your account is unblocked.",
   },
   ar: {
     appName: "Investaty",
@@ -383,7 +386,22 @@ const TRANSLATIONS = {
     today: "اليوم",
     deployed: "مُودَع",
     footerBranding: "© 2026 Investaty. مطور ومملوك بواسطة وفيق عبد الرحمن. جميع الحقوق محفوظة.",
+    blockedTitle: "تم حظر الوصول للحساب",
+    blockedMessage: "تم حظر حسابك من قبل الإدارة. لا يمكنك الوصول إلى بيانات الاستثمار حتى يتم إلغاء الحظر.",
   },
+};
+
+const DEFAULT_USERS_CONFIG = {
+  ownerEmail: "wafique22@gmail.com",
+  roles: {
+    Owner: { permissions: ["block_user", "unblock_user", "assign_role", "manage_everything"] },
+    Supervisor: { permissions: ["block_user", "unblock_user"] },
+    Admin: { permissions: ["block_user"] },
+    Member: { permissions: [] },
+  },
+  users: [
+    { email: "wafique22@gmail.com", role: "Owner", blocked: false },
+  ],
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -677,6 +695,7 @@ function useGoogleAuth() {
 // ═══════════════════════════════════════════════════════════════════════════════
 function AppProvider({ children }) {
   const auth = useGoogleAuth();
+  const [usersConfig, setUsersConfig] = useState(DEFAULT_USERS_CONFIG);
   const [db, setDb] = useState(null);
   const [fileId, setFileId] = useState(null);
   const [syncing, setSyncing] = useState(false);
@@ -690,12 +709,29 @@ function AppProvider({ children }) {
   const font = isRTL ? T.fontAr : T.fontSans;
 
   useEffect(() => {
-    if (!auth.token) return;
+    fetch(USERS_CONFIG_PATH)
+      .then((res) => res.ok ? res.json() : DEFAULT_USERS_CONFIG)
+      .then((data) => setUsersConfig(data && typeof data === "object" ? data : DEFAULT_USERS_CONFIG))
+      .catch(() => setUsersConfig(DEFAULT_USERS_CONFIG));
+  }, []);
+
+  const currentEmail = String(auth?.user?.email || "").toLowerCase();
+  const ownerEmail = String(usersConfig?.ownerEmail || DEFAULT_USERS_CONFIG.ownerEmail).toLowerCase();
+  const listedUser = (usersConfig?.users || []).find((u) => String(u.email || "").toLowerCase() === currentEmail);
+  const currentRole = currentEmail && currentEmail === ownerEmail ? "Owner" : (listedUser?.role || "Member");
+  const isBlocked = currentEmail && currentEmail !== ownerEmail ? Boolean(listedUser?.blocked) : false;
+  const hasPermission = useCallback((permission) => {
+    const rolePerms = usersConfig?.roles?.[currentRole]?.permissions || [];
+    return rolePerms.includes("manage_everything") || rolePerms.includes(permission);
+  }, [usersConfig, currentRole]);
+
+  useEffect(() => {
+    if (!auth.token || isBlocked) return;
     setDbLoading(true);
     findOrCreateDB(auth.token)
       .then(({ fileId: fid, data }) => { setFileId(fid); setDb(data); setDbLoading(false); })
       .catch(() => { setSyncError("Failed to access Google Drive."); setDbLoading(false); });
-  }, [auth.token]);
+  }, [auth.token, isBlocked]);
 
   const updateDb = useCallback((updater) => {
     setDb((prev) => {
@@ -736,6 +772,7 @@ function AppProvider({ children }) {
     ...auth, db, fileId, syncing, syncError, dbLoading,
     updateDb, softDelete, patchItem, addItem,
     lang, setLang, t, isRTL, font,
+    usersConfig, currentRole, isBlocked, hasPermission,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
@@ -938,9 +975,8 @@ function Modal({ title, children, onClose, maxWidth = "520px", badge }) {
 }
 
 // ─── KPI number card ──────────────────────────────────────────────────────────
-function KPICard({ label, value, sub, trend, accent = T.emerald, icon: Icon_ }) {
+function KPICard({ label, value, sub, trend, accent = T.emerald, icon: Icon_, currency = "USD" }) {
   const isPos = trend === undefined || trend >= 0;
-  const fmtV = (v) => "$" + Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return (
     <Card style={{ padding:"20px",flex:1,minWidth:"160px" }}>
       <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"12px" }}>
@@ -951,14 +987,14 @@ function KPICard({ label, value, sub, trend, accent = T.emerald, icon: Icon_ }) 
           </div>
         )}
       </div>
-      <div style={{ fontSize:"1.6rem",fontWeight:700,color:T.textPrimary,lineHeight:1,marginBottom:"8px" }}>{fmtV(value)}</div>
+      <div style={{ fontSize:"1.6rem",fontWeight:700,color:T.textPrimary,lineHeight:1,marginBottom:"8px" }}>{fmtMoney(value, { currency })}</div>
       <div style={{ display:"flex",alignItems:"center",gap:"6px" }}>
         {trend !== undefined && (
           <span style={{ display:"inline-flex",alignItems:"center",gap:"3px",fontSize:"0.72rem",fontWeight:500,
             color:isPos?T.positive:T.negative,background:isPos?`${T.positive}12`:`${T.negative}12`,
             border:`1px solid ${isPos?T.positive:T.negative}25`,borderRadius:"4px",padding:"1px 6px" }}>
             {isPos ? <ArrowUpRight size={11}/> : <ArrowDownRight size={11}/>}
-            ${Math.abs(trend).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}
+            {fmtMoney(Math.abs(trend), { currency })}
           </span>
         )}
         {sub && <span style={{ fontSize:"0.72rem",color:T.textMuted }}>{sub}</span>}
@@ -1213,6 +1249,14 @@ const costBasis = (inv) => (parseFloat(inv.quantity)||0)*(parseFloat(inv.purchas
 const roi = (inv) => { const c=costBasis(inv); return c>0?((curVal(inv)-c)/c)*100:0; };
 const txIncome = (txs) => txs.filter(t=>t.type==="income").reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
 const txExpense = (txs) => txs.filter(t=>t.type==="expense").reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
+const baseCurrencyCode = (db) => db?.settings?.baseCurrency || "USD";
+const currencyRate = (db, currency="USD") => {
+  const base = baseCurrencyCode(db);
+  if (currency === base) return 1;
+  const parsed = Number(db?.settings?.currencyRates?.[currency]);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+const toBaseAmount = (db, amount, sourceCurrency="USD") => (Number(amount) || 0) * currencyRate(db, sourceCurrency);
 const currencySymbol = (currency="USD") => ({ USD:"$", EUR:"€", GBP:"£", SAR:"﷼", AED:"د.إ" }[currency] || currency);
 const fmtMoney = (v, { compact=false, currency="USD" } = {}) => {
   const n = Number(v||0);
@@ -1247,12 +1291,13 @@ function Dashboard() {
   const portfolios = visible(db.portfolios);
   const investments = visible(db.investments);
   const transactions = visible(db.transactions);
+  const baseCurrency = baseCurrencyCode(db);
 
-  const totalPortfolioValue = investments.reduce((s,i)=>s+curVal(i),0);
-  const totalCost = investments.reduce((s,i)=>s+costBasis(i),0);
+  const totalPortfolioValue = investments.reduce((s,i)=>s+toBaseAmount(db, curVal(i), portfolioCurrency(db, i.portfolioId)),0);
+  const totalCost = investments.reduce((s,i)=>s+toBaseAmount(db, costBasis(i), portfolioCurrency(db, i.portfolioId)),0);
   const capitalGainsVal = totalPortfolioValue - totalCost;
-  const totalIncome = txIncome(transactions);
-  const totalExpense = txExpense(transactions);
+  const totalIncome = transactions.filter(t=>t.type==="income").reduce((sum, tx)=>sum + toBaseAmount(db, parseFloat(tx.amount)||0, portfolioCurrency(db, tx.portfolioId)), 0);
+  const totalExpense = transactions.filter(t=>t.type==="expense").reduce((sum, tx)=>sum + toBaseAmount(db, parseFloat(tx.amount)||0, portfolioCurrency(db, tx.portfolioId)), 0);
   const netProfit = capitalGainsVal + totalIncome - totalExpense;
 
   const hour = new Date().getHours();
@@ -1261,7 +1306,7 @@ function Dashboard() {
   // Chart data: portfolio allocation
   const allocationData = portfolios.map(p=>{
     const pvInvs = inv_of_portfolio(db, p.id);
-    return { name:p.name, value:pvInvs.reduce((s,i)=>s+curVal(i),0) };
+    return { name:p.name, value:pvInvs.reduce((s,i)=>s+toBaseAmount(db, curVal(i), p.currency || "USD"),0) };
   }).filter(d=>d.value>0);
 
   const totalAlloc = allocationData.reduce((s,d)=>s+d.value,0);
@@ -1281,8 +1326,8 @@ function Dashboard() {
         .map((inv) => {
           const amount = (inv.funding || [])
             .filter((f) => f.source === source)
-            .reduce((sum, f) => sum + (parseFloat(f.amount) || 0), 0);
-          return amount > 0 ? { id: inv.id, name: inv.name, amount, currency: portfolioCurrency(db, inv.portfolioId) } : null;
+            .reduce((sum, f) => sum + toBaseAmount(db, parseFloat(f.amount) || 0, portfolioCurrency(db, inv.portfolioId)), 0);
+          return amount > 0 ? { id: inv.id, name: inv.name, amount: toBaseAmount(db, amount, portfolioCurrency(db, inv.portfolioId)), currency: baseCurrency } : null;
         })
         .filter(Boolean);
       const total = items.reduce((sum, item) => sum + item.amount, 0);
@@ -1311,10 +1356,10 @@ function Dashboard() {
       {/* KPI Row */}
       <SectionHeader title={t.portfolioOverview} />
       <div style={{ display:"flex",gap:"14px",flexWrap:"wrap",marginBottom:"28px" }}>
-        <KPICard label={t.totalPortfolioValue} value={totalPortfolioValue} sub={`${investments.filter(i=>i.status!=="Closed").length} ${t.activePositions}`} accent={T.emerald} icon={Wallet} />
-        <KPICard label={t.totalNetProfit} value={netProfit} sub={t.dividendsCapital} trend={netProfit} accent={netProfit>=0?T.positive:T.negative} icon={TrendingUp} />
-        <KPICard label={t.totalIncome} value={totalIncome} sub={`${transactions.filter(tx=>tx.type==="income").length} ${t.payments}`} accent={T.info} icon={ArrowUpRight} />
-        <KPICard label={t.capitalGains} value={capitalGainsVal} sub={t.unrealised} trend={capitalGainsVal} accent={capitalGainsVal>=0?T.positive:T.negative} icon={BarChart2} />
+        <KPICard label={t.totalPortfolioValue} value={totalPortfolioValue} currency={baseCurrency} sub={`${investments.filter(i=>i.status!=="Closed").length} ${t.activePositions}`} accent={T.emerald} icon={Wallet} />
+        <KPICard label={t.totalNetProfit} value={netProfit} currency={baseCurrency} sub={t.dividendsCapital} trend={netProfit} accent={netProfit>=0?T.positive:T.negative} icon={TrendingUp} />
+        <KPICard label={t.totalIncome} value={totalIncome} currency={baseCurrency} sub={`${transactions.filter(tx=>tx.type==="income").length} ${t.payments}`} accent={T.info} icon={ArrowUpRight} />
+        <KPICard label={t.capitalGains} value={capitalGainsVal} currency={baseCurrency} sub={t.unrealised} trend={capitalGainsVal} accent={capitalGainsVal>=0?T.positive:T.negative} icon={BarChart2} />
       </div>
 
       {/* Charts row */}
@@ -1332,7 +1377,7 @@ function Dashboard() {
                     <Pie data={pieData} cx="50%" cy="50%" innerRadius={48} outerRadius={72} paddingAngle={3} dataKey="value" strokeWidth={0}>
                       {pieData.map((_,i)=><Cell key={i} fill={T.chart[i%T.chart.length]}/>)}
                     </Pie>
-                    <Tooltip formatter={(v)=>[fmtMoney(v),"Value"]} contentStyle={{ background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:"8px",fontSize:"0.78rem" }}/>
+                    <Tooltip formatter={(v)=>[fmtMoney(v, { currency:baseCurrency }),"Value"]} contentStyle={{ background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:"8px",fontSize:"0.78rem" }}/>
                   </PieChart>
                 </ResponsiveContainer>
                 <div style={{ flex:1,display:"flex",flexDirection:"column",gap:"6px" }}>
@@ -1401,11 +1446,11 @@ function Dashboard() {
                       >
                         {fundingDistribution.map((entry) => <Cell key={entry.name} fill={entry.color} style={{ cursor:"pointer" }} />)}
                       </Pie>
-                      <Tooltip formatter={(value, _name, props) => [`${fmtMoney(value)} · ${props?.payload?.pct?.toFixed(1) || 0}%`, props?.payload?.name || ""]} />
+                      <Tooltip formatter={(value, _name, props) => [`${fmtMoney(value, { currency:baseCurrency })} · ${props?.payload?.pct?.toFixed(1) || 0}%`, props?.payload?.name || ""]} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-                <LegendList rows={fundingDistribution} />
+                <LegendList rows={fundingDistribution} currency={baseCurrency} textColor="#0f172a" valueColor="#020617" />
               </div>
             )
           }
@@ -1419,7 +1464,7 @@ function Dashboard() {
               {sourceModal.investments.map((inv) => (
                 <div key={inv.id} style={{ padding:"10px 12px", border:`1px solid ${T.border}`, borderRadius:"10px", background:"#ffffff" }}>
                   <div style={{ fontSize:"0.86rem", fontWeight:600, color:T.textPrimary }}>{inv.name}</div>
-                  <div style={{ fontSize:"0.78rem", color:T.textSecondary }}>{fmtMoney(inv.amount, { currency:inv.currency || "USD" })}</div>
+                  <div style={{ fontSize:"0.78rem", color:T.textSecondary }}>{fmtMoney(inv.amount, { currency:inv.currency || baseCurrency })}</div>
                 </div>
               ))}
             </div>
@@ -1652,12 +1697,13 @@ function InvestmentsTab({ onQuickAddTransaction, modalPrefill }) {
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
           <div style={{ display:"flex", alignItems:"center", gap:"6px", background:"#f8fafc", border:`1px solid ${T.border}`, borderRadius:"10px", padding:"4px 6px", overflow:"hidden" }}>
-            <button onClick={() => setSearchOpen((v) => !v)} style={{ border:"none", background:"transparent", color:T.textSecondary, cursor:"pointer", display:"flex", padding:"4px" }}>
+            <button onClick={() => setSearchOpen((v) => { const next = !v; if (!next) setSearchTerm(""); return next; })} style={{ border:"none", background:"transparent", color:T.textSecondary, cursor:"pointer", display:"flex", padding:"4px" }}>
               <Search size={14} />
             </button>
             <input
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
+              onFocus={() => setSearchOpen(true)}
               placeholder={isRTL ? "ابحث بالعنوان..." : "Search title..."}
               style={{
                 width: searchOpen ? "180px" : "0px",
@@ -2419,14 +2465,14 @@ function SearchableMultiYearSelect({ options, selectedYears, onChange, t, font }
   );
 }
 
-function LegendList({ rows, currency = "USD" }) {
+function LegendList({ rows, currency = "USD", textColor = "#cbd5e1", valueColor = "#f8fafc" }) {
   return (
     <div style={{ display:"grid", gap:"8px", minWidth:"190px" }}>
       {rows.map((row) => (
-        <div key={row.name} style={{ display:"grid", gridTemplateColumns:"14px 1fr auto", gap:"8px", alignItems:"center", fontSize:"0.76rem", color:"#cbd5e1" }}>
+        <div key={row.name} style={{ display:"grid", gridTemplateColumns:"14px 1fr auto", gap:"8px", alignItems:"center", fontSize:"0.76rem", color:textColor }}>
           <span style={{ width:"10px", height:"10px", borderRadius:"999px", background:row.color }} />
           <span>{row.name}</span>
-          <span style={{ color:"#f8fafc", fontWeight:600 }}>{fmtMoney(row.value, { currency })} ({row.pct.toFixed(1)}%)</span>
+          <span style={{ color:valueColor, fontWeight:600 }}>{fmtMoney(row.value, { currency })} ({row.pct.toFixed(1)}%)</span>
         </div>
       ))}
     </div>
@@ -2503,8 +2549,7 @@ function StatisticsTab() {
   const investments = visible(db?.investments || []);
   const transactions = visible(db?.transactions || []);
   const portfolios = visible(db?.portfolios || []);
-  const allCurrencies = portfolios.map(p=>p.currency).filter(Boolean);
-  const primaryCurrency = allCurrencies[0] || "USD";
+  const primaryCurrency = baseCurrencyCode(db);
 
   const toRiskBucket = (risk) => {
     const val = String(risk || "").toLowerCase();
@@ -2524,7 +2569,7 @@ function StatisticsTab() {
   investments.forEach((inv) => {
     const bucket = toRiskBucket(inv.risk);
     if (!bucket) return;
-    capitalByRisk[bucket] += costBasis(inv);
+    capitalByRisk[bucket] += toBaseAmount(db, costBasis(inv), portfolioCurrency(db, inv.portfolioId));
   });
 
   const incomeByYearRisk = {};
@@ -2542,13 +2587,13 @@ function StatisticsTab() {
     incomeByYearStatus[year] = incomeByYearStatus[year] || Object.fromEntries(statuses.map((s)=>[s,0]));
 
     if (tx.type === "income" && tx.status !== "cancelled") {
-      if (risk) incomeByYearRisk[year][risk] += (parseFloat(tx.amount) || 0);
+      if (risk) incomeByYearRisk[year][risk] += toBaseAmount(db, parseFloat(tx.amount) || 0, portfolioCurrency(db, tx.portfolioId));
       if (incomeByYearStatus[year][tx.status] === undefined) incomeByYearStatus[year][tx.status] = 0;
-      incomeByYearStatus[year][tx.status] += (parseFloat(tx.amount) || 0);
+      incomeByYearStatus[year][tx.status] += toBaseAmount(db, parseFloat(tx.amount) || 0, portfolioCurrency(db, tx.portfolioId));
     }
 
     if (tx.type === "expense" && tx.status !== "cancelled" && risk) {
-      lossByYearRisk[year][risk] += (parseFloat(tx.amount) || 0);
+      lossByYearRisk[year][risk] += toBaseAmount(db, parseFloat(tx.amount) || 0, portfolioCurrency(db, tx.portfolioId));
     }
   });
 
@@ -2589,7 +2634,7 @@ function StatisticsTab() {
     const breakdown = [];
     let total = 0;
     investments.forEach((inv) => {
-      const amount = (inv.funding || []).filter((f) => f.source === source).reduce((sum, f) => sum + (parseFloat(f.amount) || 0), 0);
+      const amount = (inv.funding || []).filter((f) => f.source === source).reduce((sum, f) => sum + toBaseAmount(db, parseFloat(f.amount) || 0, portfolioCurrency(db, inv.portfolioId)), 0);
       if (amount > 0) {
         breakdown.push({ investment:inv.name || t.unassignedInvestment, amount });
         total += amount;
@@ -2807,8 +2852,19 @@ export default function App() {
 }
 
 function AppContent() {
-  const { user, token, dbLoading, db, t } = useApp();
+  const { user, token, dbLoading, db, t, signOut, isBlocked } = useApp();
   if (!user || !token) return <LoginPage/>;
+  if (isBlocked) {
+    return (
+      <div style={{ minHeight:"100vh", display:"grid", placeItems:"center", background:T.bgApp, padding:"20px" }}>
+        <Card style={{ maxWidth:"520px", width:"100%", padding:"22px", textAlign:"center" }}>
+          <h2 style={{ margin:"0 0 10px", color:T.negative }}>{t.blockedTitle}</h2>
+          <p style={{ margin:"0 0 16px", color:T.textSecondary, lineHeight:1.6 }}>{t.blockedMessage}</p>
+          <Btn variant="secondary" onClick={signOut}>{t.signOut}</Btn>
+        </Card>
+      </div>
+    );
+  }
   if (dbLoading || !db) return <LoadingScreen message={t?.loading||"LOADING..."}/>;
   return <MainApp/>;
 }
