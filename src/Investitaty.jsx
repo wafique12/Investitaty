@@ -1190,6 +1190,8 @@ function BrandingFooter({ text, isDark = false }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // LOGIN PAGE
 // ═══════════════════════════════════════════════════════════════════════════════
+// استيراد الإصدار من ملف package.json
+import { version } from '../../package.json'; 
 function LoginPage() {
   const { signIn, authLoading, gapiReady, authError, gatekeeperError, lang, setLang, t, isRTL, font } = useApp();
   return (
@@ -1281,7 +1283,7 @@ function LoginPage() {
       </div>
 
       <div style={{ position:"absolute",left:"20px",right:"20px",bottom:"10px" }}>
-        <BrandingFooter text={t.footerBranding} isDark />
+        <BrandingFooter text={`${t.footerBranding} | v${version}`}  isDark />
       </div>
     </div>
   );
