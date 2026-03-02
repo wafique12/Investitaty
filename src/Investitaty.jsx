@@ -8,7 +8,7 @@ import {
   ArrowDownRight, Eye, EyeOff, AlertCircle, CheckCircle2,
   Menu, Search, Landmark, ListTree, CircleDollarSign,
 } from "lucide-react";
-import { supabase } from "./lib/supabaseClient";
+import { supabase, hasSupabaseConfig, hasSupabaseClient } from "./lib/supabaseClient";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONFIG
@@ -766,15 +766,31 @@ function AppProvider({ children }) {
   }, []);
 
   const fetchUsersConfig = useCallback(async ({ requireRemote = false } = {}) => {
-    const { data, error } = await supabase.from("users").select("*").order("email", { ascending: true });
-    if (error) {
-      if (requireRemote) throw error;
+    if (!hasSupabaseClient) {
+      const configError = new Error("Supabase client is not initialized.");
+      console.log("[Supabase] fetchUsersConfig skipped:", configError.message);
+      if (requireRemote) throw configError;
       setUsersConfig(DEFAULT_USERS_CONFIG);
       return DEFAULT_USERS_CONFIG;
     }
-    const next = buildUsersConfig(data || []);
-    setUsersConfig(next);
-    return next;
+
+    try {
+      const { data, error } = await supabase.from("users").select("*").order("email", { ascending: true });
+      if (error) {
+        console.log("[Supabase] fetchUsersConfig error:", error);
+        if (requireRemote) throw error;
+        setUsersConfig(DEFAULT_USERS_CONFIG);
+        return DEFAULT_USERS_CONFIG;
+      }
+      const next = buildUsersConfig(data || []);
+      setUsersConfig(next);
+      return next;
+    } catch (err) {
+      console.log("[Supabase] fetchUsersConfig catch:", err);
+      if (requireRemote) throw err;
+      setUsersConfig(DEFAULT_USERS_CONFIG);
+      return DEFAULT_USERS_CONFIG;
+    }
   }, [buildUsersConfig]);
 
   useEffect(() => {
@@ -809,78 +825,96 @@ function AppProvider({ children }) {
 
     let isCancelled = false;
     const runGatekeeper = async () => {
+      if (!hasSupabaseClient) {
+        console.log("[Supabase] Gatekeeper skipped: Supabase client not initialized.");
+        setGatekeeperError({ ar: t.accountInactiveAr, en: t.accountInactiveEn });
+        setUserSyncDone(false);
+        return;
+      }
+
       const email = String(auth.user.email || "").toLowerCase();
       const protectedOwnerEmail = OWNER_PROTECTED_EMAIL.toLowerCase();
       const isOwner = email === protectedOwnerEmail;
       const now = new Date().toISOString();
 
-      let existing = null;
-      const { data: existingUser, error: existingUserError } = await supabase
-        .from("users")
-        .select("*")
-        .eq("email", email)
-        .maybeSingle();
-
-      if (existingUserError) {
-        setGatekeeperError({ ar: t.accountInactiveAr, en: t.accountInactiveEn });
-        auth.signOut();
-        setUserSyncDone(false);
-        return;
-      }
-      existing = existingUser;
-
-      if (!existing) {
-        const { error: insertError } = await supabase.from("users").insert({
-          name: auth.user.name || String(email).split("@")[0],
-          email,
-          role: isOwner ? "Owner" : "Member",
-          status: "active",
-          blocked: false,
-          last_login: now,
-        });
-        if (insertError) {
-          setGatekeeperError({ ar: t.accountInactiveAr, en: t.accountInactiveEn });
-          auth.signOut();
-          setUserSyncDone(false);
-          return;
-        }
-      } else {
-        const status = String(existing.status || (existing.blocked ? "blocked" : "active")).toLowerCase();
-        if (!isOwner && ["blocked", "paused", "deleted"].includes(status)) {
-          alert("Your account is blocked by The Leader");
-          setGatekeeperError({ ar: t.accountInactiveAr, en: t.accountInactiveEn });
-          auth.signOut();
-          setUserSyncDone(false);
-          return;
-        }
-
-        const { error: updateError } = await supabase.from("users").update({
-          name: auth.user.name || existing.name || String(email).split("@")[0],
-          last_login: now,
-        }).eq("email", email);
-
-        if (updateError) {
-          setGatekeeperError({ ar: t.accountInactiveAr, en: t.accountInactiveEn });
-          auth.signOut();
-          setUserSyncDone(false);
-          return;
-        }
-      }
-
-      let freshConfig;
       try {
-        freshConfig = await fetchUsersConfig({ requireRemote: true });
-      } catch {
+        let existing = null;
+        const { data: existingUser, error: existingUserError } = await supabase
+          .from("users")
+          .select("*")
+          .eq("email", email)
+          .maybeSingle();
+
+        if (existingUserError) {
+          console.log("[Supabase] Gatekeeper existing user error:", existingUserError);
+          setGatekeeperError({ ar: t.accountInactiveAr, en: t.accountInactiveEn });
+          auth.signOut();
+          setUserSyncDone(false);
+          return;
+        }
+        existing = existingUser;
+
+        if (!existing) {
+          const { error: insertError } = await supabase.from("users").insert({
+            name: auth.user.name || String(email).split("@")[0],
+            email,
+            role: isOwner ? "Owner" : "Member",
+            status: "active",
+            blocked: false,
+            last_login: now,
+          });
+          if (insertError) {
+            console.log("[Supabase] Gatekeeper insert error:", insertError);
+            setGatekeeperError({ ar: t.accountInactiveAr, en: t.accountInactiveEn });
+            auth.signOut();
+            setUserSyncDone(false);
+            return;
+          }
+        } else {
+          const status = String(existing.status || (existing.blocked ? "blocked" : "active")).toLowerCase();
+          if (!isOwner && ["blocked", "paused", "deleted"].includes(status)) {
+            alert("Your account is blocked by The Leader");
+            setGatekeeperError({ ar: t.accountInactiveAr, en: t.accountInactiveEn });
+            auth.signOut();
+            setUserSyncDone(false);
+            return;
+          }
+
+          const { error: updateError } = await supabase.from("users").update({
+            name: auth.user.name || existing.name || String(email).split("@")[0],
+            last_login: now,
+          }).eq("email", email);
+
+          if (updateError) {
+            console.log("[Supabase] Gatekeeper update error:", updateError);
+            setGatekeeperError({ ar: t.accountInactiveAr, en: t.accountInactiveEn });
+            auth.signOut();
+            setUserSyncDone(false);
+            return;
+          }
+        }
+
+        let freshConfig;
+        try {
+          freshConfig = await fetchUsersConfig({ requireRemote: true });
+        } catch (error) {
+          console.log("[Supabase] Gatekeeper refresh config error:", error);
+          setGatekeeperError({ ar: t.accountInactiveAr, en: t.accountInactiveEn });
+          auth.signOut();
+          setUserSyncDone(false);
+          return;
+        }
+        if (isCancelled) return;
+
+        setUsersConfig(freshConfig);
+        setGatekeeperError(null);
+        setUserSyncDone(true);
+      } catch (error) {
+        console.log("[Supabase] Gatekeeper unexpected error:", error);
         setGatekeeperError({ ar: t.accountInactiveAr, en: t.accountInactiveEn });
         auth.signOut();
         setUserSyncDone(false);
-        return;
       }
-      if (isCancelled) return;
-
-      setUsersConfig(freshConfig);
-      setGatekeeperError(null);
-      setUserSyncDone(true);
     };
 
     runGatekeeper();
@@ -931,6 +965,11 @@ function AppProvider({ children }) {
   }, [updateDb]);
 
   const updateUserEntry = useCallback(async (email, updater) => {
+    if (!hasSupabaseClient) {
+      console.log("[Supabase] updateUserEntry skipped: Supabase client not initialized.");
+      return false;
+    }
+
     const normalized = String(email || "").toLowerCase();
     const users = [...(usersConfig?.users || [])];
     const idx = users.findIndex((u) => String(u.email || "").toLowerCase() === normalized);
@@ -945,10 +984,18 @@ function AppProvider({ children }) {
       last_login: nextUser?.lastLogin || null,
     };
 
-    const { error } = await supabase.from("users").update(payload).eq("email", normalized);
-    if (error) return false;
-    await fetchUsersConfig({ requireRemote: true });
-    return true;
+    try {
+      const { error } = await supabase.from("users").update(payload).eq("email", normalized);
+      if (error) {
+        console.log("[Supabase] updateUserEntry error:", error);
+        return false;
+      }
+      await fetchUsersConfig({ requireRemote: true });
+      return true;
+    } catch (error) {
+      console.log("[Supabase] updateUserEntry catch:", error);
+      return false;
+    }
   }, [usersConfig, fetchUsersConfig]);
 
   const value = {
@@ -1211,6 +1258,13 @@ function BrandingFooter({ text, isDark = false }) {
 import { version } from '../package.json'; 
 function LoginPage() {
   const { signIn, authLoading, gapiReady, authError, gatekeeperError, lang, setLang, t, isRTL, font } = useApp();
+
+  useEffect(() => {
+    if (!hasSupabaseConfig || !hasSupabaseClient) {
+      console.log("[Supabase] Login page loaded without a working Supabase client.");
+    }
+  }, []);
+
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{
       minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",
@@ -1286,14 +1340,14 @@ function LoginPage() {
         {!gapiReady && !authError && (
           <p style={{ marginTop:"12px",fontSize:"0.74rem",color:`${T.emerald}80` }}>{t.loadingApis}</p>
         )}
-        {(authError || gatekeeperError) && (
+        {(authError || gatekeeperError || !hasSupabaseConfig || !hasSupabaseClient) && (
           <div style={{ marginTop:"14px",padding:"10px 14px",background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.25)",borderRadius:"8px",color:"rgba(255,100,100,0.9)",fontSize:"0.76rem" }}>
-            ⚠ {authError || (
+            ⚠ {authError || ((!hasSupabaseConfig || !hasSupabaseClient) ? "Supabase is not configured or the client package is unavailable. Check VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY and @supabase/supabase-js." : (
             <div style={{ display:"grid", gap:"4px" }}>
               <span>{gatekeeperError?.ar}</span>
               <span>{gatekeeperError?.en}</span>
             </div>
-          )}
+          ))}
           </div>
         )}
         <p style={{ marginTop:"24px",fontSize:"0.72rem",lineHeight:1.7,color:"rgba(255,255,255,0.3)" }}>{t.privacyNote}</p>
