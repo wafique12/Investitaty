@@ -27,6 +27,12 @@ const USERS_STORAGE_KEY = "investitaty_users_config_v1";
 const USERS_CONFIG_PATH = "/data/users.json";
 const OWNER_PROTECTED_EMAIL = "wafique22@gmail.com";
 
+const normalizeRole = (role) => {
+  const value = String(role || "").trim().toLowerCase();
+  if (!value) return "Member";
+  return value.charAt(0).toUpperCase() + value.slice(1);
+};
+
 // ─── New nested schema ────────────────────────────────────────────────────────
 // portfolios[]  → investments[]  → transactions[]
 // lookup categories stored in settings for dropdown menus
@@ -109,7 +115,7 @@ const TRANSLATIONS = {
     lossAnalysisMatrix: "Loss Analysis Matrix",
     assetAllocationOverview: "Asset Allocation Overview",
     centralizedCategoryAnalytics: "Centralized Item/Category Analytics",
-    fundingSourceBreakdown: "Funding Source Breakdown",
+    fundingSourceBreakdown: "Funding Sources Distribution",
     sourceName: "Source Name",
     totalAllocatedAmount: "Total Allocated Amount",
     investmentsList: "Investments List",
@@ -283,7 +289,7 @@ const TRANSLATIONS = {
     lossAnalysisMatrix: "مصفوفة تحليل الخسائر",
     assetAllocationOverview: "نظرة توزيع الأصول",
     centralizedCategoryAnalytics: "تحليلات العناصر/الفئات المركزية",
-    fundingSourceBreakdown: "تفصيل مصادر التمويل",
+    fundingSourceBreakdown: "توزيع مصادر التمويل",
     sourceName: "اسم المصدر",
     totalAllocatedAmount: "إجمالي المبلغ المخصص",
     investmentsList: "قائمة الاستثمارات",
@@ -751,6 +757,21 @@ function AppProvider({ children }) {
     localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(nextConfig));
   }, []);
 
+  const syncUsersConfigToJson = useCallback(async (nextConfig) => {
+    try {
+      await fetch(USERS_CONFIG_PATH, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(nextConfig, null, 2),
+      });
+    } catch (_) {}
+  }, []);
+
+  const saveUsersConfig = useCallback((nextConfig) => {
+    persistUsersConfig(nextConfig);
+    syncUsersConfigToJson(nextConfig);
+  }, [persistUsersConfig, syncUsersConfigToJson]);
+
   const fetchUsersConfig = useCallback(async ({ requireRemote = false } = {}) => {
     try {
       const res = await fetch(`${USERS_CONFIG_PATH}?t=${Date.now()}`, { cache: "no-store" });
@@ -785,7 +806,7 @@ function AppProvider({ children }) {
   const currentEmail = String(auth?.user?.email || "").toLowerCase();
   const ownerEmail = String(usersConfig?.ownerEmail || OWNER_PROTECTED_EMAIL).toLowerCase();
   const listedUser = (usersConfig?.users || []).find((u) => String(u.email || "").toLowerCase() === currentEmail) || null;
-  const currentRole = listedUser?.role || (currentEmail && currentEmail === ownerEmail ? "Owner" : "Member");
+  const currentRole = normalizeRole(listedUser?.role || (currentEmail && currentEmail === ownerEmail ? "Owner" : "member"));
   const userStatus = String(listedUser?.status || (listedUser?.blocked ? "blocked" : "active")).toLowerCase();
   const isBlocked = currentEmail && currentEmail !== ownerEmail ? ["blocked", "paused", "deleted"].includes(userStatus) : false;
   const hasPermission = useCallback((permission) => {
@@ -833,7 +854,9 @@ function AppProvider({ children }) {
       if (existing) {
         users[idx] = {
           ...existing,
-          role: existing.role || (isOwner ? "Owner" : "Member"),
+          name: auth.user.name || existing.name || String(email).split("@")[0],
+          email,
+          role: existing.role || (isOwner ? "Owner" : "member"),
           status: existing.status || "active",
           blocked: Boolean(existing.blocked),
           lastLogin: now,
@@ -842,21 +865,21 @@ function AppProvider({ children }) {
         users.push({
           name: auth.user.name || String(email).split("@")[0],
           email,
-          role: isOwner ? "Owner" : "Member",
+          role: isOwner ? "Owner" : "member",
           status: "active",
           blocked: false,
           lastLogin: now,
         });
       }
 
-      persistUsersConfig({ ...freshConfig, users });
+      saveUsersConfig({ ...freshConfig, users });
       setGatekeeperError(null);
       setUserSyncDone(true);
     };
 
     runGatekeeper();
     return () => { isCancelled = true; };
-  }, [auth.user, auth.token, auth.signOut, fetchUsersConfig, usersConfigReady, persistUsersConfig, t.accountInactiveAr, t.accountInactiveEn]);
+  }, [auth.user, auth.token, auth.signOut, fetchUsersConfig, usersConfigReady, saveUsersConfig, t.accountInactiveAr, t.accountInactiveEn]);
 
   useEffect(() => {
     if (!auth.token || isBlocked || !userSyncDone) return;
@@ -908,8 +931,8 @@ function AppProvider({ children }) {
     if (idx < 0) return;
     const nextUser = typeof updater === "function" ? updater(users[idx]) : { ...users[idx], ...updater };
     users[idx] = nextUser;
-    persistUsersConfig({ ...usersConfig, users });
-  }, [usersConfig, persistUsersConfig]);
+    saveUsersConfig({ ...usersConfig, users });
+  }, [usersConfig, saveUsersConfig]);
 
   const value = {
     ...auth, db, fileId, syncing, syncError, dbLoading,
@@ -1403,7 +1426,7 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen }) {
             </div>
             <div style={{ overflow:"hidden",flex:1 }}>
               <div style={{ color:"rgba(255,255,255,0.75)",fontSize:"0.76rem",fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{user?.name}</div>
-              <div style={{ color:"rgba(255,255,255,0.48)",fontSize:"0.66rem",fontWeight:300,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:"2px" }}>{user?.email}</div>
+              <div style={{ color:"rgba(255,255,255,0.42)",fontSize:"0.62rem",fontWeight:300,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:"2px" }}>{user?.email}</div>
             </div>
           </div>
           <button onClick={signOut} style={{ display:"flex",alignItems:"center",gap:"6px",width:"100%",padding:"7px 10px",background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.2)",borderRadius:"7px",color:"rgba(255,100,100,0.8)",fontSize:"0.76rem",cursor:"pointer",fontFamily:font }}>
