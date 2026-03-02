@@ -1,5 +1,5 @@
 const SUPABASE_URL = 'https://sucuonebmfhemebscmlo.supabase.co'; // الرابط بتاعك من سوبابيز
-const SUPABASE_ANON_KEY = 'sb_publishable_EKCCUOf9cFpVTtYRP76IkA_3AGVRkPR'; // المفتاح الطويل بتاعك
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1Y3VvbmVibWZoZW1lYnNjbWxvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0NzEwMjEsImV4cCI6MjA4ODA0NzAyMX0.xMLP110xEWRZ0C5Wt69EhXox8i7CynnS5JMvRAYIPtg'; // المفتاح الطويل بتاعك
 
 const hasSupabaseConfig = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 
