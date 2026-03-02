@@ -228,6 +228,8 @@ const TRANSLATIONS = {
     footerBranding: "© 2026 Investaty. Developed and Owned by Wafiq Abdulrahman. All rights reserved.",
     blockedTitle: "Account access blocked",
     blockedMessage: "Your account has been blocked by an administrator. You cannot access investment data until your account is unblocked.",
+    accountBlockedLeader: "Your account is blocked by the Leader",
+    permissionsVerifyFailed: "Unable to verify permissions at this time",
     accountInactiveAr: "عذراً، حسابك غير مفعل حالياً. يرجى التواصل مع إدارة التطبيق.",
     accountInactiveEn: "Your account is currently inactive. Please contact administration.",
   },
@@ -402,6 +404,8 @@ const TRANSLATIONS = {
     footerBranding: "© 2026 Investaty. مطور ومملوك بواسطة وفيق عبد الرحمن. جميع الحقوق محفوظة.",
     blockedTitle: "تم حظر الوصول للحساب",
     blockedMessage: "تم حظر حسابك من قبل الإدارة. لا يمكنك الوصول إلى بيانات الاستثمار حتى يتم إلغاء الحظر.",
+    accountBlockedLeader: "حسابك محظور من قِبل القائد",
+    permissionsVerifyFailed: "غير قادر على التحقق من الصلاحيات حالياً",
     accountInactiveAr: "عذراً، حسابك غير مفعل حالياً. يرجى التواصل مع إدارة التطبيق.",
     accountInactiveEn: "Your account is currently inactive. Please contact administration.",
   },
@@ -827,7 +831,7 @@ function AppProvider({ children }) {
     const runGatekeeper = async () => {
       if (!hasSupabaseClient) {
         console.log("[Supabase] Gatekeeper skipped: Supabase client not initialized.");
-        setGatekeeperError({ ar: t.accountInactiveAr, en: t.accountInactiveEn });
+        setGatekeeperError(t.permissionsVerifyFailed);
         setUserSyncDone(false);
         return;
       }
@@ -847,7 +851,7 @@ function AppProvider({ children }) {
 
         if (existingUserError) {
           console.log("[Supabase] Gatekeeper existing user error:", existingUserError);
-          setGatekeeperError({ ar: t.accountInactiveAr, en: t.accountInactiveEn });
+          setGatekeeperError(t.permissionsVerifyFailed);
           auth.signOut();
           setUserSyncDone(false);
           return;
@@ -865,7 +869,7 @@ function AppProvider({ children }) {
           });
           if (insertError) {
             console.log("[Supabase] Gatekeeper insert error:", insertError);
-            setGatekeeperError({ ar: t.accountInactiveAr, en: t.accountInactiveEn });
+            setGatekeeperError(t.permissionsVerifyFailed);
             auth.signOut();
             setUserSyncDone(false);
             return;
@@ -873,8 +877,7 @@ function AppProvider({ children }) {
         } else {
           const status = String(existing.status || (existing.blocked ? "blocked" : "active")).toLowerCase();
           if (!isOwner && ["blocked", "paused", "deleted"].includes(status)) {
-            alert("Your account is blocked by The Leader");
-            setGatekeeperError({ ar: t.accountInactiveAr, en: t.accountInactiveEn });
+            setGatekeeperError(t.accountBlockedLeader);
             auth.signOut();
             setUserSyncDone(false);
             return;
@@ -887,7 +890,7 @@ function AppProvider({ children }) {
 
           if (updateError) {
             console.log("[Supabase] Gatekeeper update error:", updateError);
-            setGatekeeperError({ ar: t.accountInactiveAr, en: t.accountInactiveEn });
+            setGatekeeperError(t.permissionsVerifyFailed);
             auth.signOut();
             setUserSyncDone(false);
             return;
@@ -899,7 +902,7 @@ function AppProvider({ children }) {
           freshConfig = await fetchUsersConfig({ requireRemote: true });
         } catch (error) {
           console.log("[Supabase] Gatekeeper refresh config error:", error);
-          setGatekeeperError({ ar: t.accountInactiveAr, en: t.accountInactiveEn });
+          setGatekeeperError(t.permissionsVerifyFailed);
           auth.signOut();
           setUserSyncDone(false);
           return;
@@ -911,7 +914,7 @@ function AppProvider({ children }) {
         setUserSyncDone(true);
       } catch (error) {
         console.log("[Supabase] Gatekeeper unexpected error:", error);
-        setGatekeeperError({ ar: t.accountInactiveAr, en: t.accountInactiveEn });
+        setGatekeeperError(t.permissionsVerifyFailed);
         auth.signOut();
         setUserSyncDone(false);
       }
@@ -919,7 +922,7 @@ function AppProvider({ children }) {
 
     runGatekeeper();
     return () => { isCancelled = true; };
-  }, [auth.user, auth.token, auth.signOut, fetchUsersConfig, usersConfigReady, t.accountInactiveAr, t.accountInactiveEn]);
+  }, [auth.user, auth.token, auth.signOut, fetchUsersConfig, usersConfigReady, t.accountBlockedLeader, t.permissionsVerifyFailed]);
 
   useEffect(() => {
     if (!auth.token || isBlocked || !userSyncDone) return;
@@ -998,12 +1001,33 @@ function AppProvider({ children }) {
     }
   }, [usersConfig, fetchUsersConfig]);
 
+  const deleteUserEntry = useCallback(async (email) => {
+    if (!hasSupabaseClient) {
+      console.log("[Supabase] deleteUserEntry skipped: Supabase client not initialized.");
+      return false;
+    }
+
+    const normalized = String(email || "").toLowerCase();
+    try {
+      const { error } = await supabase.from("users").delete().eq("email", normalized);
+      if (error) {
+        console.log("[Supabase] deleteUserEntry error:", error);
+        return false;
+      }
+      await fetchUsersConfig({ requireRemote: true });
+      return true;
+    } catch (error) {
+      console.log("[Supabase] deleteUserEntry catch:", error);
+      return false;
+    }
+  }, [fetchUsersConfig]);
+
   const value = {
     ...auth, db, fileId, syncing, syncError, dbLoading,
     updateDb, softDelete, patchItem, addItem,
     lang, setLang, t, isRTL, font,
     usersConfig, usersConfigReady, currentRole, isBlocked, hasPermission,
-    updateUserEntry, gatekeeperError, userSyncDone,
+    updateUserEntry, deleteUserEntry, gatekeeperError, userSyncDone,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
@@ -1342,12 +1366,7 @@ function LoginPage() {
         )}
         {(authError || gatekeeperError || !hasSupabaseConfig || !hasSupabaseClient) && (
           <div style={{ marginTop:"14px",padding:"10px 14px",background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.25)",borderRadius:"8px",color:"rgba(255,100,100,0.9)",fontSize:"0.76rem" }}>
-            ⚠ {authError || ((!hasSupabaseConfig || !hasSupabaseClient) ? "Supabase is not configured or the client package is unavailable. Check VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY and @supabase/supabase-js." : (
-            <div style={{ display:"grid", gap:"4px" }}>
-              <span>{gatekeeperError?.ar}</span>
-              <span>{gatekeeperError?.en}</span>
-            </div>
-          ))}
+            ⚠ {authError || gatekeeperError || ((!hasSupabaseConfig || !hasSupabaseClient) ? t.permissionsVerifyFailed : "")}
           </div>
         )}
         <p style={{ marginTop:"24px",fontSize:"0.72rem",lineHeight:1.7,color:"rgba(255,255,255,0.3)" }}>{t.privacyNote}</p>
@@ -1355,34 +1374,6 @@ function LoginPage() {
 
       <div style={{ position:"absolute",left:"20px",right:"20px",bottom:"10px" }}>
         <BrandingFooter text={`${t.footerBranding} | v${version}`}  isDark />
-      </div>
-    </div>
-  );
-}
-
-function InactiveAccountScreen({ message }) {
-  return (
-    <div style={{
-      minHeight:"100vh",
-      display:"flex",
-      alignItems:"center",
-      justifyContent:"center",
-      background:"linear-gradient(135deg, #3b0a0a 0%, #7f1d1d 45%, #2b0606 100%)",
-      color:"#fee2e2",
-      padding:"24px",
-      textAlign:"center",
-    }}>
-      <div style={{
-        width:"min(620px, 100%)",
-        border:"1px solid rgba(254, 202, 202, 0.35)",
-        background:"rgba(127, 29, 29, 0.48)",
-        borderRadius:"16px",
-        padding:"28px 26px",
-        boxShadow:"0 30px 90px rgba(0, 0, 0, 0.4)",
-      }}>
-        <h2 style={{ margin:"0 0 14px", fontSize:"1.15rem", letterSpacing:"0.03em" }}>Account Inactive • الحساب غير مفعل</h2>
-        <p style={{ margin:"0 0 8px", fontSize:"1rem", lineHeight:1.8 }}>{message?.ar}</p>
-        <p style={{ margin:0, fontSize:"0.95rem", opacity:0.92 }}>{message?.en}</p>
       </div>
     </div>
   );
@@ -3092,24 +3083,70 @@ function StatisticsTab() {
 }
 
 function UserManagementTab() {
-  const { usersConfig, updateUserEntry, hasPermission, currentRole, isRTL, font } = useApp();
+  const { usersConfig, updateUserEntry, deleteUserEntry, hasPermission, currentRole, isRTL, font } = useApp();
   const users = usersConfig?.users || [];
-  const roleOptions = Object.keys(usersConfig?.roles || {});
-  const canBlock = currentRole === "Owner" || hasPermission("block_user") || hasPermission("unblock_user");
-  const canAssignRole = currentRole === "Owner" || hasPermission("assign_role");
   const [updatingEmail, setUpdatingEmail] = useState(null);
+  const currentEmail = String(usersConfig?.ownerEmail || OWNER_PROTECTED_EMAIL).toLowerCase();
+
+  const canDelete = currentRole === "Owner";
+  const canAssignRole = currentRole === "Owner" || currentRole === "Supervisor" || hasPermission("assign_role");
+  const canBlock = currentRole === "Owner" || currentRole === "Supervisor" || currentRole === "Admin" || hasPermission("block_user");
+
+  const getRoleOptions = (entry) => {
+    if (entry?.role === "Owner") return ["Owner"];
+    if (currentRole === "Owner") return ["Supervisor", "Admin", "Member"];
+    if (currentRole === "Supervisor") return ["Admin", "Member"];
+    return [];
+  };
 
   const handleToggleBlock = async (entry) => {
-    const nextStatus = String(entry?.status || (entry?.blocked ? "blocked" : "active")).toLowerCase() === "blocked" ? "active" : "blocked";
+    const status = String(entry?.status || (entry?.blocked ? "blocked" : "active")).toLowerCase();
+    const isOwnerRow = String(entry?.email || "").toLowerCase() === currentEmail || entry?.role === "Owner";
+    if (isOwnerRow) return;
+
+    if (status === "blocked") {
+      if (!(currentRole === "Owner" || currentRole === "Supervisor")) return;
+    } else if (!canBlock) {
+      return;
+    }
+
+    const nextStatus = status === "blocked" ? "active" : "blocked";
     setUpdatingEmail(entry.email);
-    await updateUserEntry(entry.email, { status: nextStatus, blocked: nextStatus === "blocked" });
-    setUpdatingEmail(null);
+    try {
+      await updateUserEntry(entry.email, { status: nextStatus, blocked: nextStatus === "blocked" });
+    } catch (error) {
+      console.log("[RBAC] handleToggleBlock error:", error);
+    } finally {
+      setUpdatingEmail(null);
+    }
   };
 
   const handleRoleChange = async (entry, role) => {
+    const isOwnerRow = String(entry?.email || "").toLowerCase() === currentEmail || entry?.role === "Owner";
+    if (isOwnerRow || !getRoleOptions(entry).includes(role)) return;
+
     setUpdatingEmail(entry.email);
-    await updateUserEntry(entry.email, { role });
-    setUpdatingEmail(null);
+    try {
+      await updateUserEntry(entry.email, { role });
+    } catch (error) {
+      console.log("[RBAC] handleRoleChange error:", error);
+    } finally {
+      setUpdatingEmail(null);
+    }
+  };
+
+  const handleDelete = async (entry) => {
+    const isOwnerRow = String(entry?.email || "").toLowerCase() === currentEmail || entry?.role === "Owner";
+    if (!canDelete || isOwnerRow) return;
+
+    setUpdatingEmail(entry.email);
+    try {
+      await deleteUserEntry(entry.email);
+    } catch (error) {
+      console.log("[RBAC] handleDelete error:", error);
+    } finally {
+      setUpdatingEmail(null);
+    }
   };
 
   const formatName = (entry) => {
@@ -3139,10 +3176,16 @@ function UserManagementTab() {
           </thead>
           <tbody>
             {users.map((entry, index) => {
-              const isOwner = entry.role === "Owner";
+              const isOwner = String(entry?.email || "").toLowerCase() === currentEmail || entry.role === "Owner";
               const status = String(entry.status || (entry.blocked ? "blocked" : "active")).toLowerCase();
               const blocked = status === "blocked";
+              const isUpdating = updatingEmail === entry.email;
+              const canUnblock = currentRole === "Owner" || currentRole === "Supervisor";
+              const canRowBlock = !isOwner && ((blocked && canUnblock) || (!blocked && canBlock));
+              const rowRoleOptions = getRoleOptions(entry);
+              const canRowAssignRole = !isOwner && canAssignRole && rowRoleOptions.length > 0;
               const statusColorMap = { active: T.positive, blocked: T.negative, paused: T.warning, deleted: "#475569" };
+
               return (
                 <tr key={`${entry.email}-${index}`} style={{ borderBottom:`1px solid ${T.border}` }}>
                   <td style={{ padding:"12px 14px", color:T.textPrimary, fontWeight:600 }}>{formatName(entry)}</td>
@@ -3153,16 +3196,21 @@ function UserManagementTab() {
                     <Chip color={statusColorMap[status] || T.textMuted}>{status[0]?.toUpperCase() + status.slice(1)}</Chip>
                   </td>
                   <td style={{ padding:"12px 14px" }}>
-                    <div style={{ display:"flex", gap:"8px", flexWrap:"wrap", alignItems:"center" }}>
-                      <Btn size="sm" variant="danger" disabled={!canBlock || isOwner || updatingEmail === entry.email} onClick={() => handleToggleBlock(entry)}>{blocked ? "Unblock" : "Block"}</Btn>
-                      <Select
-                        value={entry.role || "Member"}
-                        onChange={(e) => handleRoleChange(entry, e.target.value)}
-                        options={roleOptions.map((role) => ({ value:role, label:role }))}
-                        isRTL={isRTL}
-                        disabled={!canAssignRole || isOwner || updatingEmail === entry.email}
-                      />
-                    </div>
+                    {!isOwner && (
+                      <div style={{ display:"flex", gap:"8px", flexWrap:"wrap", alignItems:"center" }}>
+                        <Btn size="sm" variant="danger" disabled={!canRowBlock || isUpdating} onClick={() => handleToggleBlock(entry)}>{blocked ? "Unblock" : "Block"}</Btn>
+                        <Select
+                          value={entry.role || "Member"}
+                          onChange={(e) => handleRoleChange(entry, e.target.value)}
+                          options={rowRoleOptions.map((role) => ({ value:role, label:role }))}
+                          isRTL={isRTL}
+                          disabled={!canRowAssignRole || isUpdating}
+                        />
+                        {canDelete && (
+                          <Btn size="sm" variant="danger" disabled={isUpdating} onClick={() => handleDelete(entry)}>Delete</Btn>
+                        )}
+                      </div>
+                    )}
                   </td>
                 </tr>
               );
@@ -3255,8 +3303,7 @@ export default function App() {
 }
 
 function AppContent() {
-  const { user, token, dbLoading, db, t, usersConfigReady, userSyncDone, gatekeeperError } = useApp();
-  if (gatekeeperError) return <InactiveAccountScreen message={gatekeeperError} />;
+  const { user, token, dbLoading, db, t, usersConfigReady, userSyncDone } = useApp();
   if (!user || !token) return <LoginPage/>;
   if (!usersConfigReady || !userSyncDone) return <LoadingScreen message={t?.loading||"LOADING..."}/>;
   if (dbLoading || !db) return <LoadingScreen message={t?.loading||"LOADING..."}/>;
