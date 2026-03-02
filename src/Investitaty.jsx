@@ -8,7 +8,6 @@ import {
   ArrowDownRight, Eye, EyeOff, AlertCircle, CheckCircle2,
   Menu, Search, Landmark, ListTree, CircleDollarSign,
 } from "lucide-react";
-import { supabase } from "./lib/supabaseClient";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONFIG
@@ -24,6 +23,8 @@ const DB_FILENAME = "investitaty_db.json";
 const AUTH_STORAGE_KEY = "investitaty_auth_v1";
 const AUTH_CONSENT_STORAGE_KEY = "investitaty_auth_consent_v1";
 const TAB_STORAGE_KEY = "investitaty_active_tab_v1";
+const USERS_STORAGE_KEY = "investitaty_users_config_v1";
+const USERS_CONFIG_PATH = "/data/users.json";
 const OWNER_PROTECTED_EMAIL = "wafique22@gmail.com";
 
 const normalizeRole = (role) => {
@@ -751,43 +752,56 @@ function AppProvider({ children }) {
   const isRTL = lang === "ar";
   const font = isRTL ? T.fontAr : T.fontSans;
 
-  const buildUsersConfig = useCallback((rows = []) => {
-    const normalizedRows = rows.map((row) => {
-      const status = String(row?.status || (row?.blocked ? "blocked" : "active")).toLowerCase();
-      return {
-        ...row,
-        role: normalizeRole(row?.role || "Member"),
-        status,
-        blocked: status === "blocked",
-        lastLogin: row?.lastLogin || row?.last_login || null,
-      };
-    });
-    return { ...DEFAULT_USERS_CONFIG, users: normalizedRows };
+  const persistUsersConfig = useCallback((nextConfig) => {
+    setUsersConfig(nextConfig);
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(nextConfig));
   }, []);
 
+  const syncUsersConfigToJson = useCallback(async (nextConfig) => {
+    try {
+      await fetch(USERS_CONFIG_PATH, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(nextConfig, null, 2),
+      });
+    } catch (_) {}
+  }, []);
+
+  const saveUsersConfig = useCallback((nextConfig) => {
+    persistUsersConfig(nextConfig);
+    syncUsersConfigToJson(nextConfig);
+  }, [persistUsersConfig, syncUsersConfigToJson]);
+
   const fetchUsersConfig = useCallback(async ({ requireRemote = false } = {}) => {
-    const { data, error } = await supabase.from("users").select("*").order("email", { ascending: true });
-    if (error) {
-      if (requireRemote) throw error;
-      setUsersConfig(DEFAULT_USERS_CONFIG);
+    try {
+      const res = await fetch(`${USERS_CONFIG_PATH}?t=${Date.now()}`, { cache: "no-store" });
+      if (!res.ok) throw new Error(`users config ${res.status}`);
+      const data = await res.json();
+      const next = data && typeof data === "object" ? data : DEFAULT_USERS_CONFIG;
+      persistUsersConfig(next);
+      return next;
+    } catch (_) {
+      if (requireRemote) {
+        throw new Error("Unable to verify user status from users.json");
+      }
+      const localUsers = localStorage.getItem(USERS_STORAGE_KEY);
+      if (localUsers) {
+        try {
+          const parsed = JSON.parse(localUsers);
+          if (parsed && typeof parsed === "object") {
+            setUsersConfig(parsed);
+            return parsed;
+          }
+        } catch (_) {}
+      }
+      persistUsersConfig(DEFAULT_USERS_CONFIG);
       return DEFAULT_USERS_CONFIG;
     }
-    const next = buildUsersConfig(data || []);
-    setUsersConfig(next);
-    return next;
-  }, [buildUsersConfig]);
+  }, [persistUsersConfig]);
 
   useEffect(() => {
     fetchUsersConfig().finally(() => setUsersConfigReady(true));
   }, [fetchUsersConfig]);
-
-  useEffect(() => {
-    if (!usersConfigReady || !auth.user) return;
-    const intervalId = setInterval(() => {
-      fetchUsersConfig().catch(() => {});
-    }, 10000);
-    return () => clearInterval(intervalId);
-  }, [usersConfigReady, auth.user, fetchUsersConfig]);
 
   const currentEmail = String(auth?.user?.email || "").toLowerCase();
   const ownerEmail = String(usersConfig?.ownerEmail || OWNER_PROTECTED_EMAIL).toLowerCase();
@@ -809,64 +823,6 @@ function AppProvider({ children }) {
 
     let isCancelled = false;
     const runGatekeeper = async () => {
-      const email = String(auth.user.email || "").toLowerCase();
-      const protectedOwnerEmail = OWNER_PROTECTED_EMAIL.toLowerCase();
-      const isOwner = email === protectedOwnerEmail;
-      const now = new Date().toISOString();
-
-      let existing = null;
-      const { data: existingUser, error: existingUserError } = await supabase
-        .from("users")
-        .select("*")
-        .eq("email", email)
-        .maybeSingle();
-
-      if (existingUserError) {
-        setGatekeeperError({ ar: t.accountInactiveAr, en: t.accountInactiveEn });
-        auth.signOut();
-        setUserSyncDone(false);
-        return;
-      }
-      existing = existingUser;
-
-      if (!existing) {
-        const { error: insertError } = await supabase.from("users").insert({
-          name: auth.user.name || String(email).split("@")[0],
-          email,
-          role: isOwner ? "Owner" : "Member",
-          status: "active",
-          blocked: false,
-          last_login: now,
-        });
-        if (insertError) {
-          setGatekeeperError({ ar: t.accountInactiveAr, en: t.accountInactiveEn });
-          auth.signOut();
-          setUserSyncDone(false);
-          return;
-        }
-      } else {
-        const status = String(existing.status || (existing.blocked ? "blocked" : "active")).toLowerCase();
-        if (!isOwner && ["blocked", "paused", "deleted"].includes(status)) {
-          alert("Your account is blocked by The Leader");
-          setGatekeeperError({ ar: t.accountInactiveAr, en: t.accountInactiveEn });
-          auth.signOut();
-          setUserSyncDone(false);
-          return;
-        }
-
-        const { error: updateError } = await supabase.from("users").update({
-          name: auth.user.name || existing.name || String(email).split("@")[0],
-          last_login: now,
-        }).eq("email", email);
-
-        if (updateError) {
-          setGatekeeperError({ ar: t.accountInactiveAr, en: t.accountInactiveEn });
-          auth.signOut();
-          setUserSyncDone(false);
-          return;
-        }
-      }
-
       let freshConfig;
       try {
         freshConfig = await fetchUsersConfig({ requireRemote: true });
@@ -878,14 +834,52 @@ function AppProvider({ children }) {
       }
       if (isCancelled) return;
 
-      setUsersConfig(freshConfig);
+      const email = String(auth.user.email || "").toLowerCase();
+      const protectedOwnerEmail = OWNER_PROTECTED_EMAIL.toLowerCase();
+      const ownerFromConfig = String(freshConfig?.ownerEmail || protectedOwnerEmail).toLowerCase();
+      const isOwner = email === protectedOwnerEmail || email === ownerFromConfig;
+      const now = new Date().toISOString().slice(0, 16).replace("T", " ");
+      const users = [...(freshConfig?.users || [])];
+      const idx = users.findIndex((u) => String(u.email || "").toLowerCase() === email);
+      const existing = idx >= 0 ? users[idx] : null;
+      const status = String(existing?.status || (existing?.blocked ? "blocked" : "active")).toLowerCase();
+
+      if (!isOwner && ["blocked", "paused", "deleted"].includes(status)) {
+        setGatekeeperError({ ar: t.accountInactiveAr, en: t.accountInactiveEn });
+        auth.signOut();
+        setUserSyncDone(false);
+        return;
+      }
+
+      if (existing) {
+        users[idx] = {
+          ...existing,
+          name: auth.user.name || existing.name || String(email).split("@")[0],
+          email,
+          role: existing.role || (isOwner ? "Owner" : "member"),
+          status: existing.status || "active",
+          blocked: Boolean(existing.blocked),
+          lastLogin: now,
+        };
+      } else {
+        users.push({
+          name: auth.user.name || String(email).split("@")[0],
+          email,
+          role: isOwner ? "Owner" : "member",
+          status: "active",
+          blocked: false,
+          lastLogin: now,
+        });
+      }
+
+      saveUsersConfig({ ...freshConfig, users });
       setGatekeeperError(null);
       setUserSyncDone(true);
     };
 
     runGatekeeper();
     return () => { isCancelled = true; };
-  }, [auth.user, auth.token, auth.signOut, fetchUsersConfig, usersConfigReady, t.accountInactiveAr, t.accountInactiveEn]);
+  }, [auth.user, auth.token, auth.signOut, fetchUsersConfig, usersConfigReady, saveUsersConfig, t.accountInactiveAr, t.accountInactiveEn]);
 
   useEffect(() => {
     if (!auth.token || isBlocked || !userSyncDone) return;
@@ -930,26 +924,15 @@ function AppProvider({ children }) {
     return newItem;
   }, [updateDb]);
 
-  const updateUserEntry = useCallback(async (email, updater) => {
+  const updateUserEntry = useCallback((email, updater) => {
     const normalized = String(email || "").toLowerCase();
     const users = [...(usersConfig?.users || [])];
     const idx = users.findIndex((u) => String(u.email || "").toLowerCase() === normalized);
-    if (idx < 0) return false;
+    if (idx < 0) return;
     const nextUser = typeof updater === "function" ? updater(users[idx]) : { ...users[idx], ...updater };
-    const nextStatus = String(nextUser?.status || (nextUser?.blocked ? "blocked" : "active")).toLowerCase();
-    const payload = {
-      name: nextUser?.name || null,
-      role: normalizeRole(nextUser?.role || "Member"),
-      status: nextStatus,
-      blocked: nextStatus === "blocked",
-      last_login: nextUser?.lastLogin || null,
-    };
-
-    const { error } = await supabase.from("users").update(payload).eq("email", normalized);
-    if (error) return false;
-    await fetchUsersConfig({ requireRemote: true });
-    return true;
-  }, [usersConfig, fetchUsersConfig]);
+    users[idx] = nextUser;
+    saveUsersConfig({ ...usersConfig, users });
+  }, [usersConfig, saveUsersConfig]);
 
   const value = {
     ...auth, db, fileId, syncing, syncError, dbLoading,
@@ -3043,19 +3026,14 @@ function UserManagementTab() {
   const roleOptions = Object.keys(usersConfig?.roles || {});
   const canBlock = currentRole === "Owner" || hasPermission("block_user") || hasPermission("unblock_user");
   const canAssignRole = currentRole === "Owner" || hasPermission("assign_role");
-  const [updatingEmail, setUpdatingEmail] = useState(null);
 
-  const handleToggleBlock = async (entry) => {
+  const handleToggleBlock = (entry) => {
     const nextStatus = String(entry?.status || (entry?.blocked ? "blocked" : "active")).toLowerCase() === "blocked" ? "active" : "blocked";
-    setUpdatingEmail(entry.email);
-    await updateUserEntry(entry.email, { status: nextStatus, blocked: nextStatus === "blocked" });
-    setUpdatingEmail(null);
+    updateUserEntry(entry.email, { status: nextStatus, blocked: nextStatus === "blocked" });
   };
 
-  const handleRoleChange = async (entry, role) => {
-    setUpdatingEmail(entry.email);
-    await updateUserEntry(entry.email, { role });
-    setUpdatingEmail(null);
+  const handleRoleChange = (entry, role) => {
+    updateUserEntry(entry.email, { role });
   };
 
   const formatName = (entry) => {
@@ -3100,13 +3078,13 @@ function UserManagementTab() {
                   </td>
                   <td style={{ padding:"12px 14px" }}>
                     <div style={{ display:"flex", gap:"8px", flexWrap:"wrap", alignItems:"center" }}>
-                      <Btn size="sm" variant="danger" disabled={!canBlock || isOwner || updatingEmail === entry.email} onClick={() => handleToggleBlock(entry)}>{blocked ? "Unblock" : "Block"}</Btn>
+                      <Btn size="sm" variant="danger" disabled={!canBlock || isOwner} onClick={() => handleToggleBlock(entry)}>{blocked ? "Unblock" : "Block"}</Btn>
                       <Select
                         value={entry.role || "Member"}
                         onChange={(e) => handleRoleChange(entry, e.target.value)}
                         options={roleOptions.map((role) => ({ value:role, label:role }))}
                         isRTL={isRTL}
-                        disabled={!canAssignRole || isOwner || updatingEmail === entry.email}
+                        disabled={!canAssignRole || isOwner}
                       />
                     </div>
                   </td>
