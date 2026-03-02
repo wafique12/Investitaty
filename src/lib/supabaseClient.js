@@ -1,46 +1,30 @@
+import { createClient } from '@supabase/supabase-js';
 const SUPABASE_URL = 'https://sucuonebmfhemebscmlo.supabase.co'; // الرابط بتاعك من سوبابيز
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1Y3VvbmVibWZoZW1lYnNjbWxvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0NzEwMjEsImV4cCI6MjA4ODA0NzAyMX0.xMLP110xEWRZ0C5Wt69EhXox8i7CynnS5JMvRAYIPtg'; // المفتاح الطويل بتاعك
 
+
+
+// التحقق من وجود البيانات
 const hasSupabaseConfig = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 
-const buildSupabaseError = (reason) => ({
-  message: reason,
-  name: 'SupabaseClientError',
-});
+let supabase;
 
-const createFallbackQueryBuilder = (reason) => {
-  const error = buildSupabaseError(reason);
-  return {
-    select() { return this; },
-    order: async () => ({ data: [], error }),
-    eq() { return this; },
-    maybeSingle: async () => ({ data: null, error }),
-    insert: async () => ({ error }),
-    update: () => ({ eq: async () => ({ error }) }),
-  };
-};
-
-const createFallbackClient = (reason) => ({
-  from: () => createFallbackQueryBuilder(reason),
-});
-
-let supabase = null;
-let hasSupabaseClient = false;
-
-if (!hasSupabaseConfig) {
-  console.log('[Supabase] Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY. Running with fallback mode.');
-  supabase = createFallbackClient('Missing Supabase environment variables.');
-} else if (typeof window !== 'undefined' && window?.supabase?.createClient) {
-  try {
-    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    hasSupabaseClient = true;
-  } catch (error) {
-    console.log('[Supabase] Failed to initialize browser global client:', error);
-    supabase = createFallbackClient('Failed to initialize Supabase browser global client.');
-  }
+if (hasSupabaseConfig) {
+  // ده السطر اللي هينور الشاشة يا قائد
+  supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 } else {
-  console.log('[Supabase] @supabase/supabase-js is unavailable in this environment. Running with fallback mode.');
-  supabase = createFallbackClient('@supabase/supabase-js module is unavailable.');
+  console.error('[Supabase] البيانات ناقصة يا قائد!');
+  // ده لضمان إن الموقع ما يضربش لو الداتا مش موجودة
+  supabase = {
+    from: () => ({
+      select: () => ({ order: () => Promise.resolve({ data: [], error: null }) }),
+      insert: () => Promise.resolve({ error: null }),
+      update: () => ({ eq: () => Promise.resolve({ error: null }) }),
+      eq: () => ({ maybeSingle: () => Promise.resolve({ data: null, error: null }) })
+    })
+  };
 }
 
-export { supabase, hasSupabaseConfig, hasSupabaseClient };
+// تصدير الكلاينت والـ flags اللي الكود بتاعك بيحتاجها
+export { supabase, hasSupabaseConfig };
+export const hasSupabaseClient = hasSupabaseConfig;
