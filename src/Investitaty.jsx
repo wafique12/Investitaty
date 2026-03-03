@@ -757,9 +757,10 @@ function AppProvider({ children }) {
 
   const buildUsersConfig = useCallback((rows = []) => {
     const normalizedRows = rows.map((row) => {
-      const status = String(row?.status || (row?.blocked ? "blocked" : "active")).toLowerCase();
+      const status = String(row?.status || "active").toLowerCase();
       return {
         ...row,
+        name: row?.full_name || row?.name || null,
         role: normalizeRole(row?.role || "Member"),
         status,
         blocked: status === "blocked",
@@ -779,7 +780,10 @@ function AppProvider({ children }) {
     }
 
     try {
-      const { data, error } = await supabase.from("users").select("*").order("email", { ascending: true });
+      const { data, error } = await supabase
+        .from("users")
+        .select("email, role, status, full_name, last_login")
+        .order("email", { ascending: true });
       if (error) {
         console.log("[Supabase] fetchUsersConfig error:", error);
         if (requireRemote) throw error;
@@ -845,7 +849,7 @@ function AppProvider({ children }) {
         let existing = null;
         const { data: existingUser, error: existingUserError } = await supabase
           .from("users")
-          .select("*")
+          .select("email, role, status, full_name, last_login")
           .eq("email", email)
           .maybeSingle();
 
@@ -860,11 +864,10 @@ function AppProvider({ children }) {
 
         if (!existing) {
           const { error: insertError } = await supabase.from("users").insert({
-            name: auth.user.name || String(email).split("@")[0],
+            full_name: auth.user.name || String(email).split("@")[0],
             email,
             role: isOwner ? "Owner" : "Member",
             status: "active",
-            blocked: false,
             last_login: now,
           });
           if (insertError) {
@@ -875,7 +878,7 @@ function AppProvider({ children }) {
             return;
           }
         } else {
-          const status = String(existing.status || (existing.blocked ? "blocked" : "active")).toLowerCase();
+          const status = String(existing.status || "active").toLowerCase();
           if (!isOwner && ["blocked", "paused", "deleted"].includes(status)) {
             setGatekeeperError(t.accountBlockedLeader);
             auth.signOut();
@@ -884,7 +887,7 @@ function AppProvider({ children }) {
           }
 
           const { error: updateError } = await supabase.from("users").update({
-            name: auth.user.name || existing.name || String(email).split("@")[0],
+            full_name: auth.user.name || existing.full_name || String(email).split("@")[0],
             last_login: now,
           }).eq("email", email);
 
@@ -978,12 +981,11 @@ function AppProvider({ children }) {
     const idx = users.findIndex((u) => String(u.email || "").toLowerCase() === normalized);
     if (idx < 0) return false;
     const nextUser = typeof updater === "function" ? updater(users[idx]) : { ...users[idx], ...updater };
-    const nextStatus = String(nextUser?.status || (nextUser?.blocked ? "blocked" : "active")).toLowerCase();
+    const nextStatus = String(nextUser?.status || "active").toLowerCase();
     const payload = {
-      name: nextUser?.name || null,
+      full_name: nextUser?.name || null,
       role: normalizeRole(nextUser?.role || "Member"),
       status: nextStatus,
-      blocked: nextStatus === "blocked",
       last_login: nextUser?.lastLogin || null,
     };
 
