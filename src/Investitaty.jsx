@@ -6,7 +6,7 @@ import {
   TrendingUp, Wallet, DollarSign, BarChart2, Globe, LogOut,
   Cloud, Shield, Layers, Tag, FolderOpen, ArrowUpRight, PieChart as PieChartIcon,
   ArrowDownRight, Eye, EyeOff, AlertCircle, CheckCircle2,
-  Menu, Search, Landmark, ListTree, CircleDollarSign,
+  Menu, Search, Landmark, ListTree, CircleDollarSign, Lock, Unlock,
 } from "lucide-react";
 import { supabase, hasSupabaseConfig, hasSupabaseClient } from "./lib/supabaseClient";
 
@@ -219,6 +219,7 @@ const TRANSLATIONS = {
     profileError: "Signed in but could not fetch profile. Check API key.",
     failedGIS: "Failed to load Google Identity Services.",
     failedGAPI: "Failed to load Google API.",
+    drivePermissionRequired: "Please grant Google Drive access to enable reading and updating your investment files.",
     failedDrive: "Failed to access Google Drive. Please try again.",
     syncFailed: "Sync failed. Changes may not be saved.",
     days: "d",
@@ -395,6 +396,7 @@ const TRANSLATIONS = {
     profileError: "تم تسجيل الدخول لكن تعذّر جلب الملف الشخصي.",
     failedGIS: "فشل تحميل خدمات Google.",
     failedGAPI: "فشل تحميل Google API.",
+    drivePermissionRequired: "يرجى منح صلاحية الوصول لـ Google Drive لتتمكن من قراءة وتحديث ملفات الاستثمارات الخاصة بك.",
     failedDrive: "فشل الوصول إلى Google Drive.",
     syncFailed: "فشلت المزامنة. ربما لم تُحفظ التغييرات.",
     days: "يوم",
@@ -610,7 +612,8 @@ async function saveDB(token, fileId, data) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // AUTH HOOK (unchanged from Sprint 3 — battle-tested)
 // ═══════════════════════════════════════════════════════════════════════════════
-function useGoogleAuth() {
+function useGoogleAuth(lang = "en") {
+  const translations = TRANSLATIONS[lang] || TRANSLATIONS.en;
   const [user, setUser] = useState(() => {
     try {
       const raw = localStorage.getItem(AUTH_STORAGE_KEY);
@@ -691,7 +694,7 @@ function useGoogleAuth() {
           const grantedAllScopes = window.google.accounts.oauth2.hasGrantedAllScopes(response, ...REQUIRED_SCOPES);
           if (!grantedAllScopes) {
             setAuthLoading(false);
-            setAuthError("Required permissions were not granted. Please allow full access to continue.");
+            setAuthError(translations.drivePermissionRequired);
             setUser(null);
             setToken(null);
             localStorage.removeItem(AUTH_STORAGE_KEY);
@@ -715,7 +718,7 @@ function useGoogleAuth() {
       });
     }
     tokenClientRef.current.requestAccessToken({ prompt: hasGrantedConsent ? "none" : "consent" });
-  }, [gapiReady, hasGrantedConsent]);
+  }, [gapiReady, hasGrantedConsent, translations.drivePermissionRequired]);
 
   const signOut = useCallback(() => {
     if (token) { try { window.google.accounts.oauth2.revoke(token); } catch(_) {} }
@@ -738,7 +741,8 @@ function useGoogleAuth() {
 // APP PROVIDER
 // ═══════════════════════════════════════════════════════════════════════════════
 function AppProvider({ children }) {
-  const auth = useGoogleAuth();
+  const [lang, setLang] = useState("en");
+  const auth = useGoogleAuth(lang);
   const [usersConfig, setUsersConfig] = useState(DEFAULT_USERS_CONFIG);
   const [usersConfigReady, setUsersConfigReady] = useState(false);
   const [gatekeeperError, setGatekeeperError] = useState(null);
@@ -748,7 +752,6 @@ function AppProvider({ children }) {
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState(null);
   const [dbLoading, setDbLoading] = useState(false);
-  const [lang, setLang] = useState("en");
   const saveTimerRef = useRef(null);
 
   const t = TRANSLATIONS[lang];
@@ -3199,17 +3202,46 @@ function UserManagementTab() {
                   </td>
                   <td style={{ padding:"12px 14px" }}>
                     {!isOwner && (
-                      <div style={{ display:"flex", gap:"8px", flexWrap:"wrap", alignItems:"center" }}>
-                        <Btn size="sm" variant="danger" disabled={!canRowBlock || isUpdating} onClick={() => handleToggleBlock(entry)}>{blocked ? "Unblock" : "Block"}</Btn>
+                      <div style={{ display:"flex", gap:"8px", flexWrap:"nowrap", alignItems:"center" }}>
+                        <Btn
+                          size="sm"
+                          disabled={!canRowBlock || isUpdating}
+                          onClick={() => handleToggleBlock(entry)}
+                          icon={blocked ? <Unlock size={13} /> : <Lock size={13} />}
+                          style={{
+                            padding:"5px 10px",
+                            background: blocked ? "#16a34a" : "#f97316",
+                            color:"#ffffff",
+                            border:"1px solid transparent",
+                            whiteSpace:"nowrap",
+                          }}
+                        >
+                          {blocked ? "Unblock" : "Block"}
+                        </Btn>
                         <Select
                           value={entry.role || "Member"}
                           onChange={(e) => handleRoleChange(entry, e.target.value)}
                           options={rowRoleOptions.map((role) => ({ value:role, label:role }))}
                           isRTL={isRTL}
                           disabled={!canRowAssignRole || isUpdating}
+                          style={{ minWidth:"112px" }}
                         />
                         {canDelete && (
-                          <Btn size="sm" variant="danger" disabled={isUpdating} onClick={() => handleDelete(entry)}>Delete</Btn>
+                          <Btn
+                            size="sm"
+                            disabled={isUpdating}
+                            onClick={() => handleDelete(entry)}
+                            icon={<Trash2 size={13} />}
+                            style={{
+                              padding:"5px 10px",
+                              background:"#dc2626",
+                              color:"#ffffff",
+                              border:"1px solid transparent",
+                              whiteSpace:"nowrap",
+                            }}
+                          >
+                            Delete
+                          </Btn>
                         )}
                       </div>
                     )}
