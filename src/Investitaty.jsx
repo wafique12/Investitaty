@@ -229,7 +229,7 @@ const TRANSLATIONS = {
     footerBranding: "© 2026 Investaty. Developed and Owned by Wafiq Abdulrahman. All rights reserved.",
     blockedTitle: "Account access blocked",
     blockedMessage: "Your account has been blocked by an administrator. You cannot access investment data until your account is unblocked.",
-    accountBlockedLeader: "Your account is blocked by the Leader",
+    accountBlockedLeader: "Access Denied. You do not have permission to use the application at this time. Please contact the administration.",
     permissionsVerifyFailed: "Unable to verify permissions at this time",
     accountInactiveAr: "عذراً، حسابك غير مفعل حالياً. يرجى التواصل مع إدارة التطبيق.",
     accountInactiveEn: "Your account is currently inactive. Please contact administration.",
@@ -406,7 +406,7 @@ const TRANSLATIONS = {
     footerBranding: "© 2026 Investaty. مطور ومملوك بواسطة وفيق عبد الرحمن. جميع الحقوق محفوظة.",
     blockedTitle: "تم حظر الوصول للحساب",
     blockedMessage: "تم حظر حسابك من قبل الإدارة. لا يمكنك الوصول إلى بيانات الاستثمار حتى يتم إلغاء الحظر.",
-    accountBlockedLeader: "حسابك محظور من قِبل القائد",
+    accountBlockedLeader: "عذراً، لا تملك صلاحية الوصول حالياً. يرجى التواصل مع إدارة التطبيق للمزيد من المعلومات.",
     permissionsVerifyFailed: "غير قادر على التحقق من الصلاحيات حالياً",
     accountInactiveAr: "عذراً، حسابك غير مفعل حالياً. يرجى التواصل مع إدارة التطبيق.",
     accountInactiveEn: "Your account is currently inactive. Please contact administration.",
@@ -3203,6 +3203,14 @@ function UserManagementTab() {
                   <td style={{ padding:"12px 14px" }}>
                     {!isOwner && (
                       <div style={{ display:"flex", gap:"8px", flexWrap:"nowrap", alignItems:"center" }}>
+                        <Select
+                          value={entry.role || "Member"}
+                          onChange={(e) => handleRoleChange(entry, e.target.value)}
+                          options={rowRoleOptions.map((role) => ({ value:role, label:role }))}
+                          isRTL={isRTL}
+                          disabled={!canRowAssignRole || isUpdating}
+                          style={{ minWidth:"112px" }}
+                        />
                         <Btn
                           size="sm"
                           disabled={!canRowBlock || isUpdating}
@@ -3217,15 +3225,7 @@ function UserManagementTab() {
                           }}
                         >
                           {blocked ? "Unblock" : "Block"}
-                        </Btn>
-                        <Select
-                          value={entry.role || "Member"}
-                          onChange={(e) => handleRoleChange(entry, e.target.value)}
-                          options={rowRoleOptions.map((role) => ({ value:role, label:role }))}
-                          isRTL={isRTL}
-                          disabled={!canRowAssignRole || isUpdating}
-                          style={{ minWidth:"112px" }}
-                        />
+                        </Btn>                        
                         {canDelete && (
                           <Btn
                             size="sm"
