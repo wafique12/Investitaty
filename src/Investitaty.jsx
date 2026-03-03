@@ -24,8 +24,6 @@ const DB_FILENAME = "investitaty_db.json";
 const AUTH_STORAGE_KEY = "investitaty_auth_v1";
 const AUTH_CONSENT_STORAGE_KEY = "investitaty_auth_consent_v1";
 const TAB_STORAGE_KEY = "investitaty_active_tab_v1";
-const USERS_STORAGE_KEY = "investitaty_users_config_v1";
-const USERS_CONFIG_PATH = "/data/users.json";
 const OWNER_PROTECTED_EMAIL = "wafique22@gmail.com";
 
 const normalizeRole = (role) => {
@@ -775,11 +773,6 @@ function AppProvider({ children }) {
     return { ...DEFAULT_USERS_CONFIG, users: normalizedRows };
   }, []);
 
-  const saveUsersConfig = useCallback((nextConfig) => {
-    persistUsersConfig(nextConfig);
-    syncUsersConfigToJson(nextConfig);
-  }, [persistUsersConfig, syncUsersConfigToJson]);
-
   const fetchUsersConfig = useCallback(async ({ requireRemote = false } = {}) => {
     if (!hasSupabaseClient) {
       const configError = new Error("Supabase client is not initialized.");
@@ -814,6 +807,14 @@ function AppProvider({ children }) {
   useEffect(() => {
     fetchUsersConfig().finally(() => setUsersConfigReady(true));
   }, [fetchUsersConfig]);
+
+  useEffect(() => {
+    if (!usersConfigReady || !auth.user) return;
+    const intervalId = setInterval(() => {
+      fetchUsersConfig().catch(() => {});
+    }, 10000);
+    return () => clearInterval(intervalId);
+  }, [usersConfigReady, auth.user, fetchUsersConfig]);
 
   const currentEmail = String(auth?.user?.email || "").toLowerCase();
   const ownerEmail = String(usersConfig?.ownerEmail || OWNER_PROTECTED_EMAIL).toLowerCase();
@@ -981,7 +982,7 @@ function AppProvider({ children }) {
     const normalized = String(email || "").toLowerCase();
     const users = [...(usersConfig?.users || [])];
     const idx = users.findIndex((u) => String(u.email || "").toLowerCase() === normalized);
-    if (idx < 0) return;
+    if (idx < 0) return false;
     const nextUser = typeof updater === "function" ? updater(users[idx]) : { ...users[idx], ...updater };
     const nextStatus = String(nextUser?.status || "active").toLowerCase();
     const payload = {
