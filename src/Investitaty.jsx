@@ -149,7 +149,7 @@ const TRANSLATIONS = {
     addTransactionAction: "Add transaction",
     filterByInvestment: "Filter by Investment",
     view: "View",
-    returnLabel: "Return",
+    returnLabel: "Back",
     smartBackToInvestments: "Return to Investments",
     viewTransactions: "View transactions",
     viewDetails: "View details",
@@ -334,7 +334,7 @@ const TRANSLATIONS = {
     addTransactionAction: "إضافة معاملة",
     filterByInvestment: "تصفية حسب الاستثمار",
     view: "عرض",
-    returnLabel: "رجوع",
+    returnLabel: "عودة",
     smartBackToInvestments: "العودة إلى الاستثمارات",
     viewTransactions: "عرض المعاملات",
     viewDetails: "عرض التفاصيل",
@@ -1892,7 +1892,7 @@ function PortfoliosTab({ onQuickAddInvestment }) {
                   </div>
                   <div style={{ display:"flex",gap:"4px" }}>
                     <button onClick={()=>openEdit(p)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}
-                      onMouseEnter={e=>e.currentTarget.style.background=T.bgApp} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                      onMouseEnter={e=>{e.currentTarget.style.background=T.bgApp; e.currentTarget.style.color=T.warning;}} onMouseLeave={e=>{e.currentTarget.style.background="none"; e.currentTarget.style.color=T.textMuted;}}>
                       <Edit3 size={14}/>
                     </button>
                     <button onClick={()=>onQuickAddInvestment?.(p.id)} title={t.addInvestmentAction} style={{ background:"none",border:"none",cursor:"pointer",color:T.emerald,padding:"4px",borderRadius:"6px",display:"flex" }}><Plus size={14}/></button>
@@ -1945,9 +1945,9 @@ function PortfoliosTab({ onQuickAddInvestment }) {
 
 function ReadOnlyField({ label, value }) {
   return (
-    <div style={{ padding:"10px 0", borderBottom:`1px solid ${T.border}` }}>
-      <div style={{ fontSize:"0.72rem", color:T.textMuted, marginBottom:"4px", fontWeight:600 }}>{label}</div>
-      <div style={{ fontSize:"0.86rem", color:T.textPrimary }}>{value || "—"}</div>
+    <div style={{ padding:"10px", border:`1px solid ${T.border}`, borderRadius:"10px", background:T.bgApp }}>
+      <div style={{ fontSize:"0.72rem", color:T.textMuted, marginBottom:"6px", fontWeight:700 }}>{label}</div>
+      <div style={{ fontSize:"0.86rem", color:T.textPrimary, wordBreak:"break-word" }}>{value || "—"}</div>
     </div>
   );
 }
@@ -2148,11 +2148,11 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                             <td style={{ padding:"12px 10px",textAlign:"right" }} onClick={e=>e.stopPropagation()}>
                               <div style={{ display:"flex",gap:"4px",justifyContent:"flex-end" }}>
                                 <button title={t.viewDetails} onClick={()=>openView(inv)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}
-                                  onMouseEnter={e=>e.currentTarget.style.background=T.bgApp} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                                  onMouseEnter={e=>{e.currentTarget.style.background=T.bgApp; e.currentTarget.style.color=T.info;}} onMouseLeave={e=>{e.currentTarget.style.background="none"; e.currentTarget.style.color=T.textMuted;}}>
                                   <Eye size={13}/>
                                 </button>
-                                <button title={t.addTransactionAction} onClick={()=>onQuickAddTransaction?.(inv)} style={{ background:"none",border:"none",cursor:"pointer",color:T.emerald,padding:"4px",borderRadius:"6px",display:"flex" }}><Plus size={13}/></button>
-                                <button title={t.viewTransactions} onClick={()=>onViewTransactions?.(inv)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}><ListTree size={13}/></button>
+                                <button title={t.addTransactionAction} onClick={()=>onQuickAddTransaction?.(inv)} style={{ background:"none",border:"none",cursor:"pointer",color:T.emerald,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color="#059669"} onMouseLeave={e=>e.currentTarget.style.color=T.emerald}><Plus size={13}/></button>
+                                <button title={t.viewTransactions} onClick={()=>onViewTransactions?.(inv)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.warning} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><ListTree size={13}/></button>
                                 <button title={t.deleteItem} onClick={()=>softDelete("investments",inv.id)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}
                                   onMouseEnter={e=>e.currentTarget.style.color=T.negative} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
                                   <Trash2 size={13}/>
@@ -2182,12 +2182,13 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
       {showModal && (
         <Modal title={modalMode==="create" ? t.addInvestment : `${t.view} ${t.investment}`} onClose={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>
           {modalMode === "view" ? (
-            <div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"10px" }}>
               <ReadOnlyField label={t.portfolio} value={portfolios.find((p)=>p.id===form.portfolioId)?.name} />
               <ReadOnlyField label={t.name} value={form.name} />
               <ReadOnlyField label={t.quantity} value={form.quantity} />
               <ReadOnlyField label={t.purchasePrice} value={form.purchasePrice} />
               <ReadOnlyField label={t.currentPrice} value={form.currentPrice} />
+              <ReadOnlyField label="Balance" value={((Number(form.quantity)||0) * (Number(form.purchasePrice)||0)).toFixed(2)} />
               <ReadOnlyField label={t.purchaseDate} value={form.purchaseDate} />
               <ReadOnlyField label={t.startDate} value={form.startDate} />
               <ReadOnlyField label={t.endDate} value={form.endDate} />
@@ -2196,6 +2197,8 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
               <ReadOnlyField label={t.status} value={form.status} />
               <ReadOnlyField label={t.splitFunding} value={(form.funding||[]).map((f)=>`${f.source||"—"}: ${f.amount||0}`).join(" | ")} />
               <ReadOnlyField label={t.notes} value={form.notes} />
+              <ReadOnlyField label="ID" value={editItem?.id} />
+              <ReadOnlyField label="Created At" value={editItem?.created_at} />
             </div>
           ) : (
             <>
@@ -2239,12 +2242,12 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
           )}
           <div style={{ display:"flex",justifyContent:"flex-end",gap:"10px",marginTop:"8px" }}>
             {modalMode==="view" && (<>
-              <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>{t.returnLabel}</Btn>
               <Btn onClick={()=>setModalMode("edit")}>{t.editInModal}</Btn>
+              <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>{t.returnLabel}</Btn>
             </>)}
             {modalMode==="edit" && (<>
-              <Btn variant="secondary" onClick={()=>{ setForm({ portfolioId:editItem.portfolioId,name:editItem.name,quantity:editItem.quantity||"",purchasePrice:editItem.purchasePrice||"",currentPrice:editItem.currentPrice||"",purchaseDate:editItem.purchaseDate||"",startDate:editItem.startDate||"",endDate:editItem.endDate||"",investmentMethod:editItem.investmentMethod||"",risk:editItem.risk||"",funding:(editItem.funding&&editItem.funding.length?editItem.funding:[{source:editItem.source||"",amount:""}]),status:editItem.status||"Active",notes:editItem.notes||"" }); setModalMode("view"); }}>{t.cancel}</Btn>
               <Btn onClick={handleSave}>{t.save}</Btn>
+              <Btn variant="secondary" onClick={()=>{ setForm({ portfolioId:editItem.portfolioId,name:editItem.name,quantity:editItem.quantity||"",purchasePrice:editItem.purchasePrice||"",currentPrice:editItem.currentPrice||"",purchaseDate:editItem.purchaseDate||"",startDate:editItem.startDate||"",endDate:editItem.endDate||"",investmentMethod:editItem.investmentMethod||"",risk:editItem.risk||"",funding:(editItem.funding&&editItem.funding.length?editItem.funding:[{source:editItem.source||"",amount:""}]),status:editItem.status||"Active",notes:editItem.notes||"" }); setModalMode("view"); }}>{t.cancel}</Btn>
             </>)}
             {modalMode==="create" && (<>
               <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>{t.cancel}</Btn>
@@ -2408,7 +2411,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
     <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font }}>
       <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"16px",gap:"10px" }}>
         <div style={{ display:"flex",alignItems:"center",gap:"8px" }}>
-          {showSmartBack && <button title={t.smartBackToInvestments} onClick={onSmartBack} style={{ background:"none",border:`1px solid ${T.border}`,borderRadius:"8px",cursor:"pointer",padding:"6px",display:"flex",color:T.textSecondary }}><Undo2 size={15}/></button>}
+          {showSmartBack && <button title={t.smartBackToInvestments} onClick={onSmartBack} style={{ background:"none",border:`1px solid ${T.border}`,borderRadius:"8px",cursor:"pointer",padding:"6px",display:"flex",color:T.textSecondary }}><Undo2 size={15}/><span style={{ fontSize:"0.78rem",fontWeight:600 }}>{t.returnLabel}</span></button>}
           <div>
           <h2 style={{ margin:0,fontSize:"1.4rem",fontWeight:700,color:T.textPrimary }}>{t.transactions}</h2>
           <div style={{ fontSize:"0.8rem",color:T.textMuted,marginTop:"2px" }}>{sorted.length} records</div>
@@ -2469,9 +2472,9 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
                       <td style={{ padding:"11px 14px",textAlign:isRTL?"right":"left" }}><Chip color={statusColor(tx.status)}>{tx.status}</Chip></td>
                       <td style={{ padding:"11px 10px",position:"relative" }} onClick={e=>e.stopPropagation()}>
                         <div style={{ display:"flex",gap:"3px",justifyContent:"flex-end" }}>
-                          <button title={t.viewDetails} onClick={()=>openView(tx)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"5px",display:"flex" }}><Eye size={13}/></button>
+                          <button title={t.viewDetails} onClick={()=>openView(tx)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"5px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.info} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><Eye size={13}/></button>
                           <button title={t.settings} onClick={()=>setOpenMenu(openMenu===tx.id?null:tx.id)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"5px",display:"flex",position:"relative" }}
-                            onMouseEnter={e=>e.currentTarget.style.background=T.bgApp} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                            onMouseEnter={e=>{e.currentTarget.style.background=T.bgApp; e.currentTarget.style.color=T.warning;}} onMouseLeave={e=>{e.currentTarget.style.background="none"; e.currentTarget.style.color=T.textMuted;}}>
                             <MoreVertical size={13}/>
                           </button>
                           {openMenu===tx.id && <TxActionMenu tx={tx} onClose={()=>setOpenMenu(null)}/>}
@@ -2490,7 +2493,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
       {showModal && (
         <Modal title={modalMode==="create"?t.addTransaction:`${t.view} ${t.transactions}`} onClose={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>
           {modalMode === "view" ? (
-            <div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"10px" }}>
               <ReadOnlyField label={t.portfolio} value={portfolios.find((p)=>p.id===form.portfolioId)?.name} />
               <ReadOnlyField label={t.investment} value={allInvestments.find((i)=>i.id===form.investmentId)?.name} />
               <ReadOnlyField label={t.category} value={form.category} />
@@ -2536,12 +2539,12 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
           )}
           <div style={{ display:"flex",justifyContent:"flex-end",gap:"10px",marginTop:"8px" }}>
             {modalMode==="view" && (<>
-              <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>{t.returnLabel}</Btn>
               <Btn onClick={()=>setModalMode("edit")}>{t.editInModal}</Btn>
+              <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>{t.returnLabel}</Btn>
             </>)}
             {modalMode==="edit" && (<>
-              <Btn variant="secondary" onClick={()=>{ setForm({ portfolioId:editItem.portfolioId||"",investmentId:editItem.investmentId||"",category:editItem.category||"",amount:editItem.amount||"",date:editItem.date||"",dueDate:editItem.dueDate||"",type:editItem.type||"income",status:editItem.status||"recorded",notes:editItem.notes||"" }); setModalMode("view"); }}>{t.cancel}</Btn>
               <Btn onClick={handleSave}>{t.save}</Btn>
+              <Btn variant="secondary" onClick={()=>{ setForm({ portfolioId:editItem.portfolioId||"",investmentId:editItem.investmentId||"",category:editItem.category||"",amount:editItem.amount||"",date:editItem.date||"",dueDate:editItem.dueDate||"",type:editItem.type||"income",status:editItem.status||"recorded",notes:editItem.notes||"" }); setModalMode("view"); }}>{t.cancel}</Btn>
             </>)}
             {modalMode==="create" && (<>
               <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>{t.cancel}</Btn>
