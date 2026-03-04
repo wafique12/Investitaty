@@ -6,7 +6,7 @@ import {
   TrendingUp, Wallet, DollarSign, BarChart2, Globe, LogOut,
   Cloud, Shield, Layers, Tag, FolderOpen, ArrowUpRight, PieChart as PieChartIcon,
   ArrowDownRight, Eye, EyeOff, AlertCircle, CheckCircle2,
-  Menu, Search, Landmark, ListTree, CircleDollarSign, Lock, Unlock,
+  Menu, Search, Landmark, ListTree, CircleDollarSign, Lock, Unlock, Undo2,
 } from "lucide-react";
 import { supabase, hasSupabaseConfig, hasSupabaseClient } from "./lib/supabaseClient";
 
@@ -147,6 +147,14 @@ const TRANSLATIONS = {
     unpinSidebar: "Auto-hide sidebar",
     addInvestmentAction: "Add investment",
     addTransactionAction: "Add transaction",
+    filterByInvestment: "Filter by Investment",
+    view: "View",
+    returnLabel: "Back",
+    smartBackToInvestments: "Return to Investments",
+    viewTransactions: "View transactions",
+    viewDetails: "View details",
+    editInModal: "Edit",
+    deleteItem: "Delete",
     quantity: "Quantity",
     purchasePrice: "Purchase Price",
     currentPrice: "Current Price",
@@ -324,6 +332,14 @@ const TRANSLATIONS = {
     unpinSidebar: "إخفاء تلقائي للشريط الجانبي",
     addInvestmentAction: "إضافة استثمار",
     addTransactionAction: "إضافة معاملة",
+    filterByInvestment: "تصفية حسب الاستثمار",
+    view: "عرض",
+    returnLabel: "عودة",
+    smartBackToInvestments: "العودة إلى الاستثمارات",
+    viewTransactions: "عرض المعاملات",
+    viewDetails: "عرض التفاصيل",
+    editInModal: "تعديل",
+    deleteItem: "حذف",
     quantity: "الكمية",
     purchasePrice: "سعر الشراء",
     currentPrice: "السعر الحالي",
@@ -1413,7 +1429,7 @@ function LoadingScreen({ message }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // SIDEBAR
 // ═══════════════════════════════════════════════════════════════════════════════
-function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen }) {
+function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileOpen, setMobileOpen }) {
   const { user, signOut, syncing, t, font, lang, setLang, hasPermission, currentRole } = useApp();
   const canManageUsers = currentRole === "Owner" || hasPermission("assign_role") || hasPermission("block_user") || hasPermission("unblock_user");
 
@@ -1427,21 +1443,18 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen }) {
     { id:"settings",     label:t.settings,     icon:<Settings size={17}/> },
   ];
 
-  const showLabels = isOpen;
-
+  const showLabels = isMobile ? true : isOpen;
   const handleHamburger = () => setIsOpen((prev) => !prev);
 
-  return (
-    <aside dir="ltr" style={{
-      width:showLabels?"220px":"72px",minHeight:"100vh",background:T.bgSidebar,
-      borderRight:"none",display:"flex",flexDirection:"column",flexShrink:0,
-      fontFamily:font,transition:"width 0.2s ease",
-    }}>
+  const sidebarContent = (
+    <>
       <div style={{ padding:showLabels?"24px 20px 18px":"16px 10px",borderBottom:`1px solid ${T.borderDark}` }}>
         <div style={{ display:"flex",alignItems:"center",gap:"10px",justifyContent:showLabels?"flex-start":"center" }}>
-          <button onClick={handleHamburger} title={t.collapseSidebar} style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", width:"28px", height:"28px", borderRadius:"6px", border:`1px solid ${T.borderDark}`, background:"transparent", color:T.textSidebar, cursor:"pointer", flexShrink:0 }}>
-            <Menu size={14} />
-          </button>
+          {!isMobile && (
+            <button onClick={handleHamburger} title={t.collapseSidebar} style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", width:"28px", height:"28px", borderRadius:"6px", border:`1px solid ${T.borderDark}`, background:"transparent", color:T.textSidebar, cursor:"pointer", flexShrink:0 }}>
+              <Menu size={14} />
+            </button>
+          )}
           <img src="/images/logo.svg" alt="Investaty" style={{ width:"32px",height:"32px",borderRadius:"8px",flexShrink:0 }} />
           {showLabels && <span style={{ color:"#f1f5f9",fontSize:"0.85rem",fontWeight:700,letterSpacing:"0.08em" }}>INVESTATY</span>}
         </div>
@@ -1459,7 +1472,7 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen }) {
         {navItems.map(({ id, label, icon }) => {
           const active = activeTab === id;
           return (
-            <button key={id} onClick={() => setActiveTab(id)} style={{
+            <button key={id} onClick={() => { setActiveTab(id); if (isMobile) setMobileOpen(false); }} style={{
               display:"flex",alignItems:"center",gap:"10px",width:"100%",
               padding:"9px 12px",borderRadius:"8px",border:"none",
               background:active?T.emeraldBg:"transparent",
@@ -1475,10 +1488,6 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen }) {
           );
         })}
       </nav>
-
-      <div style={{ padding:"12px" }}>
-        {showLabels && <div style={{ color:T.textSidebarMuted, fontSize:"0.7rem", marginBottom:"2px" }}>{t.collapseSidebar}</div>}
-      </div>
 
       {showLabels && (
         <div style={{ padding:"8px 12px 12px",borderTop:`1px solid ${T.borderDark}` }}>
@@ -1503,11 +1512,30 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen }) {
           </button>
         </div>
       )}
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </>
+  );
+
+  if (isMobile) {
+    return (
+      <>
+        {mobileOpen && <div onClick={()=>setMobileOpen(false)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:180 }} />}
+        <aside dir="ltr" style={{ position:"fixed",left:0,top:0,bottom:0,zIndex:200,width:"260px",background:T.bgSidebar,transform:mobileOpen?"translateX(0)":"translateX(-100%)",transition:"transform 0.2s ease",display:"flex",flexDirection:"column" }}>
+          {sidebarContent}
+        </aside>
+      </>
+    );
+  }
+
+  return (
+    <aside dir="ltr" style={{
+      width:showLabels?"220px":"72px",minHeight:"100vh",background:T.bgSidebar,
+      borderRight:"none",display:"flex",flexDirection:"column",flexShrink:0,
+      fontFamily:font,transition:"width 0.2s ease",
+    }}>
+      {sidebarContent}
     </aside>
   );
 }
-
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // DATA HELPERS (pure functions, no hooks)
@@ -1559,6 +1587,16 @@ const statusColor = (status) => {
   if (s.includes("cancel") || s.includes("closed") || s.includes("ملغ") || s.includes("مغلق")) return T.negative;
   return T.textMuted;
 };
+
+function useIsMobile(breakpoint = 1024) {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < breakpoint);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < breakpoint);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [breakpoint]);
+  return isMobile;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // DASHBOARD — KPI + Charts + Portfolio cards
@@ -1854,7 +1892,7 @@ function PortfoliosTab({ onQuickAddInvestment }) {
                   </div>
                   <div style={{ display:"flex",gap:"4px" }}>
                     <button onClick={()=>openEdit(p)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}
-                      onMouseEnter={e=>e.currentTarget.style.background=T.bgApp} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                      onMouseEnter={e=>{e.currentTarget.style.background=T.bgApp; e.currentTarget.style.color=T.warning;}} onMouseLeave={e=>{e.currentTarget.style.background="none"; e.currentTarget.style.color=T.textMuted;}}>
                       <Edit3 size={14}/>
                     </button>
                     <button onClick={()=>onQuickAddInvestment?.(p.id)} title={t.addInvestmentAction} style={{ background:"none",border:"none",cursor:"pointer",color:T.emerald,padding:"4px",borderRadius:"6px",display:"flex" }}><Plus size={14}/></button>
@@ -1904,15 +1942,26 @@ function PortfoliosTab({ onQuickAddInvestment }) {
   );
 }
 
+
+function ReadOnlyField({ label, value }) {
+  return (
+    <div style={{ padding:"10px", border:`1px solid ${T.border}`, borderRadius:"10px", background:T.bgApp }}>
+      <div style={{ fontSize:"0.72rem", color:T.textMuted, marginBottom:"6px", fontWeight:700 }}>{label}</div>
+      <div style={{ fontSize:"0.86rem", color:T.textPrimary, wordBreak:"break-word" }}>{value || "—"}</div>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // INVESTMENTS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
-function InvestmentsTab({ onQuickAddTransaction, modalPrefill }) {
+function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefill }) {
   const { db, addItem, softDelete, patchItem, t, isRTL, font } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [editingPrice, setEditingPrice] = useState(null);
   const [expandedRow, setExpandedRow] = useState(null);
+  const [modalMode, setModalMode] = useState("create");
 
   const EMPTY = { portfolioId:"",name:"",quantity:"",purchasePrice:"",currentPrice:"",purchaseDate:"",startDate:"",endDate:"",investmentMethod:"",risk:"",funding:[{source:"",amount:""}],status:"Active",notes:"" };
   const [form, setForm] = useState(EMPTY);
@@ -1920,6 +1969,7 @@ function InvestmentsTab({ onQuickAddTransaction, modalPrefill }) {
 
   const portfolios = visible(db?.portfolios||[]);
   const investments = visible(db?.investments||[]);
+
 
   const handleSave = () => {
     if (!form.name.trim()||!form.portfolioId) return;
@@ -1929,10 +1979,10 @@ function InvestmentsTab({ onQuickAddTransaction, modalPrefill }) {
     setForm(EMPTY); setShowModal(false); setEditItem(null);
   };
 
-  const openEdit = (inv) => {
+  const openView = (inv) => {
     setForm({ portfolioId:inv.portfolioId,name:inv.name,quantity:inv.quantity||"",purchasePrice:inv.purchasePrice||"",
       currentPrice:inv.currentPrice||"",purchaseDate:inv.purchaseDate||"",startDate:inv.startDate||"",endDate:inv.endDate||"",investmentMethod:inv.investmentMethod||"",risk:inv.risk||"",funding:(inv.funding&&inv.funding.length?inv.funding:[{source:inv.source||"",amount:""}]),status:inv.status||"Active",notes:inv.notes||"" });
-    setEditItem(inv); setShowModal(true);
+    setEditItem(inv); setModalMode("view"); setShowModal(true);
   };
 
   const updateFunding = (idx, key, value) => {
@@ -1946,6 +1996,7 @@ function InvestmentsTab({ onQuickAddTransaction, modalPrefill }) {
     if (!modalPrefill) return;
     setForm({ ...EMPTY, ...modalPrefill, funding:[{source:"",amount:""}] });
     setEditItem(null);
+    setModalMode("create");
     setShowModal(true);
   }, [modalPrefill]);
 
@@ -1956,6 +2007,20 @@ function InvestmentsTab({ onQuickAddTransaction, modalPrefill }) {
   const [filterStatus, setFilterStatus] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+
+  useEffect(() => {
+    const saved = JSON.parse(localStorage.getItem("investments_filters_v1") || "null");
+    if (!saved) return;
+    setFilterStartDate(saved.filterStartDate || "");
+    setFilterEndDate(saved.filterEndDate || "");
+    setFilterStatus(saved.filterStatus || "");
+    setSearchTerm(saved.searchTerm || "");
+    setSearchOpen(Boolean(saved.searchTerm));
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("investments_filters_v1", JSON.stringify({ filterStartDate, filterEndDate, filterStatus, searchTerm }));
+  }, [filterStartDate, filterEndDate, filterStatus, searchTerm]);
 
   const filteredInvestments = investments.filter((inv) => {
     const startRaw = inv.startDate || inv.purchaseDate || "";
@@ -1999,7 +2064,7 @@ function InvestmentsTab({ onQuickAddTransaction, modalPrefill }) {
               }}
             />
           </div>
-          <Btn icon={<Plus size={15}/>} onClick={()=>{setForm(EMPTY);setEditItem(null);setShowModal(true);}}>{t.addInvestment}</Btn>
+          <Btn icon={<Plus size={15}/>} onClick={()=>{setForm(EMPTY);setEditItem(null);setModalMode("create");setShowModal(true);}}>{t.addInvestment}</Btn>
         </div>
       </div>
 
@@ -2024,7 +2089,8 @@ function InvestmentsTab({ onQuickAddTransaction, modalPrefill }) {
                 <span style={{ fontSize:"0.7rem",color:T.textMuted }}>· {invs.length} {t.investments.toLowerCase()}</span>
               </div>
               <Card style={{ overflow:"hidden" }}>
-                <table style={{ width:"100%",borderCollapse:"collapse",fontSize:"0.85rem" }}>
+                <div className="overflow-x-auto">
+                <table style={{ width:"100%",minWidth:"980px",borderCollapse:"collapse",fontSize:"0.85rem" }}>
                   <thead>
                     <tr style={{ background:T.bgApp }}>
                       {[t.name,t.startDate,t.endDate,t.investmentMethod,t.principal,t.currentValue,t.roi,t.currentPrice,t.risk,t.status,""].map((h,i)=>(
@@ -2081,12 +2147,13 @@ function InvestmentsTab({ onQuickAddTransaction, modalPrefill }) {
                             </td>
                             <td style={{ padding:"12px 10px",textAlign:"right" }} onClick={e=>e.stopPropagation()}>
                               <div style={{ display:"flex",gap:"4px",justifyContent:"flex-end" }}>
-                                <button onClick={()=>openEdit(inv)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}
-                                  onMouseEnter={e=>e.currentTarget.style.background=T.bgApp} onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                                  <Edit3 size={13}/>
+                                <button title={t.viewDetails} onClick={()=>openView(inv)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}
+                                  onMouseEnter={e=>{e.currentTarget.style.background=T.bgApp; e.currentTarget.style.color=T.info;}} onMouseLeave={e=>{e.currentTarget.style.background="none"; e.currentTarget.style.color=T.textMuted;}}>
+                                  <Eye size={13}/>
                                 </button>
-                                <button onClick={()=>onQuickAddTransaction?.(inv)} title={t.addTransactionAction} style={{ background:"none",border:"none",cursor:"pointer",color:T.emerald,padding:"4px",borderRadius:"6px",display:"flex" }}><Plus size={13}/></button>
-                                <button onClick={()=>softDelete("investments",inv.id)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}
+                                <button title={t.addTransactionAction} onClick={()=>onQuickAddTransaction?.(inv)} style={{ background:"none",border:"none",cursor:"pointer",color:T.emerald,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color="#059669"} onMouseLeave={e=>e.currentTarget.style.color=T.emerald}><Plus size={13}/></button>
+                                <button title={t.viewTransactions} onClick={()=>onViewTransactions?.(inv)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.warning} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><ListTree size={13}/></button>
+                                <button title={t.deleteItem} onClick={()=>softDelete("investments",inv.id)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}
                                   onMouseEnter={e=>e.currentTarget.style.color=T.negative} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
                                   <Trash2 size={13}/>
                                 </button>
@@ -2105,6 +2172,7 @@ function InvestmentsTab({ onQuickAddTransaction, modalPrefill }) {
                     })}
                   </tbody>
                 </table>
+                </div>
               </Card>
             </div>
           );
@@ -2112,46 +2180,79 @@ function InvestmentsTab({ onQuickAddTransaction, modalPrefill }) {
       }
 
       {showModal && (
-        <Modal title={editItem?t.edit+" "+t.investment:t.addInvestment} onClose={()=>{setShowModal(false);setEditItem(null);}}>
-          <FormField label={t.portfolio} required>
-            <Select value={form.portfolioId} onChange={e=>f("portfolioId")(e.target.value)}
-              options={portfolios.map(p=>({value:p.id,label:p.name}))} placeholder={t.selectPortfolio} isRTL={isRTL}/>
-          </FormField>
-          <FormField label={t.name} required><Input value={form.name} onChange={e=>f("name")(e.target.value)} isRTL={isRTL}/></FormField>
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"12px" }}>
-            <FormField label={t.quantity}><Input type="number" value={form.quantity} onChange={e=>f("quantity")(e.target.value)} isRTL={isRTL} placeholder="0"/></FormField>
-            <FormField label={t.purchasePrice}><Input type="number" value={form.purchasePrice} onChange={e=>f("purchasePrice")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
-            <FormField label={t.currentPrice}><Input type="number" value={form.currentPrice} onChange={e=>f("currentPrice")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
-          </div>
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
-            <FormField label={t.purchaseDate}><Input type="date" value={form.purchaseDate} onChange={e=>f("purchaseDate")(e.target.value)} isRTL={isRTL}/></FormField>
-            <FormField label={t.startDate}><Input type="date" value={form.startDate} onChange={e=>f("startDate")(e.target.value)} isRTL={isRTL}/></FormField>
-          </div>
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
-            <FormField label={t.endDate}><Input type="date" value={form.endDate} onChange={e=>f("endDate")(e.target.value)} isRTL={isRTL}/></FormField>
-            <FormField label={t.investmentMethod}><Select value={form.investmentMethod} onChange={e=>f("investmentMethod")(e.target.value)} options={methodOpts} placeholder={t.selectMethod} isRTL={isRTL}/></FormField>
-          </div>
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
-            <FormField label={t.risk}><Select value={form.risk} onChange={e=>f("risk")(e.target.value)} options={db?.settings?.riskLevels||[]} placeholder={t.selectRisk} isRTL={isRTL}/></FormField>
-            <div />
-          </div>
-          <FormField label={t.splitFunding}>
-            <div style={{ display:"flex",flexDirection:"column",gap:"8px" }}>
-              {form.funding.map((row, idx)=>(
-                <div key={idx} style={{ display:"grid",gridTemplateColumns:"1fr 140px 28px",gap:"8px",alignItems:"center" }}>
-                  <Select value={row.source||""} onChange={e=>updateFunding(idx,"source",e.target.value)} options={db?.settings?.fundingSources||[]} placeholder={t.selectSource} isRTL={isRTL}/>
-                  <Input type="number" value={row.amount||""} onChange={e=>updateFunding(idx,"amount",e.target.value)} isRTL={isRTL} placeholder="0.00"/>
-                  {form.funding.length>1 && <button onClick={()=>setForm(prev=>({ ...prev, funding: prev.funding.filter((_,i)=>i!==idx) }))} style={{ border:"none",background:"none",color:T.negative,cursor:"pointer",display:"flex" }}><Trash2 size={13}/></button>}
-                </div>
-              ))}
-              <Btn size="sm" variant="secondary" onClick={()=>setForm(prev=>({ ...prev, funding:[...prev.funding,{source:"",amount:""}] }))}>{t.addSplit}</Btn>
+        <Modal title={modalMode==="create" ? t.addInvestment : `${t.view} ${t.investment}`} onClose={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>
+          {modalMode === "view" ? (
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"10px" }}>
+              <ReadOnlyField label={t.portfolio} value={portfolios.find((p)=>p.id===form.portfolioId)?.name} />
+              <ReadOnlyField label={t.name} value={form.name} />
+              <ReadOnlyField label={t.quantity} value={form.quantity} />
+              <ReadOnlyField label={t.purchasePrice} value={form.purchasePrice} />
+              <ReadOnlyField label={t.currentPrice} value={form.currentPrice} />
+              <ReadOnlyField label="Balance" value={((Number(form.quantity)||0) * (Number(form.purchasePrice)||0)).toFixed(2)} />
+              <ReadOnlyField label={t.purchaseDate} value={form.purchaseDate} />
+              <ReadOnlyField label={t.startDate} value={form.startDate} />
+              <ReadOnlyField label={t.endDate} value={form.endDate} />
+              <ReadOnlyField label={t.investmentMethod} value={form.investmentMethod} />
+              <ReadOnlyField label={t.risk} value={form.risk} />
+              <ReadOnlyField label={t.status} value={form.status} />
+              <ReadOnlyField label={t.splitFunding} value={(form.funding||[]).map((f)=>`${f.source||"—"}: ${f.amount||0}`).join(" | ")} />
+              <ReadOnlyField label={t.notes} value={form.notes} />
+              <ReadOnlyField label="ID" value={editItem?.id} />
+              <ReadOnlyField label="Created At" value={editItem?.created_at} />
             </div>
-          </FormField>
-          <FormField label={t.status}><Select value={form.status} onChange={e=>f("status")(e.target.value)} options={statusOpts} isRTL={isRTL}/></FormField>
-          <FormField label={t.notes}><Input value={form.notes} onChange={e=>f("notes")(e.target.value)} isRTL={isRTL} placeholder={`(${t.optional})`}/></FormField>
+          ) : (
+            <>
+              <FormField label={t.portfolio} required>
+                <Select value={form.portfolioId} onChange={e=>f("portfolioId")(e.target.value)}
+                  options={portfolios.map(p=>({value:p.id,label:p.name}))} placeholder={t.selectPortfolio} isRTL={isRTL}/>
+              </FormField>
+              <FormField label={t.name} required><Input value={form.name} onChange={e=>f("name")(e.target.value)} isRTL={isRTL}/></FormField>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"12px" }}>
+                <FormField label={t.quantity}><Input type="number" value={form.quantity} onChange={e=>f("quantity")(e.target.value)} isRTL={isRTL} placeholder="0"/></FormField>
+                <FormField label={t.purchasePrice}><Input type="number" value={form.purchasePrice} onChange={e=>f("purchasePrice")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
+                <FormField label={t.currentPrice}><Input type="number" value={form.currentPrice} onChange={e=>f("currentPrice")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
+              </div>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
+                <FormField label={t.purchaseDate}><Input type="date" value={form.purchaseDate} onChange={e=>f("purchaseDate")(e.target.value)} isRTL={isRTL}/></FormField>
+                <FormField label={t.startDate}><Input type="date" value={form.startDate} onChange={e=>f("startDate")(e.target.value)} isRTL={isRTL}/></FormField>
+              </div>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
+                <FormField label={t.endDate}><Input type="date" value={form.endDate} onChange={e=>f("endDate")(e.target.value)} isRTL={isRTL}/></FormField>
+                <FormField label={t.investmentMethod}><Select value={form.investmentMethod} onChange={e=>f("investmentMethod")(e.target.value)} options={methodOpts} placeholder={t.selectMethod} isRTL={isRTL}/></FormField>
+              </div>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
+                <FormField label={t.risk}><Select value={form.risk} onChange={e=>f("risk")(e.target.value)} options={db?.settings?.riskLevels||[]} placeholder={t.selectRisk} isRTL={isRTL}/></FormField>
+                <div />
+              </div>
+              <FormField label={t.splitFunding}>
+                <div style={{ display:"flex",flexDirection:"column",gap:"8px" }}>
+                  {form.funding.map((row, idx)=>(
+                    <div key={idx} style={{ display:"grid",gridTemplateColumns:"1fr 140px 28px",gap:"8px",alignItems:"center" }}>
+                      <Select value={row.source||""} onChange={e=>updateFunding(idx,"source",e.target.value)} options={db?.settings?.fundingSources||[]} placeholder={t.selectSource} isRTL={isRTL}/>
+                      <Input type="number" value={row.amount||""} onChange={e=>updateFunding(idx,"amount",e.target.value)} isRTL={isRTL} placeholder="0.00"/>
+                      {form.funding.length>1 && <button onClick={()=>setForm(prev=>({ ...prev, funding: prev.funding.filter((_,i)=>i!==idx) }))} style={{ border:"none",background:"none",color:T.negative,cursor:"pointer",display:"flex" }}><Trash2 size={13}/></button>}
+                    </div>
+                  ))}
+                  <Btn size="sm" variant="secondary" onClick={()=>setForm(prev=>({ ...prev, funding:[...prev.funding,{source:"",amount:""}] }))}>{t.addSplit}</Btn>
+                </div>
+              </FormField>
+              <FormField label={t.status}><Select value={form.status} onChange={e=>f("status")(e.target.value)} options={statusOpts} isRTL={isRTL}/></FormField>
+              <FormField label={t.notes}><Input value={form.notes} onChange={e=>f("notes")(e.target.value)} isRTL={isRTL} placeholder={`(${t.optional})`}/></FormField>
+            </>
+          )}
           <div style={{ display:"flex",justifyContent:"flex-end",gap:"10px",marginTop:"8px" }}>
-            <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);}}>{t.cancel}</Btn>
-            <Btn onClick={handleSave}>{t.save}</Btn>
+            {modalMode==="view" && (<>
+              <Btn onClick={()=>setModalMode("edit")}>{t.editInModal}</Btn>
+              <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>{t.returnLabel}</Btn>
+            </>)}
+            {modalMode==="edit" && (<>
+              <Btn onClick={handleSave}>{t.save}</Btn>
+              <Btn variant="secondary" onClick={()=>{ setForm({ portfolioId:editItem.portfolioId,name:editItem.name,quantity:editItem.quantity||"",purchasePrice:editItem.purchasePrice||"",currentPrice:editItem.currentPrice||"",purchaseDate:editItem.purchaseDate||"",startDate:editItem.startDate||"",endDate:editItem.endDate||"",investmentMethod:editItem.investmentMethod||"",risk:editItem.risk||"",funding:(editItem.funding&&editItem.funding.length?editItem.funding:[{source:editItem.source||"",amount:""}]),status:editItem.status||"Active",notes:editItem.notes||"" }); setModalMode("view"); }}>{t.cancel}</Btn>
+            </>)}
+            {modalMode==="create" && (<>
+              <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>{t.cancel}</Btn>
+              <Btn onClick={handleSave}>{t.save}</Btn>
+            </>)}
           </div>
         </Modal>
       )}
@@ -2240,12 +2341,14 @@ function InvestmentDetailExpanded({ inv, txs, db }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // TRANSACTIONS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
-function TransactionsTab({ modalPrefill }) {
+function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmartBack }) {
   const { db, addItem, softDelete, patchItem, t, isRTL, font } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
+  const [modalMode, setModalMode] = useState("create");
   const [filterPortfolio, setFilterPortfolio] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  const [filterInvestment, setFilterInvestment] = useState("");
   const [filterStartDate, setFilterStartDate] = useState("");
   const [filterEndDate, setFilterEndDate] = useState("");
   const [openMenu, setOpenMenu] = useState(null);
@@ -2255,15 +2358,17 @@ function TransactionsTab({ modalPrefill }) {
   const f = k => v => setForm(p=>({...p,[k]:v}));
 
   const portfolios = visible(db?.portfolios||[]);
+  const allInvestments = visible(db?.investments||[]);
   const allTx = visible(db?.transactions||[]);
   const filtered = allTx.filter((tx) => {
     const txDate = tx.date || "";
     const due = tx.dueDate || "";
     const portfolioMatch = !filterPortfolio || tx.portfolioId===filterPortfolio;
     const statusMatch = !filterStatus || tx.status===filterStatus;
+    const investmentMatch = !filterInvestment || tx.investmentId===filterInvestment;
     const startMatch = !filterStartDate || txDate === filterStartDate;
     const endMatch = !filterEndDate || due === filterEndDate;
-    return portfolioMatch && statusMatch && startMatch && endMatch;
+    return portfolioMatch && statusMatch && investmentMatch && startMatch && endMatch;
   });
   const sorted = [...filtered].sort((a,b)=>new Date(b.date||b.created_at||0)-new Date(a.date||a.created_at||0));
 
@@ -2273,19 +2378,18 @@ function TransactionsTab({ modalPrefill }) {
     if (!form.amount||!form.portfolioId) return;
     if (editItem) { patchItem("transactions",editItem.id,form); }
     else { addItem("transactions",form); }
-    setForm(EMPTY); setShowModal(false); setEditItem(null);
+    setForm(EMPTY); setShowModal(false); setEditItem(null); setModalMode("create");
   };
 
-  const openEdit = (tx) => {
+  const openView = (tx) => {
     setForm({ portfolioId:tx.portfolioId||"",investmentId:tx.investmentId||"",category:tx.category||"",
       amount:tx.amount||"",date:tx.date||"",dueDate:tx.dueDate||"",type:tx.type||"income",status:tx.status||"recorded",notes:tx.notes||"" });
-    setEditItem(tx); setShowModal(true);
+    setEditItem(tx); setModalMode("view"); setShowModal(true);
   };
 
   const totalInc = txIncome(filtered);
   const totalExp = txExpense(filtered);
 
-  const STATUS_COLORS = { recorded:T.positive, scheduled:T.warning, cancelled:T.negative };
   const typeOpts = [{value:"income",label:t.income},{value:"expense",label:t.expense}];
   const statusOpts = ((db?.settings?.transactionStatuses&&db.settings.transactionStatuses.length)?db.settings.transactionStatuses:["recorded","scheduled","cancelled"]).map(v=>({ value:v, label:v }));
 
@@ -2293,17 +2397,27 @@ function TransactionsTab({ modalPrefill }) {
     if (!modalPrefill) return;
     setForm({ ...EMPTY, ...modalPrefill });
     setEditItem(null);
+    setModalMode("create");
     setShowModal(true);
   }, [modalPrefill]);
 
+  useEffect(() => {
+    if (!navigationFilter?.investmentId) return;
+    setFilterInvestment(navigationFilter.investmentId);
+    if (navigationFilter.portfolioId) setFilterPortfolio(navigationFilter.portfolioId);
+  }, [navigationFilter]);
+
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font }}>
-      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"16px" }}>
-        <div>
+      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"16px",gap:"10px" }}>
+        <div style={{ display:"flex",alignItems:"center",gap:"8px" }}>
+          {showSmartBack && <button title={t.smartBackToInvestments} onClick={onSmartBack} style={{ background:"none",border:`1px solid ${T.border}`,borderRadius:"8px",cursor:"pointer",padding:"6px",display:"flex",color:T.textSecondary }}><Undo2 size={15}/><span style={{ fontSize:"0.78rem",fontWeight:600 }}>{t.returnLabel}</span></button>}
+          <div>
           <h2 style={{ margin:0,fontSize:"1.4rem",fontWeight:700,color:T.textPrimary }}>{t.transactions}</h2>
           <div style={{ fontSize:"0.8rem",color:T.textMuted,marginTop:"2px" }}>{sorted.length} records</div>
+          </div>
         </div>
-        <Btn icon={<Plus size={15}/>} onClick={()=>{setForm(EMPTY);setEditItem(null);setShowModal(true);}}>{t.addTransaction}</Btn>
+        <Btn icon={<Plus size={15}/>} onClick={()=>{setForm(EMPTY);setEditItem(null);setModalMode("create");setShowModal(true);}}>{t.addTransaction}</Btn>
       </div>
 
       {/* Summary + filter */}
@@ -2319,6 +2433,7 @@ function TransactionsTab({ modalPrefill }) {
       </div>
       <div style={{ ...filterBarCss, marginBottom:"20px" }}>
         <Select value={filterPortfolio} onChange={e=>setFilterPortfolio(e.target.value)} options={[{value:"",label:t.allPortfolios},...portfolios.map(p=>({value:p.id,label:p.name}))]} isRTL={isRTL} style={filterInputCss(isRTL)} />
+        <Select value={filterInvestment} onChange={e=>setFilterInvestment(e.target.value)} options={[{value:"",label:t.filterByInvestment},...allInvestments.map(i=>({value:i.id,label:i.name}))]} isRTL={isRTL} style={filterInputCss(isRTL)} />
         <FilterDateInput value={filterStartDate} onChange={(e)=>setFilterStartDate(e.target.value)} isRTL={isRTL} />
         <FilterDateInput value={filterEndDate} onChange={(e)=>setFilterEndDate(e.target.value)} isRTL={isRTL} />
         <Select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} options={[{ value:"", label:t.transactionStatusLabel }, ...statusOpts]} isRTL={isRTL} style={filterInputCss(isRTL)} />
@@ -2328,7 +2443,8 @@ function TransactionsTab({ modalPrefill }) {
         {sorted.length===0
           ? <div style={{ padding:"32px" }}><EmptyState text={t.noRecords}/></div>
           : (
-            <table style={{ width:"100%",borderCollapse:"collapse",fontSize:"0.85rem" }}>
+            <div className="overflow-x-auto">
+            <table style={{ width:"100%",minWidth:"920px",borderCollapse:"collapse",fontSize:"0.85rem" }}>
               <thead>
                 <tr style={{ background:T.bgApp }}>
                   {[t.date,t.category,t.portfolio,t.investment,t.amount,t.transactionType,t.status,""].map((h,i)=>(
@@ -2356,12 +2472,9 @@ function TransactionsTab({ modalPrefill }) {
                       <td style={{ padding:"11px 14px",textAlign:isRTL?"right":"left" }}><Chip color={statusColor(tx.status)}>{tx.status}</Chip></td>
                       <td style={{ padding:"11px 10px",position:"relative" }} onClick={e=>e.stopPropagation()}>
                         <div style={{ display:"flex",gap:"3px",justifyContent:"flex-end" }}>
-                          <button onClick={()=>openEdit(tx)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"5px",display:"flex" }}
-                            onMouseEnter={e=>e.currentTarget.style.background=T.bgApp} onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                            <Edit3 size={13}/>
-                          </button>
-                          <button onClick={()=>setOpenMenu(openMenu===tx.id?null:tx.id)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"5px",display:"flex",position:"relative" }}
-                            onMouseEnter={e=>e.currentTarget.style.background=T.bgApp} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                          <button title={t.viewDetails} onClick={()=>openView(tx)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"5px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.info} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><Eye size={13}/></button>
+                          <button title={t.settings} onClick={()=>setOpenMenu(openMenu===tx.id?null:tx.id)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"5px",display:"flex",position:"relative" }}
+                            onMouseEnter={e=>{e.currentTarget.style.background=T.bgApp; e.currentTarget.style.color=T.warning;}} onMouseLeave={e=>{e.currentTarget.style.background="none"; e.currentTarget.style.color=T.textMuted;}}>
                             <MoreVertical size={13}/>
                           </button>
                           {openMenu===tx.id && <TxActionMenu tx={tx} onClose={()=>setOpenMenu(null)}/>}
@@ -2372,12 +2485,29 @@ function TransactionsTab({ modalPrefill }) {
                 })}
               </tbody>
             </table>
+            </div>
           )
         }
       </Card>
 
       {showModal && (
-        <Modal title={editItem?t.edit+" "+t.transactions:t.addTransaction} onClose={()=>{setShowModal(false);setEditItem(null);}}>
+        <Modal title={modalMode==="create"?t.addTransaction:`${t.view} ${t.transactions}`} onClose={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>
+          {modalMode === "view" ? (
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"10px" }}>
+              <ReadOnlyField label={t.portfolio} value={portfolios.find((p)=>p.id===form.portfolioId)?.name} />
+              <ReadOnlyField label={t.investment} value={allInvestments.find((i)=>i.id===form.investmentId)?.name} />
+              <ReadOnlyField label={t.category} value={form.category} />
+              <ReadOnlyField label={t.amount} value={form.amount} />
+              <ReadOnlyField label={t.date} value={form.date} />
+              <ReadOnlyField label={t.dueDate} value={form.dueDate} />
+              <ReadOnlyField label={t.transactionType} value={form.type} />
+              <ReadOnlyField label={t.status} value={form.status} />
+              <ReadOnlyField label={t.notes} value={form.notes} />
+              <ReadOnlyField label="ID" value={editItem?.id} />
+              <ReadOnlyField label="Created At" value={editItem?.created_at} />
+            </div>
+          ) : (
+            <>
           <FormField label={t.portfolio} required>
             <Select value={form.portfolioId} onChange={e=>{f("portfolioId")(e.target.value);f("investmentId")("");}}
               options={portfolios.map(p=>({value:p.id,label:p.name}))} placeholder={t.selectPortfolio} isRTL={isRTL}/>
@@ -2405,9 +2535,21 @@ function TransactionsTab({ modalPrefill }) {
             <FormField label={t.dueDate}><Input type="date" value={form.dueDate} onChange={e=>f("dueDate")(e.target.value)} isRTL={isRTL}/></FormField>
           )}
           <FormField label={t.notes}><Input value={form.notes} onChange={e=>f("notes")(e.target.value)} isRTL={isRTL} placeholder={`(${t.optional})`}/></FormField>
+            </>
+          )}
           <div style={{ display:"flex",justifyContent:"flex-end",gap:"10px",marginTop:"8px" }}>
-            <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);}}>{t.cancel}</Btn>
-            <Btn onClick={handleSave}>{t.save}</Btn>
+            {modalMode==="view" && (<>
+              <Btn onClick={()=>setModalMode("edit")}>{t.editInModal}</Btn>
+              <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>{t.returnLabel}</Btn>
+            </>)}
+            {modalMode==="edit" && (<>
+              <Btn onClick={handleSave}>{t.save}</Btn>
+              <Btn variant="secondary" onClick={()=>{ setForm({ portfolioId:editItem.portfolioId||"",investmentId:editItem.investmentId||"",category:editItem.category||"",amount:editItem.amount||"",date:editItem.date||"",dueDate:editItem.dueDate||"",type:editItem.type||"income",status:editItem.status||"recorded",notes:editItem.notes||"" }); setModalMode("view"); }}>{t.cancel}</Btn>
+            </>)}
+            {modalMode==="create" && (<>
+              <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>{t.cancel}</Btn>
+              <Btn onClick={handleSave}>{t.save}</Btn>
+            </>)}
           </div>
         </Modal>
       )}
@@ -3263,8 +3405,13 @@ function MainApp() {
   const { syncError, t, isRTL, font, hasPermission, currentRole } = useApp();
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem(TAB_STORAGE_KEY) || "dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [investmentPrefill, setInvestmentPrefill] = useState(null);
   const [transactionPrefill, setTransactionPrefill] = useState(null);
+  const [txNavigationFilter, setTxNavigationFilter] = useState(null);
+  const [smartBackVisible, setSmartBackVisible] = useState(false);
+  const mainRef = useRef(null);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     localStorage.setItem(TAB_STORAGE_KEY, activeTab);
@@ -3286,11 +3433,27 @@ function MainApp() {
     setTransactionPrefill({ portfolioId: inv.portfolioId, investmentId: inv.id });
   };
 
+  const goToTransactionsForInvestment = (inv) => {
+    localStorage.setItem("investments_scroll_top", String(mainRef.current?.scrollTop || 0));
+    setTxNavigationFilter({ investmentId: inv.id, portfolioId: inv.portfolioId, stamp: Date.now() });
+    setSmartBackVisible(true);
+    setActiveTab("transactions");
+  };
+
+  const handleSmartBack = () => {
+    setActiveTab("investments");
+    const saved = Number(localStorage.getItem("investments_scroll_top") || "0");
+    requestAnimationFrame(() => {
+      if (mainRef.current) mainRef.current.scrollTop = saved;
+    });
+    setSmartBackVisible(false);
+  };
+
   const tabs = {
     dashboard:    <Dashboard />,
     portfolios:   <PortfoliosTab onQuickAddInvestment={quickAddInvestment} />,
-    investments:  <InvestmentsTab onQuickAddTransaction={quickAddTransaction} modalPrefill={investmentPrefill} />,
-    transactions: <TransactionsTab modalPrefill={transactionPrefill} />,
+    investments:  <InvestmentsTab onQuickAddTransaction={quickAddTransaction} onViewTransactions={goToTransactionsForInvestment} modalPrefill={investmentPrefill} />,
+    transactions: <TransactionsTab showSmartBack={smartBackVisible} onSmartBack={handleSmartBack} navigationFilter={txNavigationFilter} modalPrefill={transactionPrefill} />,
     statistics:   <StatisticsTab />,
     users:        canManageUsers ? <UserManagementTab /> : <Dashboard />,
     settings:     <SettingsTab />,
@@ -3309,10 +3472,14 @@ function MainApp() {
         body { margin: 0; }
       `}</style>
 
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} isOpen={sidebarOpen} setIsOpen={setSidebarOpen}/>
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} isOpen={sidebarOpen} setIsOpen={setSidebarOpen} isMobile={isMobile} mobileOpen={mobileSidebarOpen} setMobileOpen={setMobileSidebarOpen} />
 
-
-      <main style={{ flex:1,overflowY:"auto",padding:"32px 36px",maxWidth:"100%",display:"flex",flexDirection:"column" }}>
+      <main ref={mainRef} style={{ flex:1,overflowY:"auto",padding:isMobile?"16px":"32px 36px",maxWidth:"100%",display:"flex",flexDirection:"column" }}>
+        {isMobile && (
+          <button onClick={()=>setMobileSidebarOpen(true)} className="mb-4 inline-flex w-fit items-center gap-2 rounded-md border border-slate-700 bg-white px-3 py-2 text-sm text-black">
+            <Menu size={15}/> Menu
+          </button>
+        )}
         {syncError && (
           <div style={{ marginBottom:"16px",padding:"10px 16px",background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.2)",borderRadius:"8px",color:T.negative,fontSize:"0.8rem",display:"flex",alignItems:"center",gap:"8px" }}>
             <AlertCircle size={14}/>{syncError}
