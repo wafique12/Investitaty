@@ -1942,6 +1942,16 @@ function PortfoliosTab({ onQuickAddInvestment }) {
   );
 }
 
+
+function ReadOnlyField({ label, value }) {
+  return (
+    <div style={{ padding:"10px 0", borderBottom:`1px solid ${T.border}` }}>
+      <div style={{ fontSize:"0.72rem", color:T.textMuted, marginBottom:"4px", fontWeight:600 }}>{label}</div>
+      <div style={{ fontSize:"0.86rem", color:T.textPrimary }}>{value || "—"}</div>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // INVESTMENTS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2172,26 +2182,20 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
       {showModal && (
         <Modal title={modalMode==="create" ? t.addInvestment : `${t.view} ${t.investment}`} onClose={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>
           {modalMode === "view" ? (
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
-              {[
-                [t.portfolio, portfolios.find((p)=>p.id===form.portfolioId)?.name || "—"],
-                [t.name, form.name || "—"],
-                [t.quantity, form.quantity || "—"],
-                [t.purchasePrice, form.purchasePrice || "—"],
-                [t.currentPrice, form.currentPrice || "—"],
-                [t.purchaseDate, form.purchaseDate || "—"],
-                [t.startDate, form.startDate || "—"],
-                [t.endDate, form.endDate || "—"],
-                [t.investmentMethod, form.investmentMethod || "—"],
-                [t.risk, form.risk || "—"],
-                [t.status, form.status || "—"],
-                [t.notes, form.notes || "—"],
-              ].map(([label, value]) => (
-                <div key={label}>
-                  <div style={{ fontSize:"0.72rem", color:T.textMuted, marginBottom:"4px" }}>{label}</div>
-                  <div style={{ ...inputCss(isRTL), minHeight:"38px" }}>{value}</div>
-                </div>
-              ))}
+            <div>
+              <ReadOnlyField label={t.portfolio} value={portfolios.find((p)=>p.id===form.portfolioId)?.name} />
+              <ReadOnlyField label={t.name} value={form.name} />
+              <ReadOnlyField label={t.quantity} value={form.quantity} />
+              <ReadOnlyField label={t.purchasePrice} value={form.purchasePrice} />
+              <ReadOnlyField label={t.currentPrice} value={form.currentPrice} />
+              <ReadOnlyField label={t.purchaseDate} value={form.purchaseDate} />
+              <ReadOnlyField label={t.startDate} value={form.startDate} />
+              <ReadOnlyField label={t.endDate} value={form.endDate} />
+              <ReadOnlyField label={t.investmentMethod} value={form.investmentMethod} />
+              <ReadOnlyField label={t.risk} value={form.risk} />
+              <ReadOnlyField label={t.status} value={form.status} />
+              <ReadOnlyField label={t.splitFunding} value={(form.funding||[]).map((f)=>`${f.source||"—"}: ${f.amount||0}`).join(" | ")} />
+              <ReadOnlyField label={t.notes} value={form.notes} />
             </div>
           ) : (
             <>
@@ -2234,9 +2238,18 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
             </>
           )}
           <div style={{ display:"flex",justifyContent:"flex-end",gap:"10px",marginTop:"8px" }}>
-            <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>{t.returnLabel}</Btn>
-            {modalMode==="view" && <Btn onClick={()=>setModalMode("edit")}>{t.editInModal}</Btn>}
-            {(modalMode==="edit" || modalMode==="create") && <Btn onClick={handleSave}>{t.save}</Btn>}
+            {modalMode==="view" && (<>
+              <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>{t.returnLabel}</Btn>
+              <Btn onClick={()=>setModalMode("edit")}>{t.editInModal}</Btn>
+            </>)}
+            {modalMode==="edit" && (<>
+              <Btn variant="secondary" onClick={()=>{ setForm({ portfolioId:editItem.portfolioId,name:editItem.name,quantity:editItem.quantity||"",purchasePrice:editItem.purchasePrice||"",currentPrice:editItem.currentPrice||"",purchaseDate:editItem.purchaseDate||"",startDate:editItem.startDate||"",endDate:editItem.endDate||"",investmentMethod:editItem.investmentMethod||"",risk:editItem.risk||"",funding:(editItem.funding&&editItem.funding.length?editItem.funding:[{source:editItem.source||"",amount:""}]),status:editItem.status||"Active",notes:editItem.notes||"" }); setModalMode("view"); }}>{t.cancel}</Btn>
+              <Btn onClick={handleSave}>{t.save}</Btn>
+            </>)}
+            {modalMode==="create" && (<>
+              <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>{t.cancel}</Btn>
+              <Btn onClick={handleSave}>{t.save}</Btn>
+            </>)}
           </div>
         </Modal>
       )}
@@ -2477,10 +2490,18 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
       {showModal && (
         <Modal title={modalMode==="create"?t.addTransaction:`${t.view} ${t.transactions}`} onClose={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>
           {modalMode === "view" ? (
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
-              {[[t.portfolio, portfolios.find((p)=>p.id===form.portfolioId)?.name || "—"],[t.investment, allInvestments.find((i)=>i.id===form.investmentId)?.name || "—"],[t.category, form.category||"—"],[t.amount, form.amount||"—"],[t.date, form.date||"—"],[t.transactionType, form.type||"—"],[t.status, form.status||"—"],[t.notes, form.notes||"—"]].map(([label,value]) => (
-                <div key={label}><div style={{ fontSize:"0.72rem", color:T.textMuted, marginBottom:"4px" }}>{label}</div><div style={{ ...inputCss(isRTL), minHeight:"38px" }}>{value}</div></div>
-              ))}
+            <div>
+              <ReadOnlyField label={t.portfolio} value={portfolios.find((p)=>p.id===form.portfolioId)?.name} />
+              <ReadOnlyField label={t.investment} value={allInvestments.find((i)=>i.id===form.investmentId)?.name} />
+              <ReadOnlyField label={t.category} value={form.category} />
+              <ReadOnlyField label={t.amount} value={form.amount} />
+              <ReadOnlyField label={t.date} value={form.date} />
+              <ReadOnlyField label={t.dueDate} value={form.dueDate} />
+              <ReadOnlyField label={t.transactionType} value={form.type} />
+              <ReadOnlyField label={t.status} value={form.status} />
+              <ReadOnlyField label={t.notes} value={form.notes} />
+              <ReadOnlyField label="ID" value={editItem?.id} />
+              <ReadOnlyField label="Created At" value={editItem?.created_at} />
             </div>
           ) : (
             <>
@@ -2514,9 +2535,18 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
             </>
           )}
           <div style={{ display:"flex",justifyContent:"flex-end",gap:"10px",marginTop:"8px" }}>
-            <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>{t.returnLabel}</Btn>
-            {modalMode==="view" && <Btn onClick={()=>setModalMode("edit")}>{t.editInModal}</Btn>}
-            {(modalMode==="edit" || modalMode==="create") && <Btn onClick={handleSave}>{t.save}</Btn>}
+            {modalMode==="view" && (<>
+              <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>{t.returnLabel}</Btn>
+              <Btn onClick={()=>setModalMode("edit")}>{t.editInModal}</Btn>
+            </>)}
+            {modalMode==="edit" && (<>
+              <Btn variant="secondary" onClick={()=>{ setForm({ portfolioId:editItem.portfolioId||"",investmentId:editItem.investmentId||"",category:editItem.category||"",amount:editItem.amount||"",date:editItem.date||"",dueDate:editItem.dueDate||"",type:editItem.type||"income",status:editItem.status||"recorded",notes:editItem.notes||"" }); setModalMode("view"); }}>{t.cancel}</Btn>
+              <Btn onClick={handleSave}>{t.save}</Btn>
+            </>)}
+            {modalMode==="create" && (<>
+              <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>{t.cancel}</Btn>
+              <Btn onClick={handleSave}>{t.save}</Btn>
+            </>)}
           </div>
         </Modal>
       )}
@@ -3443,7 +3473,7 @@ function MainApp() {
 
       <main ref={mainRef} style={{ flex:1,overflowY:"auto",padding:isMobile?"16px":"32px 36px",maxWidth:"100%",display:"flex",flexDirection:"column" }}>
         {isMobile && (
-          <button onClick={()=>setMobileSidebarOpen(true)} className="mb-4 inline-flex w-fit items-center gap-2 rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200">
+          <button onClick={()=>setMobileSidebarOpen(true)} className="mb-4 inline-flex w-fit items-center gap-2 rounded-md border border-slate-700 bg-white px-3 py-2 text-sm text-black">
             <Menu size={15}/> Menu
           </button>
         )}
