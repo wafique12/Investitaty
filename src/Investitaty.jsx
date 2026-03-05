@@ -836,7 +836,6 @@ function AppProvider({ children }) {
     setGatekeeperError(null);
     setUserSyncDone(false);
     if (shouldSignOut) auth.signOut();
-    window.history.replaceState({}, "", "/login");
   }, [auth]);
 
   const t = TRANSLATIONS[lang];
@@ -1037,10 +1036,6 @@ function AppProvider({ children }) {
   useEffect(() => {
     if (!auth.user?.id || !auth.token) {
       clearLocalSessionState(false);
-      return;
-    }
-    if (window.location.pathname === "/login") {
-      window.history.replaceState({}, "", "/");
     }
   }, [auth.user?.id, auth.token, clearLocalSessionState]);
 
@@ -1905,7 +1900,7 @@ function Dashboard() {
               const pvInvs = inv_of_portfolio(db,p.id);
               const pValue = pvInvs.filter(isActiveInvestment).reduce((s,inv)=>s+investmentValue(inv),0);
               const pCost  = pvInvs.reduce((s,inv)=>s+costBasis(inv),0);
-              const pRoi   = pCost>0?((totalValue-pCost)/pCost)*100:0;
+              const pRoi   = pCost>0?((pValue-pCost)/pCost)*100:0;
               const color  = p.color || T.chart[i%T.chart.length];
               return (
                 <Card key={p.id} hover style={{ minWidth:"195px",maxWidth:"220px",flexShrink:0,padding:"18px",borderTop:`3px solid ${color}` }}>
