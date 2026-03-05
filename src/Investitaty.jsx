@@ -161,6 +161,8 @@ const TRANSLATIONS = {
     totalInvestmentValue: "Total Investment Value",
     splitFundingMismatchError: "Split funding total must equal Total Investment Value.",
     transactionDateOutOfRange: "Transaction date must be within the investment start and end dates.",
+    dueDateOutOfRange: "Due date must be within the investment start and end dates.",
+    investmentRequiredForTransaction: "Please select an investment before saving the transaction.",
     purchaseDate: "Purchase Date",
     startDate: "Start Date",
     endDate: "End Date",
@@ -207,6 +209,14 @@ const TRANSLATIONS = {
     investmentMethods: "Investment Methods",
     transactionCategories: "Transaction Categories",
     currencies: "Currencies",
+    usersPermissions: "Users & Permissions",
+    usersPermissionsDesc: "Manage user access, account status, and role assignments.",
+    searchUsersPlaceholder: "Search by full name or email...",
+    showingResults: "Showing",
+    ofLabel: "of",
+    previous: "Previous",
+    next: "Next",
+    pageLabel: "Page",
     addItem: "Add",
     dataStorage: "Data stored in",
     language: "Language",
@@ -218,6 +228,7 @@ const TRANSLATIONS = {
     selectCurrency: "Select currency",
     selectStatus: "Select status",
     selectMethod: "Select method",
+    selectInvestment: "Select investment",
     optional: "optional",
     positions: "Positions",
     allocation: "Allocation",
@@ -349,6 +360,8 @@ const TRANSLATIONS = {
     totalInvestmentValue: "إجمالي قيمة الاستثمار",
     splitFundingMismatchError: "يجب أن يساوي إجمالي التمويل المقسم إجمالي قيمة الاستثمار.",
     transactionDateOutOfRange: "يجب أن يكون تاريخ المعاملة ضمن تاريخ بداية ونهاية الاستثمار.",
+    dueDateOutOfRange: "يجب أن يكون تاريخ الاستحقاق ضمن تاريخ بداية ونهاية الاستثمار.",
+    investmentRequiredForTransaction: "يرجى اختيار استثمار قبل حفظ المعاملة.",
     purchaseDate: "تاريخ الشراء",
     startDate: "تاريخ البداية",
     endDate: "تاريخ النهاية",
@@ -395,6 +408,14 @@ const TRANSLATIONS = {
     investmentMethods: "طرق الاستثمار",
     transactionCategories: "فئات المعاملات",
     currencies: "العملات",
+    usersPermissions: "المستخدمون والصلاحيات",
+    usersPermissionsDesc: "إدارة وصول المستخدمين وحالة الحساب وتعيينات الأدوار.",
+    searchUsersPlaceholder: "ابحث بالبريد الإلكتروني أو الاسم الكامل...",
+    showingResults: "عرض",
+    ofLabel: "من",
+    previous: "السابق",
+    next: "التالي",
+    pageLabel: "الصفحة",
     addItem: "إضافة",
     dataStorage: "البيانات محفوظة في",
     language: "اللغة",
@@ -406,6 +427,7 @@ const TRANSLATIONS = {
     selectCurrency: "اختر العملة",
     selectStatus: "اختر الحالة",
     selectMethod: "اختر الطريقة",
+    selectInvestment: "اختر الاستثمار",
     optional: "اختياري",
     positions: "مراكز",
     allocation: "التخصيص",
@@ -2458,12 +2480,24 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const handleSave = () => {
     setFormError("");
     if (!form.amount||!form.portfolioId) return;
+    if (!form.investmentId) {
+      setFormError(t.investmentRequiredForTransaction);
+      return;
+    }
     const selectedInvestment = allInvestments.find((inv) => inv.id === form.investmentId);
     if (selectedInvestment && form.date) {
       const start = selectedInvestment.startDate || selectedInvestment.purchaseDate || "";
       const end = selectedInvestment.endDate || "";
       if ((start && form.date < start) || (end && form.date > end)) {
         setFormError(t.transactionDateOutOfRange);
+        return;
+      }
+    }
+    if (selectedInvestment && form.dueDate) {
+      const start = selectedInvestment.startDate || selectedInvestment.purchaseDate || "";
+      const end = selectedInvestment.endDate || "";
+      if ((start && form.dueDate < start) || (end && form.dueDate > end)) {
+        setFormError(t.dueDateOutOfRange);
         return;
       }
     }
@@ -2602,13 +2636,11 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
             <Select value={form.portfolioId} onChange={e=>{f("portfolioId")(e.target.value);f("investmentId")("");}}
               options={portfolios.map(p=>({value:p.id,label:p.name}))} placeholder={t.selectPortfolio} isRTL={isRTL}/>
           </FormField>
-          {investmentsForPortfolio.length > 0 && (
-            <FormField label={t.investment}>
-              <Select value={form.investmentId} onChange={e=>f("investmentId")(e.target.value)}
-                options={[{value:"",label:`(${t.optional})`},...investmentsForPortfolio.map(i=>({value:i.id,label:i.name}))]}
-                isRTL={isRTL}/>
-            </FormField>
-          )}
+          <FormField label={t.investment} required>
+            <Select value={form.investmentId} onChange={e=>f("investmentId")(e.target.value)}
+              options={[{value:"",label:`(${t.selectInvestment})`},...investmentsForPortfolio.map(i=>({value:i.id,label:i.name}))]}
+              isRTL={isRTL}/>
+          </FormField>
           <FormField label={t.category} required>
             <Select value={form.category} onChange={e=>f("category")(e.target.value)}
               options={db?.settings?.transactionCategories||[]} placeholder={t.selectCategory} isRTL={isRTL}/>
@@ -2904,6 +2936,7 @@ function SettingsTab() {
           </span>
         </div>
       </Card>
+
     </div>
   );
 }
@@ -3321,9 +3354,13 @@ function StatisticsTab() {
 }
 
 function UserManagementTab() {
-  const { usersConfig, updateUserEntry, deleteUserEntry, hasPermission, currentRole, isRTL, font } = useApp();
+  const { usersConfig, updateUserEntry, deleteUserEntry, hasPermission, currentRole, isRTL, font, t } = useApp();
   const users = usersConfig?.users || [];
   const [updatingEmail, setUpdatingEmail] = useState(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 50;
   const currentEmail = String(usersConfig?.ownerEmail || OWNER_PROTECTED_EMAIL).toLowerCase();
 
   const canDelete = currentRole === "Owner";
@@ -3393,11 +3430,45 @@ function UserManagementTab() {
     return emailPrefix.replace(/[._-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   };
 
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+  const filteredUsers = users.filter((entry) => {
+    if (!normalizedSearch) return true;
+    const email = String(entry?.email || "").toLowerCase();
+    const fullName = formatName(entry).toLowerCase();
+    return email.includes(normalizedSearch) || fullName.includes(normalizedSearch);
+  });
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedUsers = filteredUsers.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [normalizedSearch]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
+
   return (
     <div dir={isRTL ? "rtl" : "ltr"} style={{ fontFamily:font }}>
-      <div style={{ marginBottom:"16px" }}>
-        <h2 style={{ margin:0, fontSize:"1.4rem", fontWeight:700, color:T.textPrimary }}>Users & Permissions</h2>
-        <p style={{ margin:"4px 0 0", color:T.textSecondary, fontSize:"0.82rem" }}>Manage user access, account status, and role assignments.</p>
+      <div style={{ marginBottom:"16px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:"10px", flexWrap:"wrap" }}>
+        <div>
+          <h2 style={{ margin:0, fontSize:"1.4rem", fontWeight:700, color:T.textPrimary }}>{t.usersPermissions}</h2>
+          <p style={{ margin:"4px 0 0", color:T.textSecondary, fontSize:"0.82rem" }}>{t.usersPermissionsDesc}</p>
+        </div>
+        <div className="relative z-10 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 overflow-hidden">
+          <button onClick={() => setSearchOpen((v) => { const next = !v; if (!next) setSearchTerm(""); return next; })} style={{ border:"none", background:"transparent", color:T.textSecondary, cursor:"pointer", display:"flex", padding:"4px" }}>
+            <Search size={14} />
+          </button>
+          <input
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            onFocus={() => setSearchOpen(true)}
+            placeholder={t.searchUsersPlaceholder}
+            className={`bg-transparent text-sm outline-none transition-all duration-300 ease-in-out ${searchOpen ? "w-56 opacity-100 px-1" : "w-0 opacity-0 px-0"}`}
+            style={{ color:T.textPrimary, textAlign:isRTL ? "right" : "left" }}
+          />
+        </div>
       </div>
 
       <Card style={{ padding:0, overflow:"hidden" }}>
@@ -3413,7 +3484,7 @@ function UserManagementTab() {
             </tr>
           </thead>
           <tbody>
-            {users.map((entry, index) => {
+            {paginatedUsers.map((entry, index) => {
               const isOwner = String(entry?.email || "").toLowerCase() === currentEmail || entry.role === "Owner";
               const status = String(entry.status || (entry.blocked ? "blocked" : "active")).toLowerCase();
               const blocked = status === "blocked";
@@ -3485,6 +3556,15 @@ function UserManagementTab() {
           </tbody>
         </table>
       </Card>
+
+      <div style={{ marginTop:"12px", display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:"10px", color:T.textSecondary, fontSize:"0.8rem" }}>
+        <span>{t.showingResults} {filteredUsers.length === 0 ? 0 : (safePage - 1) * pageSize + 1}-{Math.min(safePage * pageSize, filteredUsers.length)} {t.ofLabel} {filteredUsers.length}</span>
+        <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
+          <Btn size="sm" variant="secondary" disabled={safePage <= 1} onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}>{t.previous}</Btn>
+          <span>{t.pageLabel} {safePage} / {totalPages}</span>
+          <Btn size="sm" variant="secondary" disabled={safePage >= totalPages} onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}>{t.next}</Btn>
+        </div>
+      </div>
     </div>
   );
 }
