@@ -233,6 +233,16 @@ const TRANSLATIONS = {
     positions: "Positions",
     allocation: "Allocation",
     totalValue: "Total Value",
+    activeInvestmentValue: "Active Investment Value",
+    usersName: "Name",
+    usersEmail: "Email",
+    usersLastLogin: "Last Login",
+    usersRole: "Role",
+    usersStatus: "Status",
+    usersActions: "Actions",
+    block: "Block",
+    unblock: "Unblock",
+    delete: "Delete",
     dominantRisk: "Risk",
     noInvestments: "No investments yet.",
     dueDate: "Due Date",
@@ -432,6 +442,16 @@ const TRANSLATIONS = {
     positions: "مراكز",
     allocation: "التخصيص",
     totalValue: "القيمة الإجمالية",
+    activeInvestmentValue: "قيمة الاستثمارات النشطة",
+    usersName: "الاسم",
+    usersEmail: "البريد الإلكتروني",
+    usersLastLogin: "آخر تسجيل دخول",
+    usersRole: "الدور",
+    usersStatus: "الحالة",
+    usersActions: "الإجراءات",
+    block: "حظر",
+    unblock: "إلغاء الحظر",
+    delete: "حذف",
     dominantRisk: "المخاطرة",
     noInvestments: "لا توجد استثمارات بعد.",
     dueDate: "تاريخ الاستحقاق",
@@ -761,7 +781,8 @@ function useGoogleAuth(lang = "en") {
             const userRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", { headers: { Authorization: `Bearer ${accessToken}` } });
             if (!userRes.ok) throw new Error(`userinfo ${userRes.status}`);
             const userInfo = await userRes.json();
-            setUser(userInfo); setToken(accessToken);
+            const normalizedUser = { ...userInfo, id: userInfo?.id || userInfo?.sub || null };
+            setUser(normalizedUser); setToken(accessToken);
           } catch (err) {
             setAuthError("Signed in but could not fetch profile. Check API key.");
             setToken(accessToken);
@@ -805,6 +826,18 @@ function AppProvider({ children }) {
   const [syncError, setSyncError] = useState(null);
   const [dbLoading, setDbLoading] = useState(false);
   const saveTimerRef = useRef(null);
+
+  const clearLocalSessionState = useCallback((shouldSignOut = false) => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    setDb(null);
+    setFileId(null);
+    setSyncError(null);
+    setDbLoading(false);
+    setGatekeeperError(null);
+    setUserSyncDone(false);
+    if (shouldSignOut) auth.signOut();
+    window.history.replaceState({}, "", "/login");
+  }, [auth]);
 
   const t = TRANSLATIONS[lang];
   const isRTL = lang === "ar";
@@ -989,6 +1022,27 @@ function AppProvider({ children }) {
       .then(({ fileId: fid, data }) => { setFileId(fid); setDb(data); setDbLoading(false); })
       .catch(() => { setSyncError("Failed to access Google Drive."); setDbLoading(false); });
   }, [auth.token, isBlocked, userSyncDone]);
+
+  useEffect(() => {
+    if (!hasSupabaseClient || !supabase?.auth?.onAuthStateChange) return;
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      const sessionExpired = Boolean(session?.expires_at && session.expires_at * 1000 <= Date.now());
+      if (event === "SIGNED_OUT" || !session || sessionExpired) {
+        clearLocalSessionState(true);
+      }
+    });
+    return () => listener?.subscription?.unsubscribe?.();
+  }, [clearLocalSessionState]);
+
+  useEffect(() => {
+    if (!auth.user?.id || !auth.token) {
+      clearLocalSessionState(false);
+      return;
+    }
+    if (window.location.pathname === "/login") {
+      window.history.replaceState({}, "", "/");
+    }
+  }, [auth.user?.id, auth.token, clearLocalSessionState]);
 
   const updateDb = useCallback((updater) => {
     setDb((prev) => {
@@ -1619,6 +1673,8 @@ const fmtMoney = (v, { compact=false, currency="USD" } = {}) => {
   return symbol + n.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
 };
 const portfolioCurrency = (db, portfolioId) => (visible(db?.portfolios||[]).find(p=>p.id===portfolioId)?.currency || "USD");
+const isActiveInvestment = (inv) => String(inv?.status || "Active").toLowerCase() === "active";
+const investmentValue = (inv) => (parseFloat(inv?.quantity) || 0) * (parseFloat(inv?.currentPrice) || 0);
 const riskColor = (risk) => {
   const r = String(risk||"").toLowerCase();
   if (r.includes("low") || r.includes("منخفض")) return T.positive;
@@ -1656,7 +1712,9 @@ function Dashboard() {
   const transactions = visible(db.transactions);
   const baseCurrency = baseCurrencyCode(db);
 
-  const totalPortfolioValue = investments.reduce((s,i)=>s+toBaseAmount(db, curVal(i), portfolioCurrency(db, i.portfolioId)),0);
+  const totalPortfolioValue = investments
+    .filter(isActiveInvestment)
+    .reduce((s,i)=>s+toBaseAmount(db, investmentValue(i), portfolioCurrency(db, i.portfolioId)),0);
   const totalCost = investments.reduce((s,i)=>s+toBaseAmount(db, costBasis(i), portfolioCurrency(db, i.portfolioId)),0);
   const capitalGainsVal = totalPortfolioValue - totalCost;
   const totalIncome = transactions.filter(t=>t.type==="income").reduce((sum, tx)=>sum + toBaseAmount(db, parseFloat(tx.amount)||0, portfolioCurrency(db, tx.portfolioId)), 0);
@@ -1845,9 +1903,9 @@ function Dashboard() {
           <div style={{ display:"flex",gap:"14px",overflowX:"auto",paddingBottom:"8px",scrollbarWidth:"thin",scrollbarColor:`${T.border} transparent` }}>
             {portfolios.map((p,i)=>{
               const pvInvs = inv_of_portfolio(db,p.id);
-              const pValue = pvInvs.reduce((s,inv)=>s+curVal(inv),0);
+              const pValue = pvInvs.filter(isActiveInvestment).reduce((s,inv)=>s+investmentValue(inv),0);
               const pCost  = pvInvs.reduce((s,inv)=>s+costBasis(inv),0);
-              const pRoi   = pCost>0?((pValue-pCost)/pCost)*100:0;
+              const pRoi   = pCost>0?((totalValue-pCost)/pCost)*100:0;
               const color  = p.color || T.chart[i%T.chart.length];
               return (
                 <Card key={p.id} hover style={{ minWidth:"195px",maxWidth:"220px",flexShrink:0,padding:"18px",borderTop:`3px solid ${color}` }}>
@@ -1925,11 +1983,12 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
       <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:"16px" }}>
         {portfolios.map((p,i) => {
           const invs = inv_of_portfolio(db,p.id);
-          const pValue = invs.reduce((s,i)=>s+curVal(i),0);
+          const activeValue = invs.filter(isActiveInvestment).reduce((sum, inv) => sum + investmentValue(inv), 0);
+          const totalValue = invs.reduce((sum, inv)=>sum+curVal(inv),0);
           const pCost  = invs.reduce((s,i)=>s+costBasis(i),0);
           const pTx    = tx_of_portfolio(db,p.id);
           const pIncome = txIncome(pTx);
-          const pRoi   = pCost>0?((pValue-pCost)/pCost)*100:0;
+          const pRoi   = pCost>0?((totalValue-pCost)/pCost)*100:0;
           const color  = p.color || T.chart[i%T.chart.length];
           return (
             <Card key={p.id} style={{ overflow:"hidden" }}>
@@ -1957,9 +2016,20 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
                     </button>
                   </div>
                 </div>
-                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",marginBottom:"14px" }}>
+                <div style={{ marginBottom:"14px", display:"flex", flexDirection:"column", gap:"8px" }}>
+                  <button
+                    onClick={() => onViewInvestments?.(p, { status: "Active" })}
+                    style={{ border:"none", background:"transparent", padding:0, textAlign:isRTL?"right":"left", cursor:"pointer", color:T.info }}
+                  >
+                    <div style={{ fontSize:"0.68rem",color:T.textMuted,marginBottom:"3px" }}>{t.activeInvestmentValue}</div>
+                    <div style={{ fontSize:"1.02rem",fontWeight:700,textDecoration:"underline" }}>{fmtMoney(activeValue,{compact:true,currency:p.currency||"USD"})}</div>
+                  </button>
+                  <div style={{ fontSize:"0.74rem", color:T.textMuted }}>
+                    {t.totalPortfolioValue}: {fmtMoney(totalValue,{compact:true,currency:p.currency||"USD"})}
+                  </div>
+                </div>
+                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"10px",marginBottom:"14px" }}>
                   {[
-                    { label:t.totalValue,  val:fmtMoney(pValue,{compact:true,currency:p.currency||"USD"}) },
                     { label:t.roi,         val:`${pRoi>=0?"+":""}${pRoi.toFixed(1)}%`, color:pRoi>=0?T.positive:T.negative },
                     { label:t.positions,   val:invs.length },
                     { label:t.totalIncome, val:fmtMoney(pIncome,{compact:true,currency:p.currency||"USD"}) },
@@ -2121,6 +2191,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   useEffect(() => {
     if (!navigationFilter?.portfolioId) return;
     setFilterPortfolio(navigationFilter.portfolioId);
+    if (navigationFilter?.status) setFilterStatus(navigationFilter.status);
   }, [navigationFilter]);
   const filteredInvestments = investments.filter((inv) => {
     const startRaw = inv.startDate || inv.purchaseDate || "";
@@ -2282,7 +2353,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
       }
 
       {showModal && (
-        <Modal title={modalMode==="create" ? t.addInvestment : `${t.view} ${t.investment}`} onClose={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>
+        <Modal title={modalMode==="create" ? t.addInvestment : `${t.view} ${t.investment}`} maxWidth="760px" onClose={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>
           {modalMode === "view" ? (
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"10px" }}>
               <ReadOnlyField label={t.portfolio} value={portfolios.find((p)=>p.id===form.portfolioId)?.name} />
@@ -2308,20 +2379,20 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                   options={portfolios.map(p=>({value:p.id,label:p.name}))} placeholder={t.selectPortfolio} isRTL={isRTL}/>
               </FormField>
               <FormField label={t.name} required><Input value={form.name} onChange={e=>f("name")(e.target.value)} isRTL={isRTL}/></FormField>
-              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"12px" }}>
+              <div style={{ display:"grid",gridTemplateColumns:"repeat(3, minmax(0, 1fr))",gap:"12px",alignItems:"start" }}>
                 <FormField label={t.quantity}><Input type="number" value={form.quantity} onChange={e=>f("quantity")(e.target.value)} isRTL={isRTL} placeholder="0"/></FormField>
                 <FormField label={t.purchasePrice}><Input type="number" value={form.purchasePrice} onChange={e=>f("purchasePrice")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
                 <FormField label={t.currentPrice}><Input type="number" value={form.currentPrice} onChange={e=>f("currentPrice")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField label={t.totalInvestmentValue}><Input value={totalInvestmentValue.toFixed(2)} isRTL={isRTL} readOnly style={{ background:"#f3f4f6" }}/></FormField>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
                 <FormField label={t.purchaseDate}><Input type="date" value={form.purchaseDate} onChange={e=>f("purchaseDate")(e.target.value)} isRTL={isRTL}/></FormField>
+                <FormField label={t.totalInvestmentValue}><Input value={totalInvestmentValue.toFixed(2)} isRTL={isRTL} readOnly style={{ background:"#e2e8f0", color:T.textSecondary }}/></FormField>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
                 <FormField label={t.startDate}><Input type="date" value={form.startDate} onChange={e=>f("startDate")(e.target.value)} isRTL={isRTL}/></FormField>
                 <FormField label={t.endDate}><Input type="date" value={form.endDate} onChange={e=>f("endDate")(e.target.value)} isRTL={isRTL}/></FormField>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
                 <FormField label={t.risk}><Select value={form.risk} onChange={e=>f("risk")(e.target.value)} options={db?.settings?.riskLevels||[]} placeholder={t.selectRisk} isRTL={isRTL}/></FormField>
                 <FormField label={t.investmentMethod}><Select value={form.investmentMethod} onChange={e=>f("investmentMethod")(e.target.value)} options={methodOpts} placeholder={t.selectMethod} isRTL={isRTL}/></FormField>
               </div>
@@ -3475,12 +3546,12 @@ function UserManagementTab() {
         <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.82rem" }}>
           <thead>
             <tr style={{ background:"#f8fafc", borderBottom:`1px solid ${T.border}` }}>
-              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>Name</th>
-              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>Email</th>
-              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>Last Login</th>
-              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>Role</th>
-              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>Status</th>
-              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>Actions</th>
+              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersName}</th>
+              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersEmail}</th>
+              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersLastLogin}</th>
+              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersRole}</th>
+              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersStatus}</th>
+              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersActions}</th>
             </tr>
           </thead>
           <tbody>
@@ -3528,7 +3599,7 @@ function UserManagementTab() {
                             whiteSpace:"nowrap",
                           }}
                         >
-                          {blocked ? "Unblock" : "Block"}
+                          {blocked ? t.unblock : t.block}
                         </Btn>                        
                         {canDelete && (
                           <Btn
@@ -3544,7 +3615,7 @@ function UserManagementTab() {
                               whiteSpace:"nowrap",
                             }}
                           >
-                            Delete
+                            {t.delete}
                           </Btn>
                         )}
                       </div>
@@ -3600,8 +3671,8 @@ function MainApp() {
     setInvestmentPrefill({ portfolioId });
   };
 
-  const goToInvestmentsForPortfolio = (portfolio) => {
-    setInvestmentNavigationFilter({ portfolioId: portfolio.id, stamp: Date.now() });
+  const goToInvestmentsForPortfolio = (portfolio, options = {}) => {
+    setInvestmentNavigationFilter({ portfolioId: portfolio.id, status: options.status || "", stamp: Date.now() });
     setActiveTab("investments");
   };
 
@@ -3687,7 +3758,7 @@ export default function App() {
 
 function AppContent() {
   const { user, token, dbLoading, db, t, usersConfigReady, userSyncDone } = useApp();
-  if (!user || !token) return <LoginPage/>;
+  if (!user?.id || !token) return <LoginPage/>;
   if (!usersConfigReady || !userSyncDone) return <LoadingScreen message={t?.loading||"LOADING..."}/>;
   if (dbLoading || !db) return <LoadingScreen message={t?.loading||"LOADING..."}/>;
   return <MainApp/>;
