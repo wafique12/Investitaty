@@ -156,8 +156,11 @@ const TRANSLATIONS = {
     editInModal: "Edit",
     deleteItem: "Delete",
     quantity: "Quantity",
-    purchasePrice: "Purchase Price",
-    currentPrice: "Current Price",
+    purchasePrice: "Purchase Price (Per Unit)",
+    currentPrice: "Current Price (Per Unit)",
+    totalInvestmentValue: "Total Investment Value",
+    splitFundingMismatchError: "Split funding total must equal Total Investment Value.",
+    transactionDateOutOfRange: "Transaction date must be within the investment start and end dates.",
     purchaseDate: "Purchase Date",
     startDate: "Start Date",
     endDate: "End Date",
@@ -341,8 +344,11 @@ const TRANSLATIONS = {
     editInModal: "تعديل",
     deleteItem: "حذف",
     quantity: "الكمية",
-    purchasePrice: "سعر الشراء",
-    currentPrice: "السعر الحالي",
+    purchasePrice: "سعر الشراء (لكل وحدة)",
+    currentPrice: "السعر الحالي (لكل وحدة)",
+    totalInvestmentValue: "إجمالي قيمة الاستثمار",
+    splitFundingMismatchError: "يجب أن يساوي إجمالي التمويل المقسم إجمالي قيمة الاستثمار.",
+    transactionDateOutOfRange: "يجب أن يكون تاريخ المعاملة ضمن تاريخ بداية ونهاية الاستثمار.",
     purchaseDate: "تاريخ الشراء",
     startDate: "تاريخ البداية",
     endDate: "تاريخ النهاية",
@@ -1820,7 +1826,7 @@ function Dashboard() {
               const pValue = pvInvs.reduce((s,inv)=>s+curVal(inv),0);
               const pCost  = pvInvs.reduce((s,inv)=>s+costBasis(inv),0);
               const pRoi   = pCost>0?((pValue-pCost)/pCost)*100:0;
-              const color  = T.chart[i%T.chart.length];
+              const color  = p.color || T.chart[i%T.chart.length];
               return (
                 <Card key={p.id} hover style={{ minWidth:"195px",maxWidth:"220px",flexShrink:0,padding:"18px",borderTop:`3px solid ${color}` }}>
                   <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"12px" }}>
@@ -1971,7 +1977,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
                 <FormField label={t.currency}><Select value={form.currency} onChange={e=>f("currency")(e.target.value)} options={db?.settings?.currencies||[]} placeholder={t.selectCurrency} isRTL={isRTL}/></FormField>
               </div>
               <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
-                <FormField label={t.status}><Select value={form.status} onChange={e=>f("status")(e.target.value)} options={statusOpts} isRTL={isRTL}/></FormField>
+              <FormField label={t.status}><Select value={form.status} onChange={e=>f("status")(e.target.value)} options={statusOpts} isRTL={isRTL}/></FormField>
                 <FormField label="Color"><Input type="color" value={form.color} onChange={e=>f("color")(e.target.value)} isRTL={isRTL}/></FormField>
               </div>
               <FormField label={t.notes}><Input value={form.notes} onChange={e=>f("notes")(e.target.value)} isRTL={isRTL} placeholder={`(${t.optional})`}/></FormField>
@@ -2027,7 +2033,12 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
 
 
   const handleSave = () => {
+    setFormError("");
     if (!form.name.trim()||!form.portfolioId) return;
+    if (Math.abs(splitFundingTotal - totalInvestmentValue) > 0.01) {
+      setFormError(t.splitFundingMismatchError);
+      return;
+    }
     const payload = { ...form, funding:(form.funding||[]).filter(r=>r.source||r.amount), source:undefined };
     if (editItem) { patchItem("investments",editItem.id,payload); }
     else { addItem("investments",payload); }
@@ -2052,6 +2063,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     setForm({ ...EMPTY, ...modalPrefill, funding:[{source:"",amount:""}] });
     setEditItem(null);
     setModalMode("create");
+    setFormError("");
     setShowModal(true);
   }, [modalPrefill]);
 
@@ -2063,6 +2075,10 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   const [filterPortfolio, setFilterPortfolio] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [formError, setFormError] = useState("");
+
+  const totalInvestmentValue = (Number(form.quantity)||0) * (Number(form.purchasePrice)||0);
+  const splitFundingTotal = (form.funding||[]).reduce((sum, row) => sum + (parseFloat(row.amount)||0), 0);
 
   useEffect(() => {
     const saved = JSON.parse(localStorage.getItem("investments_filters_v1") || "null");
@@ -2275,6 +2291,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                 <FormField label={t.purchasePrice}><Input type="number" value={form.purchasePrice} onChange={e=>f("purchasePrice")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
                 <FormField label={t.currentPrice}><Input type="number" value={form.currentPrice} onChange={e=>f("currentPrice")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
               </div>
+              <FormField label={t.totalInvestmentValue}><Input value={totalInvestmentValue.toFixed(2)} isRTL={isRTL} readOnly/></FormField>
               <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
                 <FormField label={t.purchaseDate}><Input type="date" value={form.purchaseDate} onChange={e=>f("purchaseDate")(e.target.value)} isRTL={isRTL}/></FormField>
                 <FormField label={t.startDate}><Input type="date" value={form.startDate} onChange={e=>f("startDate")(e.target.value)} isRTL={isRTL}/></FormField>
@@ -2299,6 +2316,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                   <Btn size="sm" variant="secondary" onClick={()=>setForm(prev=>({ ...prev, funding:[...prev.funding,{source:"",amount:""}] }))}>{t.addSplit}</Btn>
                 </div>
               </FormField>
+              {formError && <div style={{ color:T.negative, fontSize:"0.78rem", marginTop:"-6px", marginBottom:"10px" }}>{formError}</div>}
               <FormField label={t.status}><Select value={form.status} onChange={e=>f("status")(e.target.value)} options={statusOpts} isRTL={isRTL}/></FormField>
               <FormField label={t.notes}><Input value={form.notes} onChange={e=>f("notes")(e.target.value)} isRTL={isRTL} placeholder={`(${t.optional})`}/></FormField>
             </>
@@ -2415,6 +2433,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const [filterStartDate, setFilterStartDate] = useState("");
   const [filterEndDate, setFilterEndDate] = useState("");
   const [openMenu, setOpenMenu] = useState(null);
+  const [formError, setFormError] = useState("");
 
   const EMPTY = { portfolioId:"",investmentId:"",category:"",amount:"",date:"",dueDate:"",type:"income",status:"recorded",notes:"" };
   const [form, setForm] = useState(EMPTY);
@@ -2438,7 +2457,17 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const investmentsForPortfolio = form.portfolioId ? visible(db?.investments||[]).filter(i=>i.portfolioId===form.portfolioId) : [];
 
   const handleSave = () => {
+    setFormError("");
     if (!form.amount||!form.portfolioId) return;
+    const selectedInvestment = allInvestments.find((inv) => inv.id === form.investmentId);
+    if (selectedInvestment && form.date) {
+      const start = selectedInvestment.startDate || selectedInvestment.purchaseDate || "";
+      const end = selectedInvestment.endDate || "";
+      if ((start && form.date < start) || (end && form.date > end)) {
+        setFormError(t.transactionDateOutOfRange);
+        return;
+      }
+    }
     if (editItem) { patchItem("transactions",editItem.id,form); }
     else { addItem("transactions",form); }
     setForm(EMPTY); setShowModal(false); setEditItem(null); setModalMode("create");
@@ -2447,7 +2476,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const openView = (tx) => {
     setForm({ portfolioId:tx.portfolioId||"",investmentId:tx.investmentId||"",category:tx.category||"",
       amount:tx.amount||"",date:tx.date||"",dueDate:tx.dueDate||"",type:tx.type||"income",status:tx.status||"recorded",notes:tx.notes||"" });
-    setEditItem(tx); setModalMode("view"); setShowModal(true);
+    setEditItem(tx); setModalMode("view"); setFormError(""); setShowModal(true);
   };
 
   const totalInc = txIncome(filtered);
@@ -2461,6 +2490,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
     setForm({ ...EMPTY, ...modalPrefill });
     setEditItem(null);
     setModalMode("create");
+    setFormError("");
     setShowModal(true);
   }, [modalPrefill]);
 
@@ -2479,7 +2509,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
           <div style={{ fontSize:"0.8rem",color:T.textMuted,marginTop:"2px" }}>{sorted.length} records</div>
           </div>
         </div>
-        <Btn icon={<Plus size={15}/>} onClick={()=>{setForm(EMPTY);setEditItem(null);setModalMode("create");setShowModal(true);}}>{t.addTransaction}</Btn>
+        <Btn icon={<Plus size={15}/>} onClick={()=>{setForm(EMPTY);setEditItem(null);setModalMode("create");setFormError("");setShowModal(true);}}>{t.addTransaction}</Btn>
       </div>
 
       {/* Summary + filter */}
@@ -2598,6 +2628,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
           <FormField label={t.notes}><Input value={form.notes} onChange={e=>f("notes")(e.target.value)} isRTL={isRTL} placeholder={`(${t.optional})`}/></FormField>
             </>
           )}
+          {formError && <div style={{ color:T.negative, fontSize:"0.78rem", marginBottom:"10px" }}>{formError}</div>}
           <div style={{ display:"flex",justifyContent:"flex-end",gap:"10px",marginTop:"8px" }}>
             {modalMode==="view" && (<>
               <Btn onClick={()=>setModalMode("edit")}>{t.editInModal}</Btn>
