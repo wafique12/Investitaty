@@ -1214,11 +1214,11 @@ function FilterDateInput({ value, onChange, isRTL }) {
   );
 }
 
-function Input({ value, onChange, type="text", placeholder, isRTL }) {
+function Input({ value, onChange, type="text", placeholder, isRTL, readOnly = false, className = "", style: extraStyle = {} }) {
   const [focused, setFocused] = useState(false);
   return (
-    <input type={type} value={value} onChange={onChange} placeholder={placeholder}
-      style={{ ...inputCss(isRTL), borderColor: focused ? T.emerald : T.border }}
+    <input type={type} value={value} onChange={onChange} placeholder={placeholder} readOnly={readOnly} className={className}
+      style={{ ...inputCss(isRTL), borderColor: focused ? T.emerald : T.border, background: readOnly ? "#f1f5f9" : inputCss(isRTL).background, ...extraStyle }}
       onFocus={()=>setFocused(true)} onBlur={()=>setFocused(false)}
     />
   );
@@ -2291,18 +2291,17 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                 <FormField label={t.purchasePrice}><Input type="number" value={form.purchasePrice} onChange={e=>f("purchasePrice")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
                 <FormField label={t.currentPrice}><Input type="number" value={form.currentPrice} onChange={e=>f("currentPrice")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
               </div>
-              <FormField label={t.totalInvestmentValue}><Input value={totalInvestmentValue.toFixed(2)} isRTL={isRTL} readOnly/></FormField>
-              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField label={t.purchaseDate}><Input type="date" value={form.purchaseDate} onChange={e=>f("purchaseDate")(e.target.value)} isRTL={isRTL}/></FormField>
+                <FormField label={t.totalInvestmentValue}><Input value={totalInvestmentValue.toFixed(2)} isRTL={isRTL} readOnly style={{ background:"#f3f4f6" }}/></FormField>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField label={t.startDate}><Input type="date" value={form.startDate} onChange={e=>f("startDate")(e.target.value)} isRTL={isRTL}/></FormField>
-              </div>
-              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
                 <FormField label={t.endDate}><Input type="date" value={form.endDate} onChange={e=>f("endDate")(e.target.value)} isRTL={isRTL}/></FormField>
-                <FormField label={t.investmentMethod}><Select value={form.investmentMethod} onChange={e=>f("investmentMethod")(e.target.value)} options={methodOpts} placeholder={t.selectMethod} isRTL={isRTL}/></FormField>
               </div>
-              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField label={t.risk}><Select value={form.risk} onChange={e=>f("risk")(e.target.value)} options={db?.settings?.riskLevels||[]} placeholder={t.selectRisk} isRTL={isRTL}/></FormField>
-                <div />
+                <FormField label={t.investmentMethod}><Select value={form.investmentMethod} onChange={e=>f("investmentMethod")(e.target.value)} options={methodOpts} placeholder={t.selectMethod} isRTL={isRTL}/></FormField>
               </div>
               <FormField label={t.splitFunding}>
                 <div style={{ display:"flex",flexDirection:"column",gap:"8px" }}>
