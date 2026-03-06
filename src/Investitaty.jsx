@@ -2492,8 +2492,8 @@ function InvestmentDetailExpanded({ inv, txs, db }) {
   const expense = txExpense(txs);
   const currency = portfolioCurrency(db, inv.portfolioId);
   return (
-    <div style={{ padding:"24px", background:"#f8fafc", borderTop:`1px solid ${T.border}`, borderBottom:`1px solid ${T.border}`, boxShadow:"inset 0 1px 0 rgba(148,163,184,0.2)" }}>
-      <div className="invest-exp-grid" style={{ width:"100%", display:"grid", gridTemplateColumns:"4fr 5fr 3fr", gap:"16px" }}>
+    <div style={{ padding:"20px 24px", border:`2px solid #e2e8f0`, borderTop:`2px solid #cbd5e1`, borderBottom:`2px solid #cbd5e1`, borderRadius:"10px", boxShadow:"inset 0 1px 0 rgba(148,163,184,0.24)" }}>
+      <div className="invest-exp-grid" style={{ width:"100%", display:"grid", gridTemplateColumns:"repeat(3, minmax(0, 1fr))", gap:"14px" }}>
         {/* Metrics */}
         <div>
           <div style={{ fontSize:"0.68rem",fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:"8px",display:"flex",alignItems:"center",gap:"5px" }}>
@@ -2522,7 +2522,7 @@ function InvestmentDetailExpanded({ inv, txs, db }) {
           {txs.length===0
             ? <EmptyState text={t.noRecords}/>
             : (
-              <div style={{ maxHeight:"160px",overflowY:"auto",borderRadius:"8px",border:`1px solid ${T.border}`, background:T.bgCard }}>
+              <div style={{ maxHeight:"160px",overflowY:"auto",borderRadius:"8px",border:`1px solid ${T.border}` }}>
                 {txs.slice(0,6).map((tx,i)=>(
                   <div key={tx.id||i} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 10px",borderBottom:i<txs.length-1?`1px solid ${T.border}`:"none",fontSize:"0.74rem" }}>
                     <div>
@@ -2547,7 +2547,7 @@ function InvestmentDetailExpanded({ inv, txs, db }) {
           {(inv.funding||[]).length === 0 ? (
             <EmptyState text={t.noRecords} />
           ) : (
-            <div style={{ border:`1px solid ${T.border}`, borderRadius:"8px", overflow:"hidden", background:T.bgCard }}>
+            <div style={{ border:`1px solid ${T.border}`, borderRadius:"8px", overflow:"hidden" }}>
               {(inv.funding||[]).map((item, idx) => (
                 <div key={idx} style={{ display:"flex",justifyContent:"space-between",gap:"8px",padding:"8px 10px",fontSize:"0.74rem",borderBottom:idx<(inv.funding||[]).length-1?`1px solid ${T.border}`:"none" }}>
                   <span style={{ color:T.textPrimary, fontWeight:500 }}>{item.source || "—"}</span>
