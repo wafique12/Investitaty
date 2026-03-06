@@ -2214,7 +2214,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   const [collapsedPortfolios, setCollapsedPortfolios] = useState({});
   const [modalMode, setModalMode] = useState("create");
 
-  const EMPTY = { portfolioId:"",name:"",quantity:"",purchasePrice:"",currentPrice:"",purchaseDate:"",startDate:"",endDate:"",investmentMethod:"",risk:"",funding:[{source:"",amount:""}],status:"Active",notes:"" };
+  const EMPTY = useMemo(() => ({ portfolioId:"",name:"",quantity:"",purchasePrice:"",currentPrice:"",purchaseDate:"",startDate:"",endDate:"",investmentMethod:"",risk:"",funding:[{source:"",amount:""}],status:"Active",notes:"" }), []);
   const [form, setForm] = useState(EMPTY);
   const f = k => v => setForm(p=>({...p,[k]:v}));
 
@@ -2277,28 +2277,8 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     onModalPrefillConsumed?.();
   }, [EMPTY, onModalPrefillConsumed]);
 
-  useEffect(() => {
-    return () => {
-      setShowModal(false);
-      setEditItem(null);
-      setModalMode("create");
-      setForm(EMPTY);
-      setFormError("");
-    };
-  }, [EMPTY]);
-
   const totalInvestmentValue = (Number(form.quantity)||0) * (Number(form.purchasePrice)||0);
   const splitFundingTotal = (form.funding||[]).reduce((sum, row) => sum + (parseFloat(row.amount)||0), 0);
-
-  useEffect(() => {
-    return () => {
-      setShowModal(false);
-      setEditItem(null);
-      setModalMode("create");
-      setForm(EMPTY);
-      setFormError("");
-    };
-  }, [EMPTY]);
 
   useEffect(() => {
     const saved = JSON.parse(localStorage.getItem("investments_filters_v1") || "null");
