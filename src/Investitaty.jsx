@@ -2284,6 +2284,8 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
             <div key={p.id} style={{ marginBottom:"24px" }}>
               <button
                 onClick={() => setCollapsedPortfolios(prev => ({ ...prev, [p.id]: !prev[p.id] }))}
+                title={p.name}
+                aria-expanded={!collapsedPortfolios[p.id]}
                 style={{ display:"flex",alignItems:"center",gap:"8px",marginBottom:"10px",background:"none",border:"none",padding:0,cursor:"pointer",width:"fit-content" }}
               >
                 <ChevronRight size={14} color={T.textMuted} style={{ transform:collapsedPortfolios[p.id]?"none":"rotate(90deg)",transition:"transform 0.2s" }} />
@@ -2490,22 +2492,22 @@ function InvestmentDetailExpanded({ inv, txs, db }) {
   const expense = txExpense(txs);
   const currency = portfolioCurrency(db, inv.portfolioId);
   return (
-    <div style={{ padding:"12px 16px",borderTop:`2px solid ${T.emerald}20` }}>
-      <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:"12px" }}>
+    <div style={{ padding:"24px", background:"#f8fafc", borderTop:`1px solid ${T.border}`, borderBottom:`1px solid ${T.border}`, boxShadow:"inset 0 1px 0 rgba(148,163,184,0.2)" }}>
+      <div className="invest-exp-grid" style={{ width:"100%", display:"grid", gridTemplateColumns:"4fr 5fr 3fr", gap:"16px" }}>
         {/* Metrics */}
         <div>
           <div style={{ fontSize:"0.68rem",fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:"8px",display:"flex",alignItems:"center",gap:"5px" }}>
             <BookOpen size={11}/>{t.fundingBreakdown}
           </div>
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px" }}>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px" }}>
             {[
               { label:t.principal,    val:fmtMoney(costBasis(inv),{currency}) },
               { label:t.currentValue, val:fmtMoney(curVal(inv),{currency}) },
               { label:t.totalIncome,  val:fmtMoney(income,{currency}),  color:T.positive },
               { label:"Expenses",     val:fmtMoney(expense,{currency}), color:T.negative },
             ].map(m=>(
-              <div key={m.label} style={{ padding:"7px 8px",background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:"7px" }}>
-                <div style={{ fontSize:"0.62rem",color:T.textMuted,marginBottom:"2px" }}>{m.label}</div>
+              <div key={m.label} style={{ padding:"9px 10px",background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:"8px" }}>
+                <div style={{ fontSize:"0.62rem",color:T.textMuted,marginBottom:"3px" }}>{m.label}</div>
                 <div style={{ fontSize:"0.82rem",fontWeight:600,color:m.color||T.textPrimary }}>{m.val}</div>
               </div>
             ))}
@@ -2520,14 +2522,14 @@ function InvestmentDetailExpanded({ inv, txs, db }) {
           {txs.length===0
             ? <EmptyState text={t.noRecords}/>
             : (
-              <div style={{ maxHeight:"140px",overflowY:"auto",borderRadius:"8px",border:`1px solid ${T.border}` }}>
+              <div style={{ maxHeight:"160px",overflowY:"auto",borderRadius:"8px",border:`1px solid ${T.border}`, background:T.bgCard }}>
                 {txs.slice(0,6).map((tx,i)=>(
-                  <div key={tx.id||i} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px",borderBottom:i<txs.length-1?`1px solid ${T.border}`:"none",fontSize:"0.74rem" }}>
+                  <div key={tx.id||i} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 10px",borderBottom:i<txs.length-1?`1px solid ${T.border}`:"none",fontSize:"0.74rem" }}>
                     <div>
                       <span style={{ fontWeight:500,color:T.textPrimary }}>{tx.category}</span>
                       <span style={{ color:T.textMuted,marginLeft:"5px",fontSize:"0.66rem" }}>{tx.date}</span>
                     </div>
-                    <span style={{ fontWeight:600,color:tx.type==="income"?T.positive:T.negative }}>
+                    <span style={{ fontWeight:600,color:tx.type==="income"?T.positive:T.negative, whiteSpace:"nowrap" }}>
                       {tx.type==="income"?"+":"-"}{fmtMoney(tx.amount,{currency:portfolioCurrency(db, tx.portfolioId)})}
                     </span>
                   </div>
@@ -2545,11 +2547,11 @@ function InvestmentDetailExpanded({ inv, txs, db }) {
           {(inv.funding||[]).length === 0 ? (
             <EmptyState text={t.noRecords} />
           ) : (
-            <div style={{ border:`1px solid ${T.border}`, borderRadius:"8px", overflow:"hidden" }}>
+            <div style={{ border:`1px solid ${T.border}`, borderRadius:"8px", overflow:"hidden", background:T.bgCard }}>
               {(inv.funding||[]).map((item, idx) => (
-                <div key={idx} style={{ display:"flex",justifyContent:"space-between",gap:"8px",padding:"7px 8px",fontSize:"0.74rem",borderBottom:idx<(inv.funding||[]).length-1?`1px solid ${T.border}`:"none" }}>
+                <div key={idx} style={{ display:"flex",justifyContent:"space-between",gap:"8px",padding:"8px 10px",fontSize:"0.74rem",borderBottom:idx<(inv.funding||[]).length-1?`1px solid ${T.border}`:"none" }}>
                   <span style={{ color:T.textPrimary, fontWeight:500 }}>{item.source || "—"}</span>
-                  <span style={{ color:T.textSecondary }}>{item.amount ? fmtMoney(item.amount,{currency}) : "—"}</span>
+                  <span style={{ color:T.textSecondary, whiteSpace:"nowrap" }}>{item.amount ? fmtMoney(item.amount,{currency}) : "—"}</span>
                 </div>
               ))}
             </div>
@@ -3767,6 +3769,12 @@ function MainApp() {
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         body { margin: 0; }
+        @media (max-width: 1100px) {
+          .invest-exp-grid { grid-template-columns: repeat(2,minmax(0,1fr)) !important; }
+        }
+        @media (max-width: 760px) {
+          .invest-exp-grid { grid-template-columns: 1fr !important; }
+        }
       `}</style>
 
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} isOpen={sidebarOpen} setIsOpen={setSidebarOpen} isMobile={isMobile} mobileOpen={mobileSidebarOpen} setMobileOpen={setMobileSidebarOpen} />
