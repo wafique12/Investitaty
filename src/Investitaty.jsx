@@ -82,6 +82,7 @@ const TRANSLATIONS = {
     totalPortfolioValue: "Total Portfolio Value",
     totalNetProfit: "Total Net Profit",
     totalIncome: "Total Income",
+    incomeYearLabel: "Income {year}",
     capitalGains: "Capital Gains",
     activePositions: "active positions",
     dividendsCapital: "income + capital gains",
@@ -159,6 +160,7 @@ const TRANSLATIONS = {
     purchasePrice: "Purchase Price (Per Unit)",
     currentPrice: "Current Price (Per Unit)",
     totalInvestmentValue: "Total Investment Value",
+    totalSplitAmount: "Total Split Amount",
     splitFundingMismatchError: "Split funding total must equal Total Investment Value.",
     transactionDateOutOfRange: "Transaction date must be within the investment start and end dates.",
     dueDateOutOfRange: "Due date must be within the investment start and end dates.",
@@ -291,6 +293,7 @@ const TRANSLATIONS = {
     totalPortfolioValue: "إجمالي قيمة المحفظة",
     totalNetProfit: "صافي الربح الإجمالي",
     totalIncome: "إجمالي الدخل",
+    incomeYearLabel: "دخل عام {year}",
     capitalGains: "مكاسب رأس المال",
     activePositions: "مركز نشط",
     dividendsCapital: "دخل + مكاسب رأسمالية",
@@ -368,6 +371,7 @@ const TRANSLATIONS = {
     purchasePrice: "سعر الشراء (لكل وحدة)",
     currentPrice: "السعر الحالي (لكل وحدة)",
     totalInvestmentValue: "إجمالي قيمة الاستثمار",
+    totalSplitAmount: "إجمالي مبلغ التقسيم",
     splitFundingMismatchError: "يجب أن يساوي إجمالي التمويل المقسم إجمالي قيمة الاستثمار.",
     transactionDateOutOfRange: "يجب أن يكون تاريخ المعاملة ضمن تاريخ بداية ونهاية الاستثمار.",
     dueDateOutOfRange: "يجب أن يكون تاريخ الاستحقاق ضمن تاريخ بداية ونهاية الاستثمار.",
@@ -1986,8 +1990,10 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
         <Btn icon={<Plus size={15}/>} onClick={()=>{setForm(EMPTY);setEditItem(null);setModalMode("create");setShowModal(true);}}>{t.addPortfolio}</Btn>
       </div>
 
-      <div style={filterBarCss}>
-        <Select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} options={[{ value:"", label:t.status }, ...statusOpts]} isRTL={isRTL} style={filterInputCss(isRTL)} />
+      <div style={{ ...filterBarCss, justifyContent:isRTL?"flex-start":"flex-end" }}>
+        <div style={{ width:"220px", maxWidth:"100%" }}>
+          <Select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} options={[{ value:"", label:t.status }, ...statusOpts]} isRTL={isRTL} style={{ ...filterInputCss(isRTL), width:"100%", flex:"0 0 auto" }} />
+        </div>
       </div>
 
       <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:"16px" }}>
@@ -1998,6 +2004,16 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
           const pCost  = invs.reduce((s,i)=>s+costBasis(i),0);
           const pTx    = tx_of_portfolio(db,p.id);
           const pIncome = txIncome(pTx);
+          const currentYear = new Date().getFullYear();
+          const pIncomeCurrentYear = txIncome(
+            pTx.filter((tx) => {
+              const dt = tx.date || tx.created_at;
+              if (!dt) return false;
+              const year = new Date(dt).getFullYear();
+              return year === currentYear;
+            })
+          );
+          const yearLabel = t.incomeYearLabel.replace("{year}", isRTL ? currentYear.toLocaleString("ar-EG") : String(currentYear));
           const pRoi   = pCost>0?((totalValue-pCost)/pCost)*100:0;
           const color  = p.color || T.chart[i%T.chart.length];
           return (
@@ -2040,6 +2056,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
                     { label:t.totalValue,  val:fmtMoney(totalValue,{compact:true,currency:p.currency||"USD"}) },
                     { label:t.roi,         val:`${pRoi>=0?"+":""}${pRoi.toFixed(1)}%`, color:pRoi>=0?T.positive:T.negative },
                     { label:t.positions,   val:invs.length },
+                    { label:yearLabel, val:fmtMoney(pIncomeCurrentYear,{compact:true,currency:p.currency||"USD"}) },
                     { label:t.totalIncome, val:fmtMoney(pIncome,{compact:true,currency:p.currency||"USD"}) },
                   ].map(m=>(
                     <div key={m.label} style={{ padding:"10px",background:T.bgApp,borderRadius:"8px" }}>
@@ -2361,7 +2378,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
       }
 
       {showModal && (
-        <Modal title={modalMode==="create" ? t.addInvestment : `${t.view} ${t.investment}`} maxWidth="760px" onClose={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>
+        <Modal title={modalMode==="create" ? t.addInvestment : `${t.view} ${t.investment}`} maxWidth="960px" onClose={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>
           {modalMode === "view" ? (
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"10px" }}>
               <ReadOnlyField label={t.portfolio} value={portfolios.find((p)=>p.id===form.portfolioId)?.name} />
@@ -2382,27 +2399,17 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
             </div>
           ) : (
             <>
-              <FormField label={t.portfolio} required>
-                <Select value={form.portfolioId} onChange={e=>f("portfolioId")(e.target.value)}
-                  options={portfolios.map(p=>({value:p.id,label:p.name}))} placeholder={t.selectPortfolio} isRTL={isRTL}/>
-              </FormField>
-              <FormField label={t.name} required><Input value={form.name} onChange={e=>f("name")(e.target.value)} isRTL={isRTL}/></FormField>
-              <div style={{ display:"grid",gridTemplateColumns:"repeat(3, minmax(0, 1fr))",gap:"12px",alignItems:"start" }}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField label={t.name} required><Input value={form.name} onChange={e=>f("name")(e.target.value)} isRTL={isRTL}/></FormField>
+                <FormField label={t.portfolio} required>
+                  <Select value={form.portfolioId} onChange={e=>f("portfolioId")(e.target.value)}
+                    options={portfolios.map(p=>({value:p.id,label:p.name}))} placeholder={t.selectPortfolio} isRTL={isRTL}/>
+                </FormField>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <FormField label={t.quantity}><Input type="number" value={form.quantity} onChange={e=>f("quantity")(e.target.value)} isRTL={isRTL} placeholder="0"/></FormField>
                 <FormField label={t.purchasePrice}><Input type="number" value={form.purchasePrice} onChange={e=>f("purchasePrice")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
                 <FormField label={t.currentPrice}><Input type="number" value={form.currentPrice} onChange={e=>f("currentPrice")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
-              </div>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
-                <FormField label={t.purchaseDate}><Input type="date" value={form.purchaseDate} onChange={e=>f("purchaseDate")(e.target.value)} isRTL={isRTL}/></FormField>
-                <FormField label={t.totalInvestmentValue}><Input value={totalInvestmentValue.toFixed(2)} isRTL={isRTL} readOnly style={{ background:"#e2e8f0", color:T.textSecondary }}/></FormField>
-              </div>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
-                <FormField label={t.startDate}><Input type="date" value={form.startDate} onChange={e=>f("startDate")(e.target.value)} isRTL={isRTL}/></FormField>
-                <FormField label={t.endDate}><Input type="date" value={form.endDate} onChange={e=>f("endDate")(e.target.value)} isRTL={isRTL}/></FormField>
-              </div>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
-                <FormField label={t.risk}><Select value={form.risk} onChange={e=>f("risk")(e.target.value)} options={db?.settings?.riskLevels||[]} placeholder={t.selectRisk} isRTL={isRTL}/></FormField>
-                <FormField label={t.investmentMethod}><Select value={form.investmentMethod} onChange={e=>f("investmentMethod")(e.target.value)} options={methodOpts} placeholder={t.selectMethod} isRTL={isRTL}/></FormField>
               </div>
               <FormField label={t.splitFunding}>
                 <div style={{ display:"flex",flexDirection:"column",gap:"8px" }}>
@@ -2414,10 +2421,25 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                     </div>
                   ))}
                   <Btn size="sm" variant="secondary" onClick={()=>setForm(prev=>({ ...prev, funding:[...prev.funding,{source:"",amount:""}] }))}>{t.addSplit}</Btn>
+                  <div style={{ padding:"10px", background:"#e2e8f0", borderRadius:"8px", color:T.textSecondary, fontSize:"0.84rem", fontWeight:600 }}>
+                    {t.totalSplitAmount}: {splitFundingTotal.toFixed(2)}
+                  </div>
                 </div>
               </FormField>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField label={t.totalInvestmentValue}><Input value={totalInvestmentValue.toFixed(2)} isRTL={isRTL} readOnly style={{ background:"#e2e8f0", color:T.textSecondary }}/></FormField>
+                <FormField label={t.purchaseDate}><Input type="date" value={form.purchaseDate} onChange={e=>f("purchaseDate")(e.target.value)} isRTL={isRTL}/></FormField>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField label={t.startDate}><Input type="date" value={form.startDate} onChange={e=>f("startDate")(e.target.value)} isRTL={isRTL}/></FormField>
+                <FormField label={t.endDate}><Input type="date" value={form.endDate} onChange={e=>f("endDate")(e.target.value)} isRTL={isRTL}/></FormField>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <FormField label={t.risk}><Select value={form.risk} onChange={e=>f("risk")(e.target.value)} options={db?.settings?.riskLevels||[]} placeholder={t.selectRisk} isRTL={isRTL}/></FormField>
+                <FormField label={t.status}><Select value={form.status} onChange={e=>f("status")(e.target.value)} options={statusOpts} isRTL={isRTL}/></FormField>
+                <FormField label={t.investmentMethod}><Select value={form.investmentMethod} onChange={e=>f("investmentMethod")(e.target.value)} options={methodOpts} placeholder={t.selectMethod} isRTL={isRTL}/></FormField>
+              </div>
               {formError && <div style={{ color:T.negative, fontSize:"0.78rem", marginTop:"-6px", marginBottom:"10px" }}>{formError}</div>}
-              <FormField label={t.status}><Select value={form.status} onChange={e=>f("status")(e.target.value)} options={statusOpts} isRTL={isRTL}/></FormField>
               <FormField label={t.notes}><Input value={form.notes} onChange={e=>f("notes")(e.target.value)} isRTL={isRTL} placeholder={`(${t.optional})`}/></FormField>
             </>
           )}
