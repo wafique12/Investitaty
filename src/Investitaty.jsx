@@ -825,6 +825,7 @@ function AppProvider({ children }) {
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState(null);
   const [dbLoading, setDbLoading] = useState(false);
+  const [supabaseSessionReady, setSupabaseSessionReady] = useState(!hasSupabaseClient);
   const saveTimerRef = useRef(null);
 
   const clearLocalSessionState = useCallback((shouldSignOut = false) => {
@@ -1023,15 +1024,29 @@ function AppProvider({ children }) {
   }, [auth.token, isBlocked, userSyncDone]);
 
   useEffect(() => {
+    if (!hasSupabaseClient || !supabase?.auth?.getSession) return;
+    let mounted = true;
+    supabase.auth.getSession()
+      .catch(() => null)
+      .finally(() => {
+        if (mounted) setSupabaseSessionReady(true);
+      });
+    return () => { mounted = false; };
+  }, []);
+
+  useEffect(() => {
     if (!hasSupabaseClient || !supabase?.auth?.onAuthStateChange) return;
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       const sessionExpired = Boolean(session?.expires_at && session.expires_at * 1000 <= Date.now());
-      if (event === "SIGNED_OUT" || !session || sessionExpired) {
-        clearLocalSessionState(true);
-      }
+      const shouldForceLogout = event === "SIGNED_OUT" || sessionExpired;
+      if (!supabaseSessionReady || auth.authLoading || !shouldForceLogout) return;
+      clearLocalSessionState(true);
     });
-    return () => listener?.subscription?.unsubscribe?.();
-  }, [clearLocalSessionState]);
+
+    return () => {
+      listener?.subscription?.unsubscribe?.();
+    };
+  }, [clearLocalSessionState, supabaseSessionReady, auth.authLoading]);
 
   useEffect(() => {
     if (!auth.user?.id || !auth.token) {
