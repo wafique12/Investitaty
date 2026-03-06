@@ -207,6 +207,7 @@ const TRANSLATIONS = {
     transactionLedger: "Transaction Ledger",
     quickUpdatePrice: "Quick update price",
     archiveInvestment: "Archive Investment",
+    archivePortfolio: "Archive Portfolio",
     settingsTitle: "Settings & Lookup Categories",
     settingsDesc: "Manage dropdown options used across all forms",
     portfolioTypes: "Portfolio Types",
@@ -421,6 +422,7 @@ const TRANSLATIONS = {
     transactionLedger: "سجل المعاملات",
     quickUpdatePrice: "تحديث السعر سريعاً",
     archiveInvestment: "أرشفة الاستثمار",
+    archivePortfolio: "أرشفة المحفظة",
     settingsTitle: "الإعدادات وفئات القوائم",
     settingsDesc: "إدارة خيارات القوائم المنسدلة المستخدمة في جميع النماذج",
     portfolioTypes: "أنواع المحافظ",
@@ -2102,7 +2104,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
                     </button>
                     <button onClick={()=>onQuickAddInvestment?.(p.id)} title={t.addInvestmentAction} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.emerald} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><Plus size={14}/></button>
                     <button onClick={()=>onViewInvestments?.(p)} title={t.investments} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.info} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><ListTree size={14}/></button>
-                    <button onClick={()=>p.is_hidden?unarchiveItem("portfolios",p.id):archiveItem("portfolios",p.id)} title={p.is_hidden?t.unarchive:t.archive} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.warning} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>{p.is_hidden?<Eye size={14}/>:<EyeOff size={14}/>}</button>
+                    <button onClick={()=>p.is_hidden?unarchiveItem("portfolios",p.id):archiveItem("portfolios",p.id)} title={p.is_hidden ? t.unarchive : t.archivePortfolio} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.warning} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>{p.is_hidden?<Eye size={14}/>:<EyeOff size={14}/>}</button>
                     <button onClick={()=>{ if(window.confirm(t.deleteCascadeWarning)) hardDeleteItem("portfolios",p.id); }} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}
                       onMouseEnter={e=>e.currentTarget.style.color=T.negative} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
                       <Trash2 size={14}/>
@@ -2426,7 +2428,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                                 </button>
                                 <button title={t.addTransactionAction} onClick={()=>onQuickAddTransaction?.(inv)} style={{ background:"none",border:"none",cursor:"pointer",color:T.emerald,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color="#059669"} onMouseLeave={e=>e.currentTarget.style.color=T.emerald}><Plus size={13}/></button>
                                 <button title={t.viewTransactions} onClick={()=>onViewTransactions?.(inv)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.warning} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><ListTree size={13}/></button>
-                                <button title={inv.is_hidden?t.unarchive:t.archive} onClick={()=>inv.is_hidden?unarchiveItem("investments",inv.id):archiveItem("investments",inv.id)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.warning} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>{inv.is_hidden?<Eye size={13}/>:<EyeOff size={13}/>}</button>
+                                <button title={inv.is_hidden ? t.unarchive : t.archiveInvestment} onClick={()=>inv.is_hidden?unarchiveItem("investments",inv.id):archiveItem("investments",inv.id)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.warning} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>{inv.is_hidden?<Eye size={13}/>:<EyeOff size={13}/>}</button>
                                 <button title={t.deleteItem} onClick={()=>{ if(window.confirm(t.deleteCascadeWarning)) hardDeleteItem("investments",inv.id); }} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}
                                   onMouseEnter={e=>e.currentTarget.style.color=T.negative} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
                                   <Trash2 size={13}/>
