@@ -2205,7 +2205,7 @@ function ReadOnlyField({ label, value }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // INVESTMENTS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
-function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefill, navigationFilter }) {
+function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefill, navigationFilter, onModalPrefillConsumed }) {
   const { db, addItem, archiveItem, unarchiveItem, hardDeleteItem, patchItem, t, isRTL, font } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -2232,7 +2232,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     const payload = { ...form, funding:(form.funding||[]).filter(r=>r.source||r.amount), source:undefined };
     if (editItem) { patchItem("investments",editItem.id,payload); }
     else { addItem("investments",payload); }
-    setForm(EMPTY); setShowModal(false); setEditItem(null);
+    setForm(EMPTY); closeModal();
   };
 
   const openView = (inv) => {
@@ -2255,7 +2255,8 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     setModalMode("create");
     setFormError("");
     setShowModal(true);
-  }, [modalPrefill]);
+    onModalPrefillConsumed?.();
+  }, [modalPrefill, onModalPrefillConsumed]);
 
   const statusOpts = ((db?.settings?.investmentStatuses&&db.settings.investmentStatuses.length)?db.settings.investmentStatuses:["Active","Paused","Closed"]).map((v)=>({ value:v, label:v }));
   const methodOpts = (db?.settings?.investmentMethods || []).map((v)=>({ value:v, label:v }));
@@ -2267,8 +2268,37 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   const [searchTerm, setSearchTerm] = useState("");
   const [formError, setFormError] = useState("");
 
+  const closeModal = useCallback(() => {
+    setShowModal(false);
+    setEditItem(null);
+    setModalMode("create");
+    setForm(EMPTY);
+    setFormError("");
+    onModalPrefillConsumed?.();
+  }, [EMPTY, onModalPrefillConsumed]);
+
+  useEffect(() => {
+    return () => {
+      setShowModal(false);
+      setEditItem(null);
+      setModalMode("create");
+      setForm(EMPTY);
+      setFormError("");
+    };
+  }, [EMPTY]);
+
   const totalInvestmentValue = (Number(form.quantity)||0) * (Number(form.purchasePrice)||0);
   const splitFundingTotal = (form.funding||[]).reduce((sum, row) => sum + (parseFloat(row.amount)||0), 0);
+
+  useEffect(() => {
+    return () => {
+      setShowModal(false);
+      setEditItem(null);
+      setModalMode("create");
+      setForm(EMPTY);
+      setFormError("");
+    };
+  }, [EMPTY]);
 
   useEffect(() => {
     const saved = JSON.parse(localStorage.getItem("investments_filters_v1") || "null");
@@ -2334,7 +2364,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
               }}
             />
           </div>
-          <Btn icon={<Plus size={15}/>} onClick={()=>{setForm(EMPTY);setEditItem(null);setModalMode("create");setShowModal(true);}}>{t.addInvestment}</Btn>
+          <Btn icon={<Plus size={15}/>} onClick={()=>{setForm(EMPTY);setEditItem(null);setModalMode("create");setShowModal(true); onModalPrefillConsumed?.();}}>{t.addInvestment}</Btn>
         </div>
       </div>
 
@@ -2460,7 +2490,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
       }
 
       {showModal && (
-        <Modal title={modalMode==="create" ? t.addInvestment : `${t.view} ${t.investment}`} maxWidth="860px" onClose={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>
+        <Modal title={modalMode==="create" ? t.addInvestment : `${t.view} ${t.investment}`} maxWidth="860px" onClose={closeModal}>
           {modalMode === "view" ? (
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"10px" }}>
               <ReadOnlyField label={t.portfolio} value={portfolios.find((p)=>p.id===form.portfolioId)?.name} />
@@ -2526,14 +2556,14 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
           <div style={{ display:"flex",justifyContent:"flex-end",gap:"10px",marginTop:"8px" }}>
             {modalMode==="view" && (<>
               <Btn onClick={()=>setModalMode("edit")}>{t.editInModal}</Btn>
-              <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>{t.returnLabel}</Btn>
+              <Btn variant="secondary" onClick={closeModal}>{t.returnLabel}</Btn>
             </>)}
             {modalMode==="edit" && (<>
               <Btn onClick={handleSave}>{t.save}</Btn>
               <Btn variant="secondary" onClick={()=>{ setForm({ portfolioId:editItem.portfolioId,name:editItem.name,quantity:editItem.quantity||"",purchasePrice:editItem.purchasePrice||"",currentPrice:editItem.currentPrice||"",purchaseDate:editItem.purchaseDate||"",startDate:editItem.startDate||"",endDate:editItem.endDate||"",investmentMethod:editItem.investmentMethod||"",risk:editItem.risk||"",funding:(editItem.funding&&editItem.funding.length?editItem.funding:[{source:editItem.source||"",amount:""}]),status:editItem.status||"Active",notes:editItem.notes||"" }); setModalMode("view"); }}>{t.cancel}</Btn>
             </>)}
             {modalMode==="create" && (<>
-              <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>{t.cancel}</Btn>
+              <Btn variant="secondary" onClick={closeModal}>{t.cancel}</Btn>
               <Btn onClick={handleSave}>{t.save}</Btn>
             </>)}
           </div>
@@ -3825,7 +3855,7 @@ function MainApp() {
   const tabs = {
     dashboard:    <Dashboard />,
     portfolios:   <PortfoliosTab onQuickAddInvestment={quickAddInvestment} onViewInvestments={goToInvestmentsForPortfolio} />,
-    investments:  <InvestmentsTab onQuickAddTransaction={quickAddTransaction} onViewTransactions={goToTransactionsForInvestment} modalPrefill={investmentPrefill} navigationFilter={investmentNavigationFilter} />,
+    investments:  <InvestmentsTab onQuickAddTransaction={quickAddTransaction} onViewTransactions={goToTransactionsForInvestment} modalPrefill={investmentPrefill} navigationFilter={investmentNavigationFilter} onModalPrefillConsumed={() => setInvestmentPrefill(null)} />,
     transactions: <TransactionsTab showSmartBack={smartBackVisible} onSmartBack={handleSmartBack} navigationFilter={txNavigationFilter} modalPrefill={transactionPrefill} />,
     statistics:   <StatisticsTab />,
     users:        canManageUsers ? <UserManagementTab /> : <Dashboard />,
