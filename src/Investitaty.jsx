@@ -82,6 +82,7 @@ const TRANSLATIONS = {
     totalPortfolioValue: "Total Portfolio Value",
     totalNetProfit: "Total Net Profit",
     totalIncome: "Total Income",
+    incomeYearLabel: "Income {year}",
     capitalGains: "Capital Gains",
     activePositions: "active positions",
     dividendsCapital: "income + capital gains",
@@ -159,6 +160,7 @@ const TRANSLATIONS = {
     purchasePrice: "Purchase Price (Per Unit)",
     currentPrice: "Current Price (Per Unit)",
     totalInvestmentValue: "Total Investment Value",
+    totalSplitAmount: "Total Split Amount",
     splitFundingMismatchError: "Split funding total must equal Total Investment Value.",
     transactionDateOutOfRange: "Transaction date must be within the investment start and end dates.",
     dueDateOutOfRange: "Due date must be within the investment start and end dates.",
@@ -233,6 +235,16 @@ const TRANSLATIONS = {
     positions: "Positions",
     allocation: "Allocation",
     totalValue: "Total Value",
+    activeInvestmentValue: "Active Value",
+    usersName: "Name",
+    usersEmail: "Email",
+    usersLastLogin: "Last Login",
+    usersRole: "Role",
+    usersStatus: "Status",
+    usersActions: "Actions",
+    block: "Block",
+    unblock: "Unblock",
+    delete: "Delete",
     dominantRisk: "Risk",
     noInvestments: "No investments yet.",
     dueDate: "Due Date",
@@ -281,6 +293,7 @@ const TRANSLATIONS = {
     totalPortfolioValue: "إجمالي قيمة المحفظة",
     totalNetProfit: "صافي الربح الإجمالي",
     totalIncome: "إجمالي الدخل",
+    incomeYearLabel: "دخل عام {year}",
     capitalGains: "مكاسب رأس المال",
     activePositions: "مركز نشط",
     dividendsCapital: "دخل + مكاسب رأسمالية",
@@ -358,6 +371,7 @@ const TRANSLATIONS = {
     purchasePrice: "سعر الشراء (لكل وحدة)",
     currentPrice: "السعر الحالي (لكل وحدة)",
     totalInvestmentValue: "إجمالي قيمة الاستثمار",
+    totalSplitAmount: "إجمالي مبلغ التقسيم",
     splitFundingMismatchError: "يجب أن يساوي إجمالي التمويل المقسم إجمالي قيمة الاستثمار.",
     transactionDateOutOfRange: "يجب أن يكون تاريخ المعاملة ضمن تاريخ بداية ونهاية الاستثمار.",
     dueDateOutOfRange: "يجب أن يكون تاريخ الاستحقاق ضمن تاريخ بداية ونهاية الاستثمار.",
@@ -432,6 +446,16 @@ const TRANSLATIONS = {
     positions: "مراكز",
     allocation: "التخصيص",
     totalValue: "القيمة الإجمالية",
+    activeInvestmentValue: "قيمة الاستثمارات النشطة",
+    usersName: "الاسم",
+    usersEmail: "البريد الإلكتروني",
+    usersLastLogin: "آخر تسجيل دخول",
+    usersRole: "الدور",
+    usersStatus: "الحالة",
+    usersActions: "الإجراءات",
+    block: "حظر",
+    unblock: "إلغاء الحظر",
+    delete: "حذف",
     dominantRisk: "المخاطرة",
     noInvestments: "لا توجد استثمارات بعد.",
     dueDate: "تاريخ الاستحقاق",
@@ -761,7 +785,8 @@ function useGoogleAuth(lang = "en") {
             const userRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", { headers: { Authorization: `Bearer ${accessToken}` } });
             if (!userRes.ok) throw new Error(`userinfo ${userRes.status}`);
             const userInfo = await userRes.json();
-            setUser(userInfo); setToken(accessToken);
+            const normalizedUser = { ...userInfo, id: userInfo?.id || userInfo?.sub || null };
+            setUser(normalizedUser); setToken(accessToken);
           } catch (err) {
             setAuthError("Signed in but could not fetch profile. Check API key.");
             setToken(accessToken);
@@ -804,7 +829,19 @@ function AppProvider({ children }) {
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState(null);
   const [dbLoading, setDbLoading] = useState(false);
+  const [supabaseSessionReady, setSupabaseSessionReady] = useState(!hasSupabaseClient);
   const saveTimerRef = useRef(null);
+
+  const clearLocalSessionState = useCallback((shouldSignOut = false) => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    setDb(null);
+    setFileId(null);
+    setSyncError(null);
+    setDbLoading(false);
+    setGatekeeperError(null);
+    setUserSyncDone(false);
+    if (shouldSignOut) auth.signOut();
+  }, [auth]);
 
   const t = TRANSLATIONS[lang];
   const isRTL = lang === "ar";
@@ -989,6 +1026,37 @@ function AppProvider({ children }) {
       .then(({ fileId: fid, data }) => { setFileId(fid); setDb(data); setDbLoading(false); })
       .catch(() => { setSyncError("Failed to access Google Drive."); setDbLoading(false); });
   }, [auth.token, isBlocked, userSyncDone]);
+
+  useEffect(() => {
+    if (!hasSupabaseClient || !supabase?.auth?.getSession) return;
+    let mounted = true;
+    supabase.auth.getSession()
+      .catch(() => null)
+      .finally(() => {
+        if (mounted) setSupabaseSessionReady(true);
+      });
+    return () => { mounted = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!hasSupabaseClient || !supabase?.auth?.onAuthStateChange) return;
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      const sessionExpired = Boolean(session?.expires_at && session.expires_at * 1000 <= Date.now());
+      const shouldForceLogout = event === "SIGNED_OUT" || sessionExpired;
+      if (!supabaseSessionReady || auth.authLoading || !shouldForceLogout) return;
+      clearLocalSessionState(true);
+    });
+
+    return () => {
+      listener?.subscription?.unsubscribe?.();
+    };
+  }, [clearLocalSessionState, supabaseSessionReady, auth.authLoading]);
+
+  useEffect(() => {
+    if (!auth.user?.id || !auth.token) {
+      clearLocalSessionState(false);
+    }
+  }, [auth.user?.id, auth.token, clearLocalSessionState]);
 
   const updateDb = useCallback((updater) => {
     setDb((prev) => {
@@ -1619,6 +1687,8 @@ const fmtMoney = (v, { compact=false, currency="USD" } = {}) => {
   return symbol + n.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
 };
 const portfolioCurrency = (db, portfolioId) => (visible(db?.portfolios||[]).find(p=>p.id===portfolioId)?.currency || "USD");
+const isActiveInvestment = (inv) => String(inv?.status || "Active").toLowerCase() === "active";
+const investmentValue = (inv) => (parseFloat(inv?.quantity) || 0) * (parseFloat(inv?.currentPrice) || 0);
 const riskColor = (risk) => {
   const r = String(risk||"").toLowerCase();
   if (r.includes("low") || r.includes("منخفض")) return T.positive;
@@ -1656,7 +1726,9 @@ function Dashboard() {
   const transactions = visible(db.transactions);
   const baseCurrency = baseCurrencyCode(db);
 
-  const totalPortfolioValue = investments.reduce((s,i)=>s+toBaseAmount(db, curVal(i), portfolioCurrency(db, i.portfolioId)),0);
+  const totalPortfolioValue = investments
+    .filter(isActiveInvestment)
+    .reduce((s,i)=>s+toBaseAmount(db, investmentValue(i), portfolioCurrency(db, i.portfolioId)),0);
   const totalCost = investments.reduce((s,i)=>s+toBaseAmount(db, costBasis(i), portfolioCurrency(db, i.portfolioId)),0);
   const capitalGainsVal = totalPortfolioValue - totalCost;
   const totalIncome = transactions.filter(t=>t.type==="income").reduce((sum, tx)=>sum + toBaseAmount(db, parseFloat(tx.amount)||0, portfolioCurrency(db, tx.portfolioId)), 0);
@@ -1845,7 +1917,7 @@ function Dashboard() {
           <div style={{ display:"flex",gap:"14px",overflowX:"auto",paddingBottom:"8px",scrollbarWidth:"thin",scrollbarColor:`${T.border} transparent` }}>
             {portfolios.map((p,i)=>{
               const pvInvs = inv_of_portfolio(db,p.id);
-              const pValue = pvInvs.reduce((s,inv)=>s+curVal(inv),0);
+              const pValue = pvInvs.filter(isActiveInvestment).reduce((s,inv)=>s+investmentValue(inv),0);
               const pCost  = pvInvs.reduce((s,inv)=>s+costBasis(inv),0);
               const pRoi   = pCost>0?((pValue-pCost)/pCost)*100:0;
               const color  = p.color || T.chart[i%T.chart.length];
@@ -1918,18 +1990,31 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
         <Btn icon={<Plus size={15}/>} onClick={()=>{setForm(EMPTY);setEditItem(null);setModalMode("create");setShowModal(true);}}>{t.addPortfolio}</Btn>
       </div>
 
-      <div style={filterBarCss}>
-        <Select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} options={[{ value:"", label:t.status }, ...statusOpts]} isRTL={isRTL} style={filterInputCss(isRTL)} />
+      <div style={{ ...filterBarCss, justifyContent:isRTL?"flex-start":"flex-end" }}>
+        <div style={{ width:"220px", maxWidth:"100%" }}>
+          <Select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} options={[{ value:"", label:t.status }, ...statusOpts]} isRTL={isRTL} style={{ ...filterInputCss(isRTL), width:"100%", flex:"0 0 auto" }} />
+        </div>
       </div>
 
       <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:"16px" }}>
         {portfolios.map((p,i) => {
           const invs = inv_of_portfolio(db,p.id);
-          const pValue = invs.reduce((s,i)=>s+curVal(i),0);
+          const activeValue = invs.filter(isActiveInvestment).reduce((sum, inv) => sum + investmentValue(inv), 0);
+          const totalValue = invs.reduce((sum, inv)=>sum+curVal(inv),0);
           const pCost  = invs.reduce((s,i)=>s+costBasis(i),0);
           const pTx    = tx_of_portfolio(db,p.id);
           const pIncome = txIncome(pTx);
-          const pRoi   = pCost>0?((pValue-pCost)/pCost)*100:0;
+          const currentYear = new Date().getFullYear();
+          const pIncomeCurrentYear = txIncome(
+            pTx.filter((tx) => {
+              const dt = tx.date || tx.created_at;
+              if (!dt) return false;
+              const year = new Date(dt).getFullYear();
+              return year === currentYear;
+            })
+          );
+          const yearLabel = t.incomeYearLabel.replace("{year}", isRTL ? currentYear.toLocaleString("ar-EG") : String(currentYear));
+          const pRoi   = pCost>0?((totalValue-pCost)/pCost)*100:0;
           const color  = p.color || T.chart[i%T.chart.length];
           return (
             <Card key={p.id} style={{ overflow:"hidden" }}>
@@ -1957,11 +2042,21 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
                     </button>
                   </div>
                 </div>
-                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",marginBottom:"14px" }}>
+                <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:"10px",marginBottom:"14px" }}>
+                  <button
+                    onClick={() => onViewInvestments?.(p, { status: "Active" })}
+                    style={{ padding:"10px",background:T.bgApp,borderRadius:"8px",border:"none",cursor:"pointer",textAlign:isRTL?"right":"left" }}
+                    onMouseEnter={e=>{ e.currentTarget.style.background="#e2e8f0"; }}
+                    onMouseLeave={e=>{ e.currentTarget.style.background=T.bgApp; }}
+                  >
+                    <div style={{ fontSize:"0.68rem",color:T.textMuted,marginBottom:"3px" }}>{t.activeInvestmentValue}</div>
+                    <div style={{ fontSize:"0.95rem",fontWeight:600,color:T.info,textDecoration:"underline" }}>{fmtMoney(activeValue,{compact:true,currency:p.currency||"USD"})}</div>
+                  </button>
                   {[
-                    { label:t.totalValue,  val:fmtMoney(pValue,{compact:true,currency:p.currency||"USD"}) },
+                    { label:t.totalValue,  val:fmtMoney(totalValue,{compact:true,currency:p.currency||"USD"}) },
                     { label:t.roi,         val:`${pRoi>=0?"+":""}${pRoi.toFixed(1)}%`, color:pRoi>=0?T.positive:T.negative },
                     { label:t.positions,   val:invs.length },
+                    { label:yearLabel, val:fmtMoney(pIncomeCurrentYear,{compact:true,currency:p.currency||"USD"}) },
                     { label:t.totalIncome, val:fmtMoney(pIncome,{compact:true,currency:p.currency||"USD"}) },
                   ].map(m=>(
                     <div key={m.label} style={{ padding:"10px",background:T.bgApp,borderRadius:"8px" }}>
@@ -2044,6 +2139,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   const [editItem, setEditItem] = useState(null);
   const [editingPrice, setEditingPrice] = useState(null);
   const [expandedRow, setExpandedRow] = useState(null);
+  const [collapsedPortfolios, setCollapsedPortfolios] = useState({});
   const [modalMode, setModalMode] = useState("create");
 
   const EMPTY = { portfolioId:"",name:"",quantity:"",purchasePrice:"",currentPrice:"",purchaseDate:"",startDate:"",endDate:"",investmentMethod:"",risk:"",funding:[{source:"",amount:""}],status:"Active",notes:"" };
@@ -2121,6 +2217,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   useEffect(() => {
     if (!navigationFilter?.portfolioId) return;
     setFilterPortfolio(navigationFilter.portfolioId);
+    if (navigationFilter?.status) setFilterStatus(navigationFilter.status);
   }, [navigationFilter]);
   const filteredInvestments = investments.filter((inv) => {
     const startRaw = inv.startDate || inv.purchaseDate || "";
@@ -2185,11 +2282,16 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
           if (invs.length === 0) return null;
           return (
             <div key={p.id} style={{ marginBottom:"24px" }}>
-              <div style={{ display:"flex",alignItems:"center",gap:"8px",marginBottom:"10px" }}>
+              <button
+                onClick={() => setCollapsedPortfolios(prev => ({ ...prev, [p.id]: !prev[p.id] }))}
+                style={{ display:"flex",alignItems:"center",gap:"8px",marginBottom:"10px",background:"none",border:"none",padding:0,cursor:"pointer",width:"fit-content" }}
+              >
+                <ChevronRight size={14} color={T.textMuted} style={{ transform:collapsedPortfolios[p.id]?"none":"rotate(90deg)",transition:"transform 0.2s" }} />
                 <FolderOpen size={14} color={T.textMuted}/>
                 <span style={{ fontSize:"0.75rem",fontWeight:600,color:T.textSecondary,textTransform:"uppercase",letterSpacing:"0.08em" }}>{p.name}</span>
                 <span style={{ fontSize:"0.7rem",color:T.textMuted }}>· {invs.length} {t.investments.toLowerCase()}</span>
-              </div>
+              </button>
+              {!collapsedPortfolios[p.id] && (
               <Card style={{ overflow:"hidden" }}>
                 <div className="overflow-x-auto">
                 <table style={{ width:"100%",minWidth:"980px",borderCollapse:"collapse",fontSize:"0.85rem" }}>
@@ -2276,13 +2378,14 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                 </table>
                 </div>
               </Card>
+              )}
             </div>
           );
         })
       }
 
       {showModal && (
-        <Modal title={modalMode==="create" ? t.addInvestment : `${t.view} ${t.investment}`} onClose={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>
+        <Modal title={modalMode==="create" ? t.addInvestment : `${t.view} ${t.investment}`} maxWidth="860px" onClose={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>
           {modalMode === "view" ? (
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"10px" }}>
               <ReadOnlyField label={t.portfolio} value={portfolios.find((p)=>p.id===form.portfolioId)?.name} />
@@ -2302,45 +2405,48 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
               <ReadOnlyField label="Created At" value={editItem?.created_at} />
             </div>
           ) : (
-            <>
-              <FormField label={t.portfolio} required>
-                <Select value={form.portfolioId} onChange={e=>f("portfolioId")(e.target.value)}
-                  options={portfolios.map(p=>({value:p.id,label:p.name}))} placeholder={t.selectPortfolio} isRTL={isRTL}/>
-              </FormField>
-              <FormField label={t.name} required><Input value={form.name} onChange={e=>f("name")(e.target.value)} isRTL={isRTL}/></FormField>
-              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"12px" }}>
+            <div style={{ padding:"4px 2px" }}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <FormField label={t.name} required><Input value={form.name} onChange={e=>f("name")(e.target.value)} isRTL={isRTL}/></FormField>
+                <FormField label={t.portfolio} required>
+                  <Select value={form.portfolioId} onChange={e=>f("portfolioId")(e.target.value)}
+                    options={portfolios.map(p=>({value:p.id,label:p.name}))} placeholder={t.selectPortfolio} isRTL={isRTL}/>
+                </FormField>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
                 <FormField label={t.quantity}><Input type="number" value={form.quantity} onChange={e=>f("quantity")(e.target.value)} isRTL={isRTL} placeholder="0"/></FormField>
                 <FormField label={t.purchasePrice}><Input type="number" value={form.purchasePrice} onChange={e=>f("purchasePrice")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
+                <FormField label={t.totalInvestmentValue}><Input value={totalInvestmentValue.toFixed(2)} isRTL={isRTL} readOnly style={{ background:"#e2e8f0", color:T.textSecondary }}/></FormField>
                 <FormField label={t.currentPrice}><Input type="number" value={form.currentPrice} onChange={e=>f("currentPrice")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField label={t.totalInvestmentValue}><Input value={totalInvestmentValue.toFixed(2)} isRTL={isRTL} readOnly style={{ background:"#f3f4f6" }}/></FormField>
-                <FormField label={t.purchaseDate}><Input type="date" value={form.purchaseDate} onChange={e=>f("purchaseDate")(e.target.value)} isRTL={isRTL}/></FormField>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField label={t.startDate}><Input type="date" value={form.startDate} onChange={e=>f("startDate")(e.target.value)} isRTL={isRTL}/></FormField>
-                <FormField label={t.endDate}><Input type="date" value={form.endDate} onChange={e=>f("endDate")(e.target.value)} isRTL={isRTL}/></FormField>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField label={t.risk}><Select value={form.risk} onChange={e=>f("risk")(e.target.value)} options={db?.settings?.riskLevels||[]} placeholder={t.selectRisk} isRTL={isRTL}/></FormField>
-                <FormField label={t.investmentMethod}><Select value={form.investmentMethod} onChange={e=>f("investmentMethod")(e.target.value)} options={methodOpts} placeholder={t.selectMethod} isRTL={isRTL}/></FormField>
               </div>
               <FormField label={t.splitFunding}>
                 <div style={{ display:"flex",flexDirection:"column",gap:"8px" }}>
                   {form.funding.map((row, idx)=>(
-                    <div key={idx} style={{ display:"grid",gridTemplateColumns:"1fr 140px 28px",gap:"8px",alignItems:"center" }}>
+                    <div key={idx} style={{ display:"grid",gridTemplateColumns:"1fr 120px 24px",gap:"6px",alignItems:"center" }}>
                       <Select value={row.source||""} onChange={e=>updateFunding(idx,"source",e.target.value)} options={db?.settings?.fundingSources||[]} placeholder={t.selectSource} isRTL={isRTL}/>
                       <Input type="number" value={row.amount||""} onChange={e=>updateFunding(idx,"amount",e.target.value)} isRTL={isRTL} placeholder="0.00"/>
-                      {form.funding.length>1 && <button onClick={()=>setForm(prev=>({ ...prev, funding: prev.funding.filter((_,i)=>i!==idx) }))} style={{ border:"none",background:"none",color:T.negative,cursor:"pointer",display:"flex" }}><Trash2 size={13}/></button>}
+                      {form.funding.length>1 && <button onClick={()=>setForm(prev=>({ ...prev, funding: prev.funding.filter((_,i)=>i!==idx) }))} style={{ border:"none",background:"none",color:T.negative,cursor:"pointer",display:"flex",padding:0 }}><Trash2 size={12}/></button>}
                     </div>
                   ))}
                   <Btn size="sm" variant="secondary" onClick={()=>setForm(prev=>({ ...prev, funding:[...prev.funding,{source:"",amount:""}] }))}>{t.addSplit}</Btn>
+                  <div style={{ padding:"8px", background:"#e2e8f0", borderRadius:"8px", color:T.textSecondary, fontSize:"0.8rem", fontWeight:600 }}>
+                    {t.totalSplitAmount}: {splitFundingTotal.toFixed(2)}
+                  </div>
                 </div>
               </FormField>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <FormField label={t.purchaseDate}><Input type="date" value={form.purchaseDate} onChange={e=>f("purchaseDate")(e.target.value)} isRTL={isRTL}/></FormField>
+                <FormField label={t.startDate}><Input type="date" value={form.startDate} onChange={e=>f("startDate")(e.target.value)} isRTL={isRTL}/></FormField>
+                <FormField label={t.endDate}><Input type="date" value={form.endDate} onChange={e=>f("endDate")(e.target.value)} isRTL={isRTL}/></FormField>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <FormField label={t.risk}><Select value={form.risk} onChange={e=>f("risk")(e.target.value)} options={db?.settings?.riskLevels||[]} placeholder={t.selectRisk} isRTL={isRTL}/></FormField>
+                <FormField label={t.status}><Select value={form.status} onChange={e=>f("status")(e.target.value)} options={statusOpts} isRTL={isRTL}/></FormField>
+                <FormField label={t.investmentMethod}><Select value={form.investmentMethod} onChange={e=>f("investmentMethod")(e.target.value)} options={methodOpts} placeholder={t.selectMethod} isRTL={isRTL}/></FormField>
+              </div>
               {formError && <div style={{ color:T.negative, fontSize:"0.78rem", marginTop:"-6px", marginBottom:"10px" }}>{formError}</div>}
-              <FormField label={t.status}><Select value={form.status} onChange={e=>f("status")(e.target.value)} options={statusOpts} isRTL={isRTL}/></FormField>
               <FormField label={t.notes}><Input value={form.notes} onChange={e=>f("notes")(e.target.value)} isRTL={isRTL} placeholder={`(${t.optional})`}/></FormField>
-            </>
+            </div>
           )}
           <div style={{ display:"flex",justifyContent:"flex-end",gap:"10px",marginTop:"8px" }}>
             {modalMode==="view" && (<>
@@ -2384,36 +2490,31 @@ function InvestmentDetailExpanded({ inv, txs, db }) {
   const expense = txExpense(txs);
   const currency = portfolioCurrency(db, inv.portfolioId);
   return (
-    <div style={{ padding:"16px 24px",borderTop:`2px solid ${T.emerald}20` }}>
-      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"20px" }}>
+    <div style={{ padding:"12px 16px",borderTop:`2px solid ${T.emerald}20` }}>
+      <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:"12px" }}>
         {/* Metrics */}
         <div>
-          <div style={{ fontSize:"0.7rem",fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:"10px",display:"flex",alignItems:"center",gap:"5px" }}>
+          <div style={{ fontSize:"0.68rem",fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:"8px",display:"flex",alignItems:"center",gap:"5px" }}>
             <BookOpen size={11}/>{t.fundingBreakdown}
           </div>
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px" }}>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px" }}>
             {[
               { label:t.principal,    val:fmtMoney(costBasis(inv),{currency}) },
               { label:t.currentValue, val:fmtMoney(curVal(inv),{currency}) },
               { label:t.totalIncome,  val:fmtMoney(income,{currency}),  color:T.positive },
               { label:"Expenses",     val:fmtMoney(expense,{currency}), color:T.negative },
             ].map(m=>(
-              <div key={m.label} style={{ padding:"8px 10px",background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:"7px" }}>
-                <div style={{ fontSize:"0.65rem",color:T.textMuted,marginBottom:"2px" }}>{m.label}</div>
-                <div style={{ fontSize:"0.88rem",fontWeight:600,color:m.color||T.textPrimary }}>{m.val}</div>
+              <div key={m.label} style={{ padding:"7px 8px",background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:"7px" }}>
+                <div style={{ fontSize:"0.62rem",color:T.textMuted,marginBottom:"2px" }}>{m.label}</div>
+                <div style={{ fontSize:"0.82rem",fontWeight:600,color:m.color||T.textPrimary }}>{m.val}</div>
               </div>
             ))}
           </div>
-          {(inv.funding||[]).length > 0 && (
-            <div style={{ marginTop:"8px",fontSize:"0.75rem",color:T.textSecondary }}>
-              {t.source}: {(inv.funding||[]).map((item, idx)=><strong key={idx} style={{ marginInlineEnd:"10px" }}>{item.source || "—"}{item.amount ? ` (${fmtMoney(item.amount,{currency})})` : ""}</strong>)}
-            </div>
-          )}
         </div>
 
         {/* Recent transactions */}
         <div>
-          <div style={{ fontSize:"0.7rem",fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:"10px",display:"flex",alignItems:"center",gap:"5px" }}>
+          <div style={{ fontSize:"0.68rem",fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:"8px",display:"flex",alignItems:"center",gap:"5px" }}>
             <DollarSign size={11}/>{t.transactionLedger}
           </div>
           {txs.length===0
@@ -2421,10 +2522,10 @@ function InvestmentDetailExpanded({ inv, txs, db }) {
             : (
               <div style={{ maxHeight:"140px",overflowY:"auto",borderRadius:"8px",border:`1px solid ${T.border}` }}>
                 {txs.slice(0,6).map((tx,i)=>(
-                  <div key={tx.id||i} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 10px",borderBottom:i<txs.length-1?`1px solid ${T.border}`:"none",fontSize:"0.78rem" }}>
+                  <div key={tx.id||i} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px",borderBottom:i<txs.length-1?`1px solid ${T.border}`:"none",fontSize:"0.74rem" }}>
                     <div>
                       <span style={{ fontWeight:500,color:T.textPrimary }}>{tx.category}</span>
-                      <span style={{ color:T.textMuted,marginLeft:"6px",fontSize:"0.7rem" }}>{tx.date}</span>
+                      <span style={{ color:T.textMuted,marginLeft:"5px",fontSize:"0.66rem" }}>{tx.date}</span>
                     </div>
                     <span style={{ fontWeight:600,color:tx.type==="income"?T.positive:T.negative }}>
                       {tx.type==="income"?"+":"-"}{fmtMoney(tx.amount,{currency:portfolioCurrency(db, tx.portfolioId)})}
@@ -2434,6 +2535,25 @@ function InvestmentDetailExpanded({ inv, txs, db }) {
               </div>
             )
           }
+        </div>
+
+        {/* Funding sources */}
+        <div>
+          <div style={{ fontSize:"0.68rem",fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:"8px" }}>
+            {t.source}
+          </div>
+          {(inv.funding||[]).length === 0 ? (
+            <EmptyState text={t.noRecords} />
+          ) : (
+            <div style={{ border:`1px solid ${T.border}`, borderRadius:"8px", overflow:"hidden" }}>
+              {(inv.funding||[]).map((item, idx) => (
+                <div key={idx} style={{ display:"flex",justifyContent:"space-between",gap:"8px",padding:"7px 8px",fontSize:"0.74rem",borderBottom:idx<(inv.funding||[]).length-1?`1px solid ${T.border}`:"none" }}>
+                  <span style={{ color:T.textPrimary, fontWeight:500 }}>{item.source || "—"}</span>
+                  <span style={{ color:T.textSecondary }}>{item.amount ? fmtMoney(item.amount,{currency}) : "—"}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -3475,12 +3595,12 @@ function UserManagementTab() {
         <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.82rem" }}>
           <thead>
             <tr style={{ background:"#f8fafc", borderBottom:`1px solid ${T.border}` }}>
-              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>Name</th>
-              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>Email</th>
-              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>Last Login</th>
-              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>Role</th>
-              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>Status</th>
-              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>Actions</th>
+              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersName}</th>
+              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersEmail}</th>
+              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersLastLogin}</th>
+              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersRole}</th>
+              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersStatus}</th>
+              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersActions}</th>
             </tr>
           </thead>
           <tbody>
@@ -3528,7 +3648,7 @@ function UserManagementTab() {
                             whiteSpace:"nowrap",
                           }}
                         >
-                          {blocked ? "Unblock" : "Block"}
+                          {blocked ? t.unblock : t.block}
                         </Btn>                        
                         {canDelete && (
                           <Btn
@@ -3544,7 +3664,7 @@ function UserManagementTab() {
                               whiteSpace:"nowrap",
                             }}
                           >
-                            Delete
+                            {t.delete}
                           </Btn>
                         )}
                       </div>
@@ -3600,8 +3720,8 @@ function MainApp() {
     setInvestmentPrefill({ portfolioId });
   };
 
-  const goToInvestmentsForPortfolio = (portfolio) => {
-    setInvestmentNavigationFilter({ portfolioId: portfolio.id, stamp: Date.now() });
+  const goToInvestmentsForPortfolio = (portfolio, options = {}) => {
+    setInvestmentNavigationFilter({ portfolioId: portfolio.id, status: options.status || "", stamp: Date.now() });
     setActiveTab("investments");
   };
 
@@ -3687,7 +3807,7 @@ export default function App() {
 
 function AppContent() {
   const { user, token, dbLoading, db, t, usersConfigReady, userSyncDone } = useApp();
-  if (!user || !token) return <LoginPage/>;
+  if (!user?.id || !token) return <LoginPage/>;
   if (!usersConfigReady || !userSyncDone) return <LoadingScreen message={t?.loading||"LOADING..."}/>;
   if (dbLoading || !db) return <LoadingScreen message={t?.loading||"LOADING..."}/>;
   return <MainApp/>;
