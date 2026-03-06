@@ -2368,7 +2368,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                           </tr>
                           {isExpanded && (
                             <tr key={inv.id+"_exp"}>
-                              <td colSpan={8} style={{ padding:"0",background:T.bgApp }}>
+                              <td colSpan={11} style={{ padding:"0",background:"transparent" }}>
                                 <InvestmentDetailExpanded inv={inv} txs={txs} db={db}/>
                               </td>
                             </tr>
@@ -2492,8 +2492,8 @@ function InvestmentDetailExpanded({ inv, txs, db }) {
   const expense = txExpense(txs);
   const currency = portfolioCurrency(db, inv.portfolioId);
   return (
-    <div style={{ padding:"20px 24px", border:`2px solid #e2e8f0`, borderTop:`2px solid #cbd5e1`, borderBottom:`2px solid #cbd5e1`, borderRadius:"10px", boxShadow:"inset 0 1px 0 rgba(148,163,184,0.24)" }}>
-      <div className="invest-exp-grid" style={{ width:"100%", display:"grid", gridTemplateColumns:"repeat(3, minmax(0, 1fr))", gap:"14px" }}>
+    <div style={{ padding:"16px 20px", background:"rgba(248,250,252,0.75)", borderTop:"1px solid rgba(148,163,184,0.22)" }}>
+      <div className="invest-exp-grid" style={{ width:"100%", display:"grid", gridTemplateColumns:"repeat(3, minmax(0, 1fr))", gap:"14px", alignItems:"start" }}>
         {/* Metrics */}
         <div>
           <div style={{ fontSize:"0.68rem",fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:"8px",display:"flex",alignItems:"center",gap:"5px" }}>
