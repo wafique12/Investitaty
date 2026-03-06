@@ -2378,7 +2378,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
       }
 
       {showModal && (
-        <Modal title={modalMode==="create" ? t.addInvestment : `${t.view} ${t.investment}`} maxWidth="960px" onClose={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>
+        <Modal title={modalMode==="create" ? t.addInvestment : `${t.view} ${t.investment}`} maxWidth="860px" onClose={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>
           {modalMode === "view" ? (
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"10px" }}>
               <ReadOnlyField label={t.portfolio} value={portfolios.find((p)=>p.id===form.portfolioId)?.name} />
@@ -2398,16 +2398,16 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
               <ReadOnlyField label="Created At" value={editItem?.created_at} />
             </div>
           ) : (
-            <>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div style={{ padding:"4px 2px" }}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 <FormField label={t.name} required><Input value={form.name} onChange={e=>f("name")(e.target.value)} isRTL={isRTL}/></FormField>
                 <FormField label={t.portfolio} required>
                   <Select value={form.portfolioId} onChange={e=>f("portfolioId")(e.target.value)}
                     options={portfolios.map(p=>({value:p.id,label:p.name}))} placeholder={t.selectPortfolio} isRTL={isRTL}/>
                 </FormField>
               </div>
-              <FormField label={t.quantity}><Input type="number" value={form.quantity} onChange={e=>f("quantity")(e.target.value)} isRTL={isRTL} placeholder="0"/></FormField>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                <FormField label={t.quantity}><Input type="number" value={form.quantity} onChange={e=>f("quantity")(e.target.value)} isRTL={isRTL} placeholder="0"/></FormField>
                 <FormField label={t.purchasePrice}><Input type="number" value={form.purchasePrice} onChange={e=>f("purchasePrice")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
                 <FormField label={t.totalInvestmentValue}><Input value={totalInvestmentValue.toFixed(2)} isRTL={isRTL} readOnly style={{ background:"#e2e8f0", color:T.textSecondary }}/></FormField>
                 <FormField label={t.currentPrice}><Input type="number" value={form.currentPrice} onChange={e=>f("currentPrice")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
@@ -2415,31 +2415,31 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
               <FormField label={t.splitFunding}>
                 <div style={{ display:"flex",flexDirection:"column",gap:"8px" }}>
                   {form.funding.map((row, idx)=>(
-                    <div key={idx} style={{ display:"grid",gridTemplateColumns:"1fr 140px 28px",gap:"8px",alignItems:"center" }}>
+                    <div key={idx} style={{ display:"grid",gridTemplateColumns:"1fr 120px 24px",gap:"6px",alignItems:"center" }}>
                       <Select value={row.source||""} onChange={e=>updateFunding(idx,"source",e.target.value)} options={db?.settings?.fundingSources||[]} placeholder={t.selectSource} isRTL={isRTL}/>
                       <Input type="number" value={row.amount||""} onChange={e=>updateFunding(idx,"amount",e.target.value)} isRTL={isRTL} placeholder="0.00"/>
-                      {form.funding.length>1 && <button onClick={()=>setForm(prev=>({ ...prev, funding: prev.funding.filter((_,i)=>i!==idx) }))} style={{ border:"none",background:"none",color:T.negative,cursor:"pointer",display:"flex" }}><Trash2 size={13}/></button>}
+                      {form.funding.length>1 && <button onClick={()=>setForm(prev=>({ ...prev, funding: prev.funding.filter((_,i)=>i!==idx) }))} style={{ border:"none",background:"none",color:T.negative,cursor:"pointer",display:"flex",padding:0 }}><Trash2 size={12}/></button>}
                     </div>
                   ))}
                   <Btn size="sm" variant="secondary" onClick={()=>setForm(prev=>({ ...prev, funding:[...prev.funding,{source:"",amount:""}] }))}>{t.addSplit}</Btn>
-                  <div style={{ padding:"10px", background:"#e2e8f0", borderRadius:"8px", color:T.textSecondary, fontSize:"0.84rem", fontWeight:600 }}>
+                  <div style={{ padding:"8px", background:"#e2e8f0", borderRadius:"8px", color:T.textSecondary, fontSize:"0.8rem", fontWeight:600 }}>
                     {t.totalSplitAmount}: {splitFundingTotal.toFixed(2)}
                   </div>
                 </div>
               </FormField>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 <FormField label={t.purchaseDate}><Input type="date" value={form.purchaseDate} onChange={e=>f("purchaseDate")(e.target.value)} isRTL={isRTL}/></FormField>
                 <FormField label={t.startDate}><Input type="date" value={form.startDate} onChange={e=>f("startDate")(e.target.value)} isRTL={isRTL}/></FormField>
                 <FormField label={t.endDate}><Input type="date" value={form.endDate} onChange={e=>f("endDate")(e.target.value)} isRTL={isRTL}/></FormField>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 <FormField label={t.risk}><Select value={form.risk} onChange={e=>f("risk")(e.target.value)} options={db?.settings?.riskLevels||[]} placeholder={t.selectRisk} isRTL={isRTL}/></FormField>
                 <FormField label={t.status}><Select value={form.status} onChange={e=>f("status")(e.target.value)} options={statusOpts} isRTL={isRTL}/></FormField>
                 <FormField label={t.investmentMethod}><Select value={form.investmentMethod} onChange={e=>f("investmentMethod")(e.target.value)} options={methodOpts} placeholder={t.selectMethod} isRTL={isRTL}/></FormField>
               </div>
               {formError && <div style={{ color:T.negative, fontSize:"0.78rem", marginTop:"-6px", marginBottom:"10px" }}>{formError}</div>}
               <FormField label={t.notes}><Input value={form.notes} onChange={e=>f("notes")(e.target.value)} isRTL={isRTL} placeholder={`(${t.optional})`}/></FormField>
-            </>
+            </div>
           )}
           <div style={{ display:"flex",justifyContent:"flex-end",gap:"10px",marginTop:"8px" }}>
             {modalMode==="view" && (<>
