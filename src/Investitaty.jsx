@@ -2088,27 +2088,30 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
             <Card key={p.id} style={{ overflow:"hidden" }}>
               <div style={{ height:"4px",background:`linear-gradient(90deg,${color},${color}80)` }}/>
               <div style={{ padding:"18px" }}>
-                <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"14px" }}>
-                  <div>
-                    <div style={{ fontSize:"1rem",fontWeight:600,color:T.textPrimary,marginBottom:"3px" }}>{p.name}</div>
-                    <div style={{ display:"flex",gap:"6px",alignItems:"center", flexWrap:"wrap" }}>
-                      <Chip color={color}>{p.type}</Chip>
-                      <Chip color={T.info}>{p.risk}</Chip>
-                      <Chip color={statusColor(p.status)}>{p.status || "—"}</Chip>
+                <div style={{ marginBottom:"12px" }}>
+                  <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",gap:"10px",marginBottom:"8px" }}>
+                    <div style={{ display:"flex",alignItems:"center",gap:"7px",minWidth:0 }}>
+                      <FolderOpen size={14} color={T.textMuted}/>
+                      <div style={{ fontSize:"1rem",fontWeight:600,color:T.textPrimary,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{p.name}</div>
+                    </div>
+                    <div style={{ display:"flex",gap:"4px",flexShrink:0 }}>
+                      <button onClick={()=>openView(p)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}
+                        onMouseEnter={e=>{e.currentTarget.style.background=T.bgApp; e.currentTarget.style.color=T.warning;}} onMouseLeave={e=>{e.currentTarget.style.background="none"; e.currentTarget.style.color=T.textMuted;}}>
+                        <Eye size={14}/>
+                      </button>
+                      <button onClick={()=>onQuickAddInvestment?.(p.id)} title={t.addInvestmentAction} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.emerald} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><Plus size={14}/></button>
+                      <button onClick={()=>onViewInvestments?.(p)} title={t.investments} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.info} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><ListTree size={14}/></button>
+                      <button onClick={()=>p.is_hidden?unarchiveItem("portfolios",p.id):archiveItem("portfolios",p.id)} title={p.is_hidden ? t.unarchive : t.archivePortfolio} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.warning} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>{p.is_hidden?<Eye size={14}/>:<EyeOff size={14}/>}</button>
+                      <button onClick={()=>{ if(window.confirm(t.deleteCascadeWarning)) hardDeleteItem("portfolios",p.id); }} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}
+                        onMouseEnter={e=>e.currentTarget.style.color=T.negative} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
+                        <Trash2 size={14}/>
+                      </button>
                     </div>
                   </div>
-                  <div style={{ display:"flex",gap:"4px" }}>
-                    <button onClick={()=>openView(p)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}
-                      onMouseEnter={e=>{e.currentTarget.style.background=T.bgApp; e.currentTarget.style.color=T.warning;}} onMouseLeave={e=>{e.currentTarget.style.background="none"; e.currentTarget.style.color=T.textMuted;}}>
-                      <Eye size={14}/>
-                    </button>
-                    <button onClick={()=>onQuickAddInvestment?.(p.id)} title={t.addInvestmentAction} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.emerald} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><Plus size={14}/></button>
-                    <button onClick={()=>onViewInvestments?.(p)} title={t.investments} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.info} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><ListTree size={14}/></button>
-                    <button onClick={()=>p.is_hidden?unarchiveItem("portfolios",p.id):archiveItem("portfolios",p.id)} title={p.is_hidden ? t.unarchive : t.archivePortfolio} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.warning} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>{p.is_hidden?<Eye size={14}/>:<EyeOff size={14}/>}</button>
-                    <button onClick={()=>{ if(window.confirm(t.deleteCascadeWarning)) hardDeleteItem("portfolios",p.id); }} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}
-                      onMouseEnter={e=>e.currentTarget.style.color=T.negative} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
-                      <Trash2 size={14}/>
-                    </button>
+                  <div style={{ display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap",paddingLeft:isRTL?0:"21px",paddingRight:isRTL?"21px":0 }}>
+                    <Chip color={color}>{p.type}</Chip>
+                    <Chip color={T.info}>{p.risk}</Chip>
+                    <Chip color={statusColor(p.status)}>{p.status || "—"}</Chip>
                   </div>
                 </div>
                 <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:"10px",marginBottom:"14px" }}>
