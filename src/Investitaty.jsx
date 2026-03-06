@@ -2139,6 +2139,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   const [editItem, setEditItem] = useState(null);
   const [editingPrice, setEditingPrice] = useState(null);
   const [expandedRow, setExpandedRow] = useState(null);
+  const [collapsedPortfolios, setCollapsedPortfolios] = useState({});
   const [modalMode, setModalMode] = useState("create");
 
   const EMPTY = { portfolioId:"",name:"",quantity:"",purchasePrice:"",currentPrice:"",purchaseDate:"",startDate:"",endDate:"",investmentMethod:"",risk:"",funding:[{source:"",amount:""}],status:"Active",notes:"" };
@@ -2281,11 +2282,16 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
           if (invs.length === 0) return null;
           return (
             <div key={p.id} style={{ marginBottom:"24px" }}>
-              <div style={{ display:"flex",alignItems:"center",gap:"8px",marginBottom:"10px" }}>
+              <button
+                onClick={() => setCollapsedPortfolios(prev => ({ ...prev, [p.id]: !prev[p.id] }))}
+                style={{ display:"flex",alignItems:"center",gap:"8px",marginBottom:"10px",background:"none",border:"none",padding:0,cursor:"pointer",width:"fit-content" }}
+              >
+                <ChevronRight size={14} color={T.textMuted} style={{ transform:collapsedPortfolios[p.id]?"none":"rotate(90deg)",transition:"transform 0.2s" }} />
                 <FolderOpen size={14} color={T.textMuted}/>
                 <span style={{ fontSize:"0.75rem",fontWeight:600,color:T.textSecondary,textTransform:"uppercase",letterSpacing:"0.08em" }}>{p.name}</span>
                 <span style={{ fontSize:"0.7rem",color:T.textMuted }}>· {invs.length} {t.investments.toLowerCase()}</span>
-              </div>
+              </button>
+              {!collapsedPortfolios[p.id] && (
               <Card style={{ overflow:"hidden" }}>
                 <div className="overflow-x-auto">
                 <table style={{ width:"100%",minWidth:"980px",borderCollapse:"collapse",fontSize:"0.85rem" }}>
@@ -2372,6 +2378,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                 </table>
                 </div>
               </Card>
+              )}
             </div>
           );
         })
@@ -2483,36 +2490,31 @@ function InvestmentDetailExpanded({ inv, txs, db }) {
   const expense = txExpense(txs);
   const currency = portfolioCurrency(db, inv.portfolioId);
   return (
-    <div style={{ padding:"16px 24px",borderTop:`2px solid ${T.emerald}20` }}>
-      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"20px" }}>
+    <div style={{ padding:"12px 16px",borderTop:`2px solid ${T.emerald}20` }}>
+      <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:"12px" }}>
         {/* Metrics */}
         <div>
-          <div style={{ fontSize:"0.7rem",fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:"10px",display:"flex",alignItems:"center",gap:"5px" }}>
+          <div style={{ fontSize:"0.68rem",fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:"8px",display:"flex",alignItems:"center",gap:"5px" }}>
             <BookOpen size={11}/>{t.fundingBreakdown}
           </div>
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px" }}>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px" }}>
             {[
               { label:t.principal,    val:fmtMoney(costBasis(inv),{currency}) },
               { label:t.currentValue, val:fmtMoney(curVal(inv),{currency}) },
               { label:t.totalIncome,  val:fmtMoney(income,{currency}),  color:T.positive },
               { label:"Expenses",     val:fmtMoney(expense,{currency}), color:T.negative },
             ].map(m=>(
-              <div key={m.label} style={{ padding:"8px 10px",background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:"7px" }}>
-                <div style={{ fontSize:"0.65rem",color:T.textMuted,marginBottom:"2px" }}>{m.label}</div>
-                <div style={{ fontSize:"0.88rem",fontWeight:600,color:m.color||T.textPrimary }}>{m.val}</div>
+              <div key={m.label} style={{ padding:"7px 8px",background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:"7px" }}>
+                <div style={{ fontSize:"0.62rem",color:T.textMuted,marginBottom:"2px" }}>{m.label}</div>
+                <div style={{ fontSize:"0.82rem",fontWeight:600,color:m.color||T.textPrimary }}>{m.val}</div>
               </div>
             ))}
           </div>
-          {(inv.funding||[]).length > 0 && (
-            <div style={{ marginTop:"8px",fontSize:"0.75rem",color:T.textSecondary }}>
-              {t.source}: {(inv.funding||[]).map((item, idx)=><strong key={idx} style={{ marginInlineEnd:"10px" }}>{item.source || "—"}{item.amount ? ` (${fmtMoney(item.amount,{currency})})` : ""}</strong>)}
-            </div>
-          )}
         </div>
 
         {/* Recent transactions */}
         <div>
-          <div style={{ fontSize:"0.7rem",fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:"10px",display:"flex",alignItems:"center",gap:"5px" }}>
+          <div style={{ fontSize:"0.68rem",fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:"8px",display:"flex",alignItems:"center",gap:"5px" }}>
             <DollarSign size={11}/>{t.transactionLedger}
           </div>
           {txs.length===0
@@ -2520,10 +2522,10 @@ function InvestmentDetailExpanded({ inv, txs, db }) {
             : (
               <div style={{ maxHeight:"140px",overflowY:"auto",borderRadius:"8px",border:`1px solid ${T.border}` }}>
                 {txs.slice(0,6).map((tx,i)=>(
-                  <div key={tx.id||i} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 10px",borderBottom:i<txs.length-1?`1px solid ${T.border}`:"none",fontSize:"0.78rem" }}>
+                  <div key={tx.id||i} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px",borderBottom:i<txs.length-1?`1px solid ${T.border}`:"none",fontSize:"0.74rem" }}>
                     <div>
                       <span style={{ fontWeight:500,color:T.textPrimary }}>{tx.category}</span>
-                      <span style={{ color:T.textMuted,marginLeft:"6px",fontSize:"0.7rem" }}>{tx.date}</span>
+                      <span style={{ color:T.textMuted,marginLeft:"5px",fontSize:"0.66rem" }}>{tx.date}</span>
                     </div>
                     <span style={{ fontWeight:600,color:tx.type==="income"?T.positive:T.negative }}>
                       {tx.type==="income"?"+":"-"}{fmtMoney(tx.amount,{currency:portfolioCurrency(db, tx.portfolioId)})}
@@ -2533,6 +2535,25 @@ function InvestmentDetailExpanded({ inv, txs, db }) {
               </div>
             )
           }
+        </div>
+
+        {/* Funding sources */}
+        <div>
+          <div style={{ fontSize:"0.68rem",fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:"8px" }}>
+            {t.source}
+          </div>
+          {(inv.funding||[]).length === 0 ? (
+            <EmptyState text={t.noRecords} />
+          ) : (
+            <div style={{ border:`1px solid ${T.border}`, borderRadius:"8px", overflow:"hidden" }}>
+              {(inv.funding||[]).map((item, idx) => (
+                <div key={idx} style={{ display:"flex",justifyContent:"space-between",gap:"8px",padding:"7px 8px",fontSize:"0.74rem",borderBottom:idx<(inv.funding||[]).length-1?`1px solid ${T.border}`:"none" }}>
+                  <span style={{ color:T.textPrimary, fontWeight:500 }}>{item.source || "—"}</span>
+                  <span style={{ color:T.textSecondary }}>{item.amount ? fmtMoney(item.amount,{currency}) : "—"}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
