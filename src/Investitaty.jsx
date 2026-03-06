@@ -233,7 +233,7 @@ const TRANSLATIONS = {
     positions: "Positions",
     allocation: "Allocation",
     totalValue: "Total Value",
-    activeInvestmentValue: "Active Investment Value",
+    activeInvestmentValue: "Active Value",
     usersName: "Name",
     usersEmail: "Email",
     usersLastLogin: "Last Login",
@@ -2026,20 +2026,18 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
                     </button>
                   </div>
                 </div>
-                <div style={{ marginBottom:"14px", display:"flex", flexDirection:"column", gap:"8px" }}>
+                <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:"10px",marginBottom:"14px" }}>
                   <button
                     onClick={() => onViewInvestments?.(p, { status: "Active" })}
-                    style={{ border:"none", background:"transparent", padding:0, textAlign:isRTL?"right":"left", cursor:"pointer", color:T.info }}
+                    style={{ padding:"10px",background:T.bgApp,borderRadius:"8px",border:"none",cursor:"pointer",textAlign:isRTL?"right":"left" }}
+                    onMouseEnter={e=>{ e.currentTarget.style.background="#e2e8f0"; }}
+                    onMouseLeave={e=>{ e.currentTarget.style.background=T.bgApp; }}
                   >
                     <div style={{ fontSize:"0.68rem",color:T.textMuted,marginBottom:"3px" }}>{t.activeInvestmentValue}</div>
-                    <div style={{ fontSize:"1.02rem",fontWeight:700,textDecoration:"underline" }}>{fmtMoney(activeValue,{compact:true,currency:p.currency||"USD"})}</div>
+                    <div style={{ fontSize:"0.95rem",fontWeight:600,color:T.info,textDecoration:"underline" }}>{fmtMoney(activeValue,{compact:true,currency:p.currency||"USD"})}</div>
                   </button>
-                  <div style={{ fontSize:"0.74rem", color:T.textMuted }}>
-                    {t.totalPortfolioValue}: {fmtMoney(totalValue,{compact:true,currency:p.currency||"USD"})}
-                  </div>
-                </div>
-                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"10px",marginBottom:"14px" }}>
                   {[
+                    { label:t.totalValue,  val:fmtMoney(totalValue,{compact:true,currency:p.currency||"USD"}) },
                     { label:t.roi,         val:`${pRoi>=0?"+":""}${pRoi.toFixed(1)}%`, color:pRoi>=0?T.positive:T.negative },
                     { label:t.positions,   val:invs.length },
                     { label:t.totalIncome, val:fmtMoney(pIncome,{compact:true,currency:p.currency||"USD"}) },
