@@ -6,9 +6,10 @@ import {
   TrendingUp, Wallet, DollarSign, BarChart2, Globe, LogOut,
   Cloud, Shield, Layers, Tag, FolderOpen, ArrowUpRight, PieChart as PieChartIcon,
   ArrowDownRight, Eye, EyeOff, AlertCircle, CheckCircle2,
-  Menu, Search, Landmark, ListTree, CircleDollarSign, Lock, Unlock, Undo2,
+  Menu, Search, Landmark, ListTree, CircleDollarSign, Lock, Unlock, Undo2, RotateCcw,
 } from "lucide-react";
 import { supabase, hasSupabaseConfig, hasSupabaseClient } from "./lib/supabaseClient";
+import BackupService from "./services/BackupService";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONFIG
@@ -23,7 +24,10 @@ const REQUIRED_SCOPES = [
 const DB_FILENAME = "investitaty_db.json";
 const AUTH_STORAGE_KEY = "investitaty_auth_v1";
 const AUTH_CONSENT_STORAGE_KEY = "investitaty_auth_consent_v1";
+const AUTH_LOGIN_DAY_KEY = "investitaty_auth_login_day_v1";
 const TAB_STORAGE_KEY = "investitaty_active_tab_v1";
+const SESSION_EXPIRED_NOTICE_KEY = "investitaty_session_expired_notice_v1";
+const INACTIVITY_TIMEOUT_MS = 20 * 60 * 1000;
 const OWNER_PROTECTED_EMAIL = "wafique22@gmail.com";
 const ARCHIVED_FILTER = "__archived__";
 
@@ -260,6 +264,14 @@ const TRANSLATIONS = {
     failedGAPI: "Failed to load Google API.",
     drivePermissionRequired: "Please grant Google Drive access to enable reading and updating your investment files.",
     failedDrive: "Failed to access Google Drive. Please try again.",
+    backupTitle: "Backup",
+    backupInfo: "Last backup date",
+    backupNow: "Backup Now",
+    backupRestoreConfirm: "Restore this backup and replace your current data?",
+    backupRestoreSuccess: "Backup restored successfully.",
+    backupNoDate: "No backup yet",
+    backupNoItems: "No backups available.",
+    sessionExpiredSecurity: "Session expired for your security",
     syncFailed: "Sync failed. Changes may not be saved.",
     days: "d",
     overdue: "Overdue",
@@ -475,6 +487,14 @@ const TRANSLATIONS = {
     failedGAPI: "فشل تحميل Google API.",
     drivePermissionRequired: "يرجى منح صلاحية الوصول لـ Google Drive لتتمكن من قراءة وتحديث ملفات الاستثمارات الخاصة بك.",
     failedDrive: "فشل الوصول إلى Google Drive.",
+    backupTitle: "النسخ الاحتياطي",
+    backupInfo: "تاريخ آخر نسخة احتياطية",
+    backupNow: "نسخ احتياطي الآن",
+    backupRestoreConfirm: "هل تريد استعادة هذه النسخة واستبدال البيانات الحالية؟",
+    backupRestoreSuccess: "تمت استعادة النسخة الاحتياطية بنجاح.",
+    backupNoDate: "لا توجد نسخة احتياطية بعد",
+    backupNoItems: "لا توجد نسخ احتياطية متاحة.",
+    sessionExpiredSecurity: "انتهت الجلسة حفاظًا على أمانك",
     syncFailed: "فشلت المزامنة. ربما لم تُحفظ التغييرات.",
     days: "يوم",
     overdue: "متأخر",
@@ -727,6 +747,24 @@ function useGoogleAuth(lang = "en") {
   const [hasGrantedConsent, setHasGrantedConsent] = useState(() => localStorage.getItem(AUTH_CONSENT_STORAGE_KEY) === "true");
 
   useEffect(() => {
+    try {
+      const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+      const loginDay = localStorage.getItem(AUTH_LOGIN_DAY_KEY);
+      if (!raw || !loginDay) return;
+      const today = new Date().toISOString().slice(0, 10);
+      if (today !== loginDay) {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+        localStorage.removeItem(AUTH_LOGIN_DAY_KEY);
+        localStorage.setItem(SESSION_EXPIRED_NOTICE_KEY, "1");
+        setUser(null);
+        setToken(null);
+      }
+    } catch (_) {
+      // noop
+    }
+  }, []);
+
+  useEffect(() => {
     let gisLoaded = false;
     let gapiLoaded = false;
     const trySetReady = () => { if (gisLoaded && gapiLoaded) setGapiReady(true); };
@@ -796,6 +834,7 @@ function useGoogleAuth(lang = "en") {
             const userInfo = await userRes.json();
             const normalizedUser = { ...userInfo, id: userInfo?.id || userInfo?.sub || null };
             setUser(normalizedUser); setToken(accessToken);
+            localStorage.setItem(AUTH_LOGIN_DAY_KEY, new Date().toISOString().slice(0, 10));
           } catch (err) {
             setAuthError("Signed in but could not fetch profile. Check API key.");
             setToken(accessToken);
@@ -810,6 +849,7 @@ function useGoogleAuth(lang = "en") {
     if (token) { try { window.google.accounts.oauth2.revoke(token); } catch(_) {} }
     localStorage.removeItem(AUTH_STORAGE_KEY);
     localStorage.removeItem(AUTH_CONSENT_STORAGE_KEY);
+    localStorage.removeItem(AUTH_LOGIN_DAY_KEY);
     setHasGrantedConsent(false);
     setUser(null); setToken(null); setAuthError(null); tokenClientRef.current = null;
   }, [token]);
@@ -839,18 +879,66 @@ function AppProvider({ children }) {
   const [syncError, setSyncError] = useState(null);
   const [dbLoading, setDbLoading] = useState(false);
   const [supabaseSessionReady, setSupabaseSessionReady] = useState(!hasSupabaseClient);
+  const [backupFiles, setBackupFiles] = useState([]);
+  const [lastBackupAt, setLastBackupAt] = useState(() => BackupService.getStoredMeta()?.lastBackupAt || null);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const inactivityTimerRef = useRef(null);
   const saveTimerRef = useRef(null);
 
   const clearLocalSessionState = useCallback((shouldSignOut = false) => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
     setDb(null);
     setFileId(null);
     setSyncError(null);
     setDbLoading(false);
     setGatekeeperError(null);
     setUserSyncDone(false);
+    setBackupFiles([]);
     if (shouldSignOut) auth.signOut();
   }, [auth]);
+
+  const fetchBackups = useCallback(async () => {
+    if (!auth.token) return [];
+    const folderId = await BackupService.findOrCreateBackupFolder(auth.token);
+    const files = await BackupService.listBackups(auth.token, folderId);
+    setBackupFiles(files.slice(0, BackupService.MAX_BACKUPS));
+    const localMetaDate = BackupService.getStoredMeta()?.lastBackupAt || null;
+    const driveLatest = files[0]?.createdTime || null;
+    setLastBackupAt(localMetaDate || driveLatest);
+    return files;
+  }, [auth.token]);
+
+  const triggerBackup = useCallback(async ({ isAuto = false } = {}) => {
+    if (!auth.token || !db || backupBusy) return null;
+    setBackupBusy(true);
+    try {
+      const result = await BackupService.createBackup(auth.token, db);
+      setBackupFiles(result.backups || []);
+      setLastBackupAt(result.lastBackupAt || new Date().toISOString());
+      return result;
+    } catch (error) {
+      const label = isAuto ? "Auto backup failed" : "Backup failed";
+      setSyncError(`${label}: ${error?.message || "Unknown error"}`);
+      return null;
+    } finally {
+      setBackupBusy(false);
+    }
+  }, [auth.token, db, backupBusy]);
+
+  const restoreBackup = useCallback(async (backup) => {
+    if (!auth.token || !fileId || !backup?.id) return false;
+    try {
+      const snapshot = await BackupService.downloadBackup(auth.token, backup.id);
+      const migrated = migrateSchema(snapshot);
+      setDb(migrated);
+      await saveDB(auth.token, fileId, migrated);
+      return true;
+    } catch (error) {
+      setSyncError(`Restore failed: ${error?.message || "Unknown error"}`);
+      return false;
+    }
+  }, [auth.token, fileId]);
 
   const t = TRANSLATIONS[lang];
   const isRTL = lang === "ar";
@@ -1035,6 +1123,47 @@ function AppProvider({ children }) {
       .then(({ fileId: fid, data }) => { setFileId(fid); setDb(data); setDbLoading(false); })
       .catch(() => { setSyncError("Failed to access Google Drive."); setDbLoading(false); });
   }, [auth.token, isBlocked, userSyncDone]);
+
+  useEffect(() => {
+    if (!auth.token || !db || isBlocked || !userSyncDone) return;
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const files = await fetchBackups();
+        if (cancelled) return;
+        const localMetaDate = BackupService.getStoredMeta()?.lastBackupAt || null;
+        const mostRecent = localMetaDate || files?.[0]?.createdTime || null;
+        if (BackupService.shouldAutoBackup(mostRecent)) {
+          setTimeout(() => {
+            if (!cancelled) triggerBackup({ isAuto: true });
+          }, 0);
+        }
+      } catch (error) {
+        if (!cancelled) setSyncError(`Backup list failed: ${error?.message || "Unknown error"}`);
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [auth.token, db, isBlocked, userSyncDone, fetchBackups, triggerBackup]);
+
+  useEffect(() => {
+    if (!auth.user?.id || !auth.token) return;
+    const onExpire = () => {
+      localStorage.setItem(SESSION_EXPIRED_NOTICE_KEY, "1");
+      clearLocalSessionState(true);
+    };
+    const resetTimer = () => {
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      inactivityTimerRef.current = setTimeout(onExpire, INACTIVITY_TIMEOUT_MS);
+    };
+    const events = ["mousemove", "mousedown", "keydown", "touchstart", "click"];
+    events.forEach((name) => window.addEventListener(name, resetTimer));
+    resetTimer();
+    return () => {
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      events.forEach((name) => window.removeEventListener(name, resetTimer));
+    };
+  }, [auth.user?.id, auth.token, clearLocalSessionState]);
 
   useEffect(() => {
     if (!hasSupabaseClient || !supabase?.auth?.getSession) return;
@@ -1226,6 +1355,7 @@ function AppProvider({ children }) {
     lang, setLang, t, isRTL, font,
     usersConfig, usersConfigReady, currentRole, isBlocked, hasPermission,
     updateUserEntry, deleteUserEntry, gatekeeperError, userSyncDone,
+    backupFiles, lastBackupAt, backupBusy, triggerBackup, restoreBackup, fetchBackups,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
@@ -1480,10 +1610,19 @@ function BrandingFooter({ text, isDark = false }) {
 import { version } from '../package.json'; 
 function LoginPage() {
   const { signIn, authLoading, gapiReady, authError, gatekeeperError, lang, setLang, t, isRTL, font } = useApp();
+  const [sessionExpiredNotice, setSessionExpiredNotice] = useState(false);
 
   useEffect(() => {
     if (!hasSupabaseConfig || !hasSupabaseClient) {
       console.log("[Supabase] Login page loaded without a working Supabase client.");
+    }
+  }, []);
+
+
+  useEffect(() => {
+    if (localStorage.getItem(SESSION_EXPIRED_NOTICE_KEY) === "1") {
+      setSessionExpiredNotice(true);
+      localStorage.removeItem(SESSION_EXPIRED_NOTICE_KEY);
     }
   }, []);
 
@@ -1561,6 +1700,11 @@ function LoginPage() {
 
         {!gapiReady && !authError && (
           <p style={{ marginTop:"12px",fontSize:"0.74rem",color:`${T.emerald}80` }}>{t.loadingApis}</p>
+        )}
+        {sessionExpiredNotice && (
+          <div style={{ marginTop:"14px",padding:"10px 14px",background:"rgba(245,158,11,0.15)",border:"1px solid rgba(245,158,11,0.35)",borderRadius:"8px",color:"rgba(251,191,36,0.95)",fontSize:"0.76rem" }}>
+            ⚠ {t.sessionExpiredSecurity}
+          </div>
         )}
         {(authError || gatekeeperError || !hasSupabaseConfig || !hasSupabaseClient) && (
           <div style={{ marginTop:"14px",padding:"10px 14px",background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.25)",borderRadius:"8px",color:"rgba(255,100,100,0.9)",fontSize:"0.76rem" }}>
@@ -2917,11 +3061,12 @@ function TxActionMenu({ tx, onClose }) {
 // SETTINGS TAB — Lookup Categories
 // ═══════════════════════════════════════════════════════════════════════════════
 function SettingsTab() {
-  const { db, updateDb, t, isRTL, font } = useApp();
+  const { db, updateDb, t, isRTL, font, backupFiles, lastBackupAt, backupBusy, triggerBackup, restoreBackup, fetchBackups } = useApp();
   const [newItems, setNewItems] = useState({});
   const [editingItems, setEditingItems] = useState({});
   const [currencyError, setCurrencyError] = useState("");
   const [editingCurrency, setEditingCurrency] = useState(null);
+  const [restoreCandidate, setRestoreCandidate] = useState(null);
 
   const sections = [
     { key:"portfolioTypes",        label:t.portfolioTypes,        icon:<FolderOpen size={15}/> },
@@ -3033,6 +3178,22 @@ function SettingsTab() {
     setCurrencyError("");
   };
 
+  const handleManualBackup = async () => {
+    await triggerBackup({ isAuto: false });
+    await fetchBackups();
+  };
+
+  const confirmRestore = async () => {
+    if (!restoreCandidate) return;
+    const ok = await restoreBackup(restoreCandidate);
+    if (ok) {
+      setRestoreCandidate(null);
+      window.alert(t.backupRestoreSuccess);
+    }
+  };
+
+  const shownDate = lastBackupAt ? new Date(lastBackupAt).toLocaleString() : t.backupNoDate;
+
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font }}>
       <div style={{ marginBottom:"24px" }}>
@@ -3133,6 +3294,32 @@ function SettingsTab() {
         ))}
       </div>
 
+      <Card style={{ marginTop:"20px",padding:"16px 20px" }}>
+        <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:"10px",flexWrap:"wrap",marginBottom:"10px" }}>
+          <div>
+            <h4 style={{ margin:"0 0 4px",fontSize:"0.92rem",color:T.textPrimary }}>{t.backupTitle}</h4>
+            <div style={{ fontSize:"0.78rem",color:T.textMuted }}>{t.backupInfo}: <strong style={{ color:T.textSecondary }}>{shownDate}</strong></div>
+          </div>
+          <Btn onClick={handleManualBackup} disabled={backupBusy} icon={<RefreshCw size={14} />}>{t.backupNow}</Btn>
+        </div>
+        <div style={{ display:"grid",gap:"8px" }}>
+          {backupFiles.length === 0 && (
+            <div style={{ fontSize:"0.8rem",color:T.textMuted }}>{t.backupNoItems}</div>
+          )}
+          {backupFiles.slice(0, 5).map((backup) => (
+            <div key={backup.id} style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:"8px",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:"8px",background:T.bgApp }}>
+              <div style={{ display:"flex",flexDirection:"column",gap:"2px" }}>
+                <span style={{ fontSize:"0.78rem",color:T.textPrimary,fontWeight:500 }}>{backup.name}</span>
+                <span style={{ fontSize:"0.72rem",color:T.textMuted }}>{new Date(backup.createdTime).toLocaleString()}</span>
+              </div>
+              <button title="Restore" onClick={() => setRestoreCandidate(backup)} style={{ border:"none",background:"none",cursor:"pointer",color:T.emerald,display:"flex",padding:"3px" }}>
+                <RotateCcw size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </Card>
+
       {/* DB info card */}
       <Card style={{ marginTop:"20px",padding:"16px 20px" }}>
         <div style={{ display:"flex",alignItems:"center",gap:"10px" }}>
@@ -3142,6 +3329,16 @@ function SettingsTab() {
           </span>
         </div>
       </Card>
+
+      {restoreCandidate && (
+        <Modal title={t.backupTitle} onClose={() => setRestoreCandidate(null)} maxWidth="420px">
+          <p style={{ margin:"0 0 16px",fontSize:"0.84rem",color:T.textSecondary }}>{t.backupRestoreConfirm}</p>
+          <div style={{ display:"flex",justifyContent:"flex-end",gap:"8px" }}>
+            <Btn variant="secondary" onClick={() => setRestoreCandidate(null)}>{t.cancel}</Btn>
+            <Btn onClick={confirmRestore}>{t.save}</Btn>
+          </div>
+        </Modal>
+      )}
 
     </div>
   );
@@ -3780,6 +3977,7 @@ function UserManagementTab() {
 // ═══════════════════════════════════════════════════════════════════════════════
 function MainApp() {
   const { syncError, t, isRTL, font, hasPermission, currentRole } = useApp();
+  const [sessionNotice, setSessionNotice] = useState(false);
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem(TAB_STORAGE_KEY) || "dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -3794,6 +3992,15 @@ function MainApp() {
   useEffect(() => {
     localStorage.setItem(TAB_STORAGE_KEY, activeTab);
   }, [activeTab]);
+
+  useEffect(() => {
+    if (localStorage.getItem(SESSION_EXPIRED_NOTICE_KEY) === "1") {
+      setSessionNotice(true);
+      localStorage.removeItem(SESSION_EXPIRED_NOTICE_KEY);
+      const timer = setTimeout(() => setSessionNotice(false), 4500);
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
   const canManageUsers = currentRole === "Owner" || hasPermission("assign_role") || hasPermission("block_user") || hasPermission("unblock_user");
 
@@ -3872,6 +4079,11 @@ function MainApp() {
         {activeTab === "transactions" && smartBackVisible && (
           <div style={{ marginBottom:"12px" }}>
             <button title={t.smartBackToInvestments} onClick={handleSmartBack} style={{ background:"none",border:`1px solid ${T.border}`,borderRadius:"8px",cursor:"pointer",padding:"6px",display:"inline-flex",alignItems:"center",gap:"4px",color:T.textSecondary }}><Undo2 size={15}/><span style={{ fontSize:"0.78rem",fontWeight:600 }}>{t.returnLabel}</span></button>
+          </div>
+        )}
+        {sessionNotice && (
+          <div style={{ marginBottom:"16px",padding:"10px 16px",background:"rgba(245,158,11,0.12)",border:"1px solid rgba(245,158,11,0.35)",borderRadius:"8px",color:T.warning,fontSize:"0.8rem",display:"flex",alignItems:"center",gap:"8px" }}>
+            <AlertCircle size={14}/>{t.sessionExpiredSecurity}
           </div>
         )}
         {syncError && (
