@@ -244,7 +244,7 @@ const TRANSLATIONS = {
     positions: "Positions",
     allocation: "Allocation",
     totalValue: "Total Value",
-    activeInvestmentValue: "Active Value",
+    activeInvestmentValue: "Active Principal",
     usersName: "Name",
     usersEmail: "Email",
     usersLastLogin: "Last Login",
@@ -467,7 +467,7 @@ const TRANSLATIONS = {
     positions: "مراكز",
     allocation: "التخصيص",
     totalValue: "القيمة الإجمالية",
-    activeInvestmentValue: "قيمة الاستثمارات النشطة",
+    activeInvestmentValue: "اصل المبلغ النشط",
     usersName: "الاسم",
     usersEmail: "البريد الإلكتروني",
     usersLastLogin: "آخر تسجيل دخول",
@@ -2211,7 +2211,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
       <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:"16px" }}>
         {portfolios.map((p,i) => {
           const invs = inv_of_portfolio(db,p.id);
-          const activeValue = invs.filter(isActiveInvestment).reduce((sum, inv) => sum + investmentValue(inv), 0);
+          const activePrincipal = invs.filter(isActiveInvestment).reduce((sum, inv) => sum + costBasis(inv), 0);
           const totalValue = invs.reduce((sum, inv)=>sum+curVal(inv),0);
           const pCost  = invs.reduce((s,i)=>s+costBasis(i),0);
           const pTx    = tx_of_portfolio(db,p.id);
@@ -2266,7 +2266,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
                     onMouseLeave={e=>{ e.currentTarget.style.background=T.bgApp; }}
                   >
                     <div style={{ fontSize:"0.68rem",color:T.textMuted,marginBottom:"3px" }}>{t.activeInvestmentValue}</div>
-                    <div style={{ fontSize:"0.95rem",fontWeight:600,color:T.info,textDecoration:"underline" }}>{fmtMoney(activeValue,{compact:true,currency:p.currency||"USD"})}</div>
+                    <div style={{ fontSize:"0.95rem",fontWeight:600,color:T.info,textDecoration:"underline" }}>{fmtMoney(activePrincipal,{compact:true,currency:p.currency||"USD"})}</div>
                   </button>
                   {[
                     { label:t.totalValue,  val:fmtMoney(totalValue,{compact:true,currency:p.currency||"USD"}) },
