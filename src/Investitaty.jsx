@@ -2127,11 +2127,20 @@ function Dashboard() {
   const hour = new Date().getHours();
   const greeting = hour<12?t.goodMorning:hour<18?t.goodAfternoon:t.goodEvening;
 
-  // Chart data: portfolio allocation
-  const allocationData = portfolios.map(p=>{
-    const pvInvs = inv_of_portfolio(db, p.id);
-    return { name:p.name, value:pvInvs.reduce((s,i)=>s+toBaseAmount(db, curVal(i), p.currency || "USD"),0) };
-  }).filter(d=>d.value>0);
+  // Chart data: allocation by portfolio type/category
+  const allocationByType = {};
+  portfolios.forEach((portfolio) => {
+    const typeKey = portfolio.type || t.unassignedType;
+    const portfolioTotal = inv_of_portfolio(db, portfolio.id)
+      .reduce((sum, inv) => sum + toBaseAmount(db, curVal(inv), portfolio.currency || "USD"), 0);
+    if (portfolioTotal > 0) {
+      allocationByType[typeKey] = (allocationByType[typeKey] || 0) + portfolioTotal;
+    }
+  });
+
+  const allocationData = Object.entries(allocationByType)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value);
 
   const totalAlloc = allocationData.reduce((s,d)=>s+d.value,0);
   const pieData = allocationData.map(d=>({ ...d, pct:totalAlloc>0?(d.value/totalAlloc)*100:0 }));
@@ -4054,13 +4063,21 @@ function StatisticsTab() {
   }, [0, 0, 0]);
   lossRows.push({ key:"loss-total", isTotal:true, values:[t.totalLabel, lossTotals[0], lossTotals[1], lossTotals[2], lossTotals[0]+lossTotals[1]+lossTotals[2]] });
 
-  const allocationData = portfolios.map((portfolio) => {
-    const portfolioInvestments = filteredInvestments.filter((inv) => inv.portfolioId === portfolio.id);
-    return {
-      name: portfolio.name,
-      value: portfolioInvestments.reduce((sum, inv) => sum + toBaseAmount(db, curVal(inv), portfolio.currency || "USD"), 0),
-    };
-  }).filter((row) => row.value > 0);
+  const portfolioById = new Map(portfolios.map((portfolio) => [portfolio.id, portfolio]));
+  const allocationByType = {};
+
+  filteredInvestments.forEach((inv) => {
+    const portfolio = portfolioById.get(inv.portfolioId);
+    if (!portfolio) return;
+    const typeKey = portfolio.type || t.unassignedType;
+    const value = toBaseAmount(db, curVal(inv), portfolio.currency || "USD");
+    if (value <= 0) return;
+    allocationByType[typeKey] = (allocationByType[typeKey] || 0) + value;
+  });
+
+  const allocationData = Object.entries(allocationByType)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value);
   const allocationTotal = allocationData.reduce((sum, row) => sum + row.value, 0);
   const allocationChartData = allocationData.map((row, idx) => ({
     ...row,
