@@ -2070,10 +2070,7 @@ const currencySymbol = (currency="USD") => ({ USD:"$", EUR:"€", GBP:"£", SAR:
 const fmtMoney = (v, { compact=false, currency="USD" } = {}) => {
   const n = Number(v||0);
   const symbol = currencySymbol(currency);
-  const abs = Math.abs(n);
-  if (compact && abs >= 1_000_000) return symbol + (n/1_000_000).toFixed(2)+"M";
-  if (compact && abs >= 1_000) return symbol + (n/1_000).toFixed(2)+"K";
-  return symbol + n.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+  return symbol + n.toLocaleString("en-US",{minimumFractionDigits:3,maximumFractionDigits:3});
 };
 const portfolioCurrency = (db, portfolioId) => (visible(db?.portfolios||[]).find(p=>p.id===portfolioId)?.currency || "USD");
 const isActiveInvestment = (inv) => String(inv?.status || "Active").toLowerCase() === "active";
@@ -2209,7 +2206,7 @@ function Dashboard() {
                     <div key={d.name} style={{ display:"flex",alignItems:"center",gap:"7px" }}>
                       <div style={{ width:"8px",height:"8px",borderRadius:"2px",background:T.chart[i%T.chart.length],flexShrink:0 }}/>
                       <span style={{ fontSize:"0.7rem",color:T.textSecondary,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{d.name}</span>
-                      <span style={{ fontSize:"0.68rem",color:T.textMuted }}>{d.pct.toFixed(1)}%</span>
+                      <span style={{ fontSize:"0.68rem",color:T.textMuted }}>{d.pct.toFixed(3)}%</span>
                     </div>
                   ))}
                 </div>
@@ -2270,7 +2267,7 @@ function Dashboard() {
                       >
                         {fundingDistribution.map((entry) => <Cell key={entry.name} fill={entry.color} style={{ cursor:"pointer" }} />)}
                       </Pie>
-                      <Tooltip formatter={(value, _name, props) => [`${fmtMoney(value, { currency:baseCurrency })} · ${props?.payload?.pct?.toFixed(1) || 0}%`, props?.payload?.name || ""]} />
+                      <Tooltip formatter={(value, _name, props) => [`${fmtMoney(value, { currency:baseCurrency })} · ${props?.payload?.pct?.toFixed(3) || 0}%`, props?.payload?.name || ""]} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -2323,7 +2320,7 @@ function Dashboard() {
                   </div>
                   <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
                     <span style={{ fontSize:"0.72rem",color:T.textMuted }}>{t.dominantRisk}: {p.risk}</span>
-                    <span style={{ fontSize:"0.72rem",fontWeight:600,color:pRoi>=0?T.positive:T.negative }}>{pRoi>=0?"+":""}{pRoi.toFixed(1)}%</span>
+                    <span style={{ fontSize:"0.72rem",fontWeight:600,color:pRoi>=0?T.positive:T.negative }}>{pRoi>=0?"+":""}{pRoi.toFixed(3)}%</span>
                   </div>
                 </Card>
               );
@@ -2498,7 +2495,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
                     { label:t.totalValue,  val:fmtMoney(totalValue,{compact:true,currency:p.currency||"USD"}) },
                     {
                       label:t.roi,
-                      val:`${pRoi>=0?"+":""}${pRoi.toFixed(1)}%`,
+                      val:`${pRoi>=0?"+":""}${pRoi.toFixed(3)}%`,
                       color:pRoi>=0?T.positive:T.negative,
                       roiValue: fmtMoney(Number.isFinite(activePrincipal + (totalValue - pCost)) ? (activePrincipal + (totalValue - pCost)) : 0,{compact:true,currency:p.currency||"USD"}),
                     },
@@ -2819,7 +2816,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                             <td style={{ padding:"12px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{fmtMoney(cbVal,{currency:portfolioCurrency(db, inv.portfolioId)})}</td>
                             <td style={{ padding:"12px 14px",fontWeight:600,color:T.textPrimary,textAlign:isRTL?"right":"left" }}>{fmtMoney(cvVal,{currency:portfolioCurrency(db, inv.portfolioId)})}</td>
                             <td style={{ padding:"12px 14px",textAlign:isRTL?"right":"left" }}>
-                              <span style={{ fontWeight:600,color:roiVal>=0?T.positive:T.negative }}>{roiVal>=0?"+":""}{roiVal.toFixed(2)}%</span>
+                              <span style={{ fontWeight:600,color:roiVal>=0?T.positive:T.negative }}>{roiVal>=0?"+":""}{roiVal.toFixed(3)}%</span>
                             </td>
                             <td style={{ padding:"12px 14px",textAlign:isRTL?"right":"left" }} onClick={e=>e.stopPropagation()}>
                               {editingPrice===inv.id
@@ -2885,7 +2882,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
               <ReadOnlyField label={t.quantity} value={form.quantity} />
               <ReadOnlyField label={t.purchasePrice} value={form.purchasePrice} />
               <ReadOnlyField label={t.currentPrice} value={form.currentPrice} />
-              <ReadOnlyField label="Balance" value={((Number(form.quantity)||0) * (Number(form.purchasePrice)||0)).toFixed(2)} />
+              <ReadOnlyField label="Balance" value={((Number(form.quantity)||0) * (Number(form.purchasePrice)||0)).toFixed(3)} />
               <ReadOnlyField label={t.purchaseDate} value={form.purchaseDate} />
               <ReadOnlyField label={t.startDate} value={form.startDate} />
               <ReadOnlyField label={t.endDate} value={form.endDate} />
@@ -2908,7 +2905,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
               <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
                 <FormField label={t.quantity}><Input type="number" value={form.quantity} onChange={e=>f("quantity")(e.target.value)} isRTL={isRTL} placeholder="0"/></FormField>
                 <FormField label={t.purchasePrice}><Input type="number" value={form.purchasePrice} onChange={e=>f("purchasePrice")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
-                <FormField label={t.totalInvestmentValue}><Input value={totalInvestmentValue.toFixed(2)} isRTL={isRTL} readOnly style={{ background:"#e2e8f0", color:T.textSecondary }}/></FormField>
+                <FormField label={t.totalInvestmentValue}><Input value={totalInvestmentValue.toFixed(3)} isRTL={isRTL} readOnly style={{ background:"#e2e8f0", color:T.textSecondary }}/></FormField>
                 <FormField label={t.currentPrice}><Input type="number" value={form.currentPrice} onChange={e=>f("currentPrice")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
               </div>
               <FormField label={t.splitFunding}>
@@ -2922,7 +2919,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                   ))}
                   <Btn size="sm" variant="secondary" onClick={()=>setForm(prev=>({ ...prev, funding:[...prev.funding,{source:"",amount:""}] }))}>{t.addSplit}</Btn>
                   <div style={{ padding:"8px", background:"#e2e8f0", borderRadius:"8px", color:T.textSecondary, fontSize:"0.8rem", fontWeight:600 }}>
-                    {t.totalSplitAmount}: {splitFundingTotal.toFixed(2)}
+                    {t.totalSplitAmount}: {splitFundingTotal.toFixed(3)}
                   </div>
                 </div>
               </FormField>
@@ -3185,7 +3182,15 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
       </div>
       <div style={{ ...filterBarCss, marginBottom:"20px" }}>
         <Select value={filterPortfolio} onChange={e=>setFilterPortfolio(e.target.value)} options={[{value:"",label:t.allPortfolios},...portfolios.map(p=>({value:p.id,label:p.name}))]} isRTL={isRTL} style={filterInputCss(isRTL)} />
-        <Select value={filterInvestment} onChange={e=>setFilterInvestment(e.target.value)} options={[{value:"",label:t.filterByInvestment},...allInvestments.map(i=>({value:i.id,label:i.name}))]} isRTL={isRTL} style={filterInputCss(isRTL)} />
+        <SearchableSingleSelect
+          options={allInvestments.map(i=>({ value:i.id, label:i.name }))}
+          value={filterInvestment}
+          onChange={setFilterInvestment}
+          placeholder={t.filterByInvestment}
+          searchPlaceholder={t.filterByInvestment}
+          font={font}
+          minWidth="220px"
+        />
         <FilterDateInput value={filterStartDate} onChange={(e)=>setFilterStartDate(e.target.value)} isRTL={isRTL} />
         <FilterDateInput value={filterEndDate} onChange={(e)=>setFilterEndDate(e.target.value)} isRTL={isRTL} />
         <Select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} options={[{ value:"", label:t.transactionStatusLabel }, ...statusOpts, { value:ARCHIVED_FILTER, label:t.archivedFilter }]} isRTL={isRTL} style={filterInputCss(isRTL)} />
@@ -3635,6 +3640,57 @@ function AccordionSection({ title, icon, children }) {
   );
 }
 
+function SearchableSingleSelect({ options, value, onChange, placeholder, searchPlaceholder, font, minWidth = "220px" }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const filtered = options.filter((opt) => String(opt.label ?? opt.value ?? "").toLowerCase().includes(normalizedQuery));
+  const selected = options.find((opt) => (opt.value ?? opt) === value);
+
+  return (
+    <div ref={ref} style={{ position:"relative", minWidth }}>
+      <button type="button" onClick={()=>setOpen((v)=>!v)} style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between", gap:"8px", padding:"9px 10px", border:"1px solid rgba(148,163,184,0.32)", borderRadius:"8px", background:"#111c33", color:"#e2e8f0", fontFamily:font, fontSize:"0.8rem", cursor:"pointer" }}>
+        <span style={{ whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{selected?.label || placeholder}</span>
+        <ChevronDown size={14} style={{ transform:open?"rotate(180deg)":"rotate(0deg)", transition:"transform 0.2s" }} />
+      </button>
+      {open && (
+        <div style={{ position:"absolute", top:"calc(100% + 6px)", left:0, right:0, border:"1px solid rgba(148,163,184,0.3)", borderRadius:"10px", background:"#0b1220", zIndex:30, padding:"10px", boxShadow:"0 8px 30px rgba(2,6,23,0.6)" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:"6px", border:"1px solid rgba(148,163,184,0.25)", borderRadius:"8px", padding:"6px 8px", marginBottom:"8px", color:"#94a3b8" }}>
+            <Search size={14} />
+            <input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder={searchPlaceholder} style={{ flex:1, border:"none", outline:"none", background:"transparent", color:"#e2e8f0", fontSize:"0.78rem", fontFamily:font }} />
+          </div>
+          <div style={{ maxHeight:"200px", overflowY:"auto", borderTop:"1px solid rgba(148,163,184,0.18)", marginTop:"6px", paddingTop:"6px" }}>
+            <button type="button" onClick={()=>{onChange(""); setOpen(false); setQuery("");}} style={{ width:"100%", textAlign:"left", border:"none", background:"transparent", color:"#e2e8f0", fontSize:"0.78rem", padding:"6px 4px", cursor:"pointer" }}>{placeholder}</button>
+            {filtered.map((opt) => {
+              const optionValue = opt.value ?? opt;
+              const optionLabel = opt.label ?? opt;
+              return (
+                <button
+                  key={optionValue}
+                  type="button"
+                  onClick={()=>{onChange(optionValue); setOpen(false); setQuery("");}}
+                  style={{ width:"100%", textAlign:"left", border:"none", background:"transparent", color:optionValue===value?"#f8fafc":"#cbd5e1", fontSize:"0.78rem", padding:"6px 4px", cursor:"pointer", fontWeight:optionValue===value?700:500 }}
+                >
+                  {optionLabel}
+                </button>
+              );
+            })}
+            {!filtered.length && <div style={{ color:"#64748b", fontSize:"0.75rem", padding:"8px 4px" }}>No matches</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SearchableMultiYearSelect({ options, selectedYears, onChange, t, font }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -3695,7 +3751,7 @@ function LegendList({ rows, currency = "USD", textColor = "#cbd5e1", valueColor 
         <div key={row.name} style={{ display:"grid", gridTemplateColumns:"14px 1fr auto", gap:"8px", alignItems:"center", fontSize:"0.76rem", color:textColor }}>
           <span style={{ width:"10px", height:"10px", borderRadius:"999px", background:row.color }} />
           <span>{row.name}</span>
-          <span style={{ color:valueColor, fontWeight:600 }}>{fmtMoney(row.value, { currency })} ({row.pct.toFixed(1)}%)</span>
+          <span style={{ color:valueColor, fontWeight:600 }}>{fmtMoney(row.value, { currency })} ({row.pct.toFixed(3)}%)</span>
         </div>
       ))}
     </div>
@@ -3925,23 +3981,15 @@ function StatisticsTab() {
           </div>
           <div>
             <label style={{ display:"block", marginBottom:"6px", fontSize:"0.74rem", color:"#94a3b8" }}>{t.investmentStatuses}</label>
-            <div style={{ display:"flex", alignItems:"center", gap:"6px", background:"#f8fafc", border:`1px solid ${T.border}`, borderRadius:"10px", padding:"4px 6px", minHeight:"36px" }}>
-              <Select
-                value={selectedInvestmentStatus}
-                onChange={(e)=>setSelectedInvestmentStatus(e.target.value)}
-                options={[{ value:"", label:t.investmentStatuses }, ...investmentStatuses.map((status)=>({ value:status, label:status }))]}
-                isRTL={isRTL}
-                style={{
-                  border:"none",
-                  background:"transparent",
-                  color:T.textPrimary,
-                  fontSize:"0.8rem",
-                  minWidth:"190px",
-                  padding:"4px",
-                  outline:"none",
-                }}
-              />
-            </div>
+            <SearchableSingleSelect
+              options={investmentStatuses.map((status)=>({ value:status, label:status }))}
+              value={selectedInvestmentStatus}
+              onChange={setSelectedInvestmentStatus}
+              placeholder={t.investmentStatuses}
+              searchPlaceholder={t.searchUsersPlaceholder}
+              font={font}
+              minWidth="220px"
+            />
           </div>
         </div>
       </div>

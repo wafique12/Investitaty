@@ -97,8 +97,8 @@ function KPICard({ label, value, sub, trend, accent, index }) {
           >
             {isPositive ? "▲" : "▼"} $
             {Math.abs(trend).toLocaleString("en-US", {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
+              minimumFractionDigits: 3,
+              maximumFractionDigits: 3,
             })}
           </span>
         )}

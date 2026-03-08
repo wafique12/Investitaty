@@ -31,10 +31,10 @@ function CustomTooltip({ active, payload }) {
           {d.name}
         </div>
         <div style={{ color: "#eef4f0" }}>
-          ${d.payload.value.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+          ${d.payload.value.toLocaleString("en-US", { minimumFractionDigits: 3 })}
         </div>
         <div style={{ color: "rgba(255,255,255,0.4)", marginTop: "2px" }}>
-          {d.payload.pct.toFixed(1)}%
+          {d.payload.pct.toFixed(3)}%
         </div>
       </div>
     );
@@ -83,7 +83,7 @@ function CustomLegend({ data }) {
               fontFamily: "'Courier New', monospace",
             }}
           >
-            {entry.pct.toFixed(1)}%
+            {entry.pct.toFixed(3)}%
           </span>
         </div>
       ))}
