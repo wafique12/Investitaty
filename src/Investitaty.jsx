@@ -159,6 +159,7 @@ const TRANSLATIONS = {
     returnLabel: "Back",
     smartBackToInvestments: "Return to Investments",
     viewTransactions: "View transactions",
+    viewInvestmentsTooltip: "View Investments",
     viewDetails: "View details",
     editInModal: "Edit",
     deleteItem: "Delete",
@@ -384,6 +385,7 @@ const TRANSLATIONS = {
     returnLabel: "عودة",
     smartBackToInvestments: "العودة إلى الاستثمارات",
     viewTransactions: "عرض المعاملات",
+    viewInvestmentsTooltip: "عرض الاستثمارات",
     viewDetails: "عرض التفاصيل",
     editInModal: "تعديل",
     deleteItem: "حذف",
@@ -2451,8 +2453,8 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
           return (
             <Card key={p.id} style={{ overflow:"hidden" }}>
               <div style={{ height:"4px",background:`linear-gradient(90deg,${color},${color}80)` }}/>
-              <div style={{ padding:"18px" }}>
-                <div style={{ marginBottom:"12px" }}>
+              <div style={{ padding:isCollapsed?"12px 16px":"18px" }}>
+                <div style={{ marginBottom:isCollapsed?"0":"12px" }}>
                   <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",gap:"10px",marginBottom:"8px" }}>
                     <button
                       title={isCollapsed ? t.expandAll : t.collapseAll}
@@ -2476,11 +2478,13 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
                       </button>
                     </div>
                   </div>
-                  <div style={{ display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap",paddingLeft:isRTL?0:"21px",paddingRight:isRTL?"21px":0 }}>
-                    <Chip color={color}>{p.type}</Chip>
-                    <Chip color={T.info}>{p.risk}</Chip>
-                    <Chip color={statusColor(p.status)}>{p.status || "—"}</Chip>
-                  </div>
+                  {!isCollapsed && (
+                    <div style={{ display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap",paddingLeft:isRTL?0:"21px",paddingRight:isRTL?"21px":0 }}>
+                      <Chip color={color}>{p.type}</Chip>
+                      <Chip color={T.info}>{p.risk}</Chip>
+                      <Chip color={statusColor(p.status)}>{p.status || "—"}</Chip>
+                    </div>
+                  )}
                 </div>
                 {!isCollapsed && (<><div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:"10px",marginBottom:"14px" }}>                  <button
                     onClick={() => onViewInvestments?.(p, { status: "Active" })}
@@ -2523,11 +2527,13 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
                 </div>
                 {p.notes && <div style={{ fontSize:"0.75rem",color:T.textMuted,fontStyle:"italic",marginBottom:"10px" }}>{p.notes}</div>}
                 </>) }
-                <div style={{ borderTop:`1px dashed ${T.border}`,paddingTop:"10px",marginTop:isCollapsed?"6px":"0" }}>
-                  <button onClick={()=>onViewInvestments?.(p)} style={{ background:"none",border:"none",padding:0,cursor:"pointer",color:T.info,fontSize:"0.8rem",fontWeight:600,textDecoration:"underline" }}>
-                    {t.investments}
-                  </button>
-                </div>
+                {!isCollapsed && (
+                  <div style={{ borderTop:`1px dashed ${T.border}`,paddingTop:"10px",display:"flex",justifyContent:isRTL?"flex-start":"flex-end" }}>
+                    <button title={t.viewInvestmentsTooltip} onClick={()=>onViewInvestments?.(p)} style={{ background:"none",border:`1px solid ${T.border}`,padding:"6px",cursor:"pointer",color:T.info,borderRadius:"8px",display:"inline-flex",alignItems:"center",justifyContent:"center" }}>
+                      <ListTree size={14}/>
+                    </button>
+                  </div>
+                )}
               </div>
             </Card>
           );
