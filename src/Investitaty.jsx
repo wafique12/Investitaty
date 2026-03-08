@@ -27,6 +27,9 @@ const AUTH_CONSENT_STORAGE_KEY = "investitaty_auth_consent_v1";
 const AUTH_LOGIN_DAY_KEY = "investitaty_auth_login_day_v1";
 const TAB_STORAGE_KEY = "investitaty_active_tab_v1";
 const SESSION_EXPIRED_NOTICE_KEY = "investitaty_session_expired_notice_v1";
+const PORTFOLIOS_COLLAPSE_STORAGE_KEY = "investitaty_portfolios_collapsed_v1";
+const PORTFOLIOS_UI_STORAGE_KEY = "investitaty_portfolios_ui_v1";
+const INVESTMENTS_COLLAPSE_STORAGE_KEY = "investitaty_investments_collapsed_v1";
 const INACTIVITY_TIMEOUT_MS = 20 * 60 * 1000;
 const AUTH_DEBUG_PREFIX = "[AuthFlow]";
 const OWNER_PROTECTED_EMAIL = "wafique22@gmail.com";
@@ -2070,9 +2073,7 @@ const currencySymbol = (currency="USD") => ({ USD:"$", EUR:"€", GBP:"£", SAR:
 const fmtMoney = (v, { compact=false, currency="USD" } = {}) => {
   const n = Number(v||0);
   const symbol = currencySymbol(currency);
-  if (compact && n >= 1_000_000) return symbol + (n/1_000_000).toFixed(1)+"M";
-  if (compact && n >= 1_000) return symbol + (n/1_000).toFixed(1)+"K";
-  return symbol + n.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+  return symbol + n.toLocaleString("en-US",{minimumFractionDigits:3,maximumFractionDigits:3});
 };
 const portfolioCurrency = (db, portfolioId) => (visible(db?.portfolios||[]).find(p=>p.id===portfolioId)?.currency || "USD");
 const isActiveInvestment = (inv) => String(inv?.status || "Active").toLowerCase() === "active";
@@ -2186,10 +2187,10 @@ function Dashboard() {
       </div>
 
       {/* Charts row */}
-      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"16px",marginBottom:"28px" }}>
+      <div style={{ display:"grid",gridTemplateColumns:"1fr 0.9fr 1.15fr",gap:"16px",marginBottom:"28px" }}>
 
         {/* Donut allocation */}
-        <Card style={{ padding:"18px" }}>
+        <Card style={{ padding:"18px", maxHeight:"450px", overflowY:"auto", scrollbarWidth:"thin", scrollbarColor:`${T.border} transparent` }}>
           <SectionHeader title={t.assetAllocation} />
           {pieData.length === 0
             ? <EmptyState text={t.noAllocation} />
@@ -2208,7 +2209,7 @@ function Dashboard() {
                     <div key={d.name} style={{ display:"flex",alignItems:"center",gap:"7px" }}>
                       <div style={{ width:"8px",height:"8px",borderRadius:"2px",background:T.chart[i%T.chart.length],flexShrink:0 }}/>
                       <span style={{ fontSize:"0.7rem",color:T.textSecondary,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{d.name}</span>
-                      <span style={{ fontSize:"0.68rem",color:T.textMuted }}>{d.pct.toFixed(1)}%</span>
+                      <span style={{ fontSize:"0.68rem",color:T.textMuted }}>{d.pct.toFixed(3)}%</span>
                     </div>
                   ))}
                 </div>
@@ -2218,7 +2219,7 @@ function Dashboard() {
         </Card>
 
         {/* Upcoming cash flow */}
-        <Card style={{ padding:"18px" }}>
+        <Card style={{ padding:"18px", maxHeight:"450px", overflowY:"auto", scrollbarWidth:"thin", scrollbarColor:`${T.border} transparent` }}>
           <SectionHeader title={t.upcomingCashFlow} />
           {upcoming.length === 0
             ? <EmptyState text={t.noScheduled} />
@@ -2250,7 +2251,7 @@ function Dashboard() {
         </Card>
 
         {/* Funding source distribution */}
-        <Card style={{ padding:"18px" }}>
+        <Card style={{ padding:"18px", maxHeight:"450px", overflowY:"auto", scrollbarWidth:"thin", scrollbarColor:`${T.border} transparent` }}>
           <SectionHeader title={t.fundingSourcesDistribution} />
           {fundingDistribution.length === 0
             ? <EmptyState text={t.noFunding} />
@@ -2269,7 +2270,7 @@ function Dashboard() {
                       >
                         {fundingDistribution.map((entry) => <Cell key={entry.name} fill={entry.color} style={{ cursor:"pointer" }} />)}
                       </Pie>
-                      <Tooltip formatter={(value, _name, props) => [`${fmtMoney(value, { currency:baseCurrency })} · ${props?.payload?.pct?.toFixed(1) || 0}%`, props?.payload?.name || ""]} />
+                      <Tooltip formatter={(value, _name, props) => [`${fmtMoney(value, { currency:baseCurrency })} · ${props?.payload?.pct?.toFixed(3) || 0}%`, props?.payload?.name || ""]} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -2322,7 +2323,7 @@ function Dashboard() {
                   </div>
                   <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
                     <span style={{ fontSize:"0.72rem",color:T.textMuted }}>{t.dominantRisk}: {p.risk}</span>
-                    <span style={{ fontSize:"0.72rem",fontWeight:600,color:pRoi>=0?T.positive:T.negative }}>{pRoi>=0?"+":""}{pRoi.toFixed(1)}%</span>
+                    <span style={{ fontSize:"0.72rem",fontWeight:600,color:pRoi>=0?T.positive:T.negative }}>{pRoi>=0?"+":""}{pRoi.toFixed(3)}%</span>
                   </div>
                 </Card>
               );
@@ -2374,14 +2375,34 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
   const statusOpts = ((db?.settings?.investmentStatuses&&db.settings.investmentStatuses.length)?db.settings.investmentStatuses:["Active","Paused","Closed"]).map((v)=>({ value:v, label:v }));
 
   useEffect(() => {
+    const saved = JSON.parse(localStorage.getItem(PORTFOLIOS_COLLAPSE_STORAGE_KEY) || "{}");
+    if (saved && typeof saved === "object") setCollapsedPortfolios(saved);
+    const savedUi = JSON.parse(localStorage.getItem(PORTFOLIOS_UI_STORAGE_KEY) || "null");
+    if (!savedUi || typeof savedUi !== "object") return;
+    setFilterStatus(savedUi.filterStatus || "");
+    setSearchTerm(savedUi.searchTerm || "");
+    setSearchOpen(Boolean(savedUi.searchOpen || savedUi.searchTerm));
+  }, []);
+
+  useEffect(() => {
     setCollapsedPortfolios((prev) => {
       const next = { ...prev };
       (allPortfolios || []).forEach((portfolio) => {
         if (!Object.prototype.hasOwnProperty.call(next, portfolio.id)) next[portfolio.id] = true;
       });
+      Object.keys(next).forEach((id) => {
+        if (!(allPortfolios || []).some((portfolio) => portfolio.id === id)) delete next[id];
+      });
       return next;
     });
   }, [allPortfolios]);
+
+  useEffect(() => {
+    localStorage.setItem(PORTFOLIOS_COLLAPSE_STORAGE_KEY, JSON.stringify(collapsedPortfolios));
+  }, [collapsedPortfolios]);
+  useEffect(() => {
+    localStorage.setItem(PORTFOLIOS_UI_STORAGE_KEY, JSON.stringify({ filterStatus, searchTerm, searchOpen }));
+  }, [filterStatus, searchTerm, searchOpen]);
   const portfolios = allPortfolios.filter((p) => {
     const matchesSearch = !searchTerm.trim() || String(p.name || "").toLowerCase().includes(searchTerm.trim().toLowerCase());
     if (!matchesSearch) return false;
@@ -2497,7 +2518,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
                     { label:t.totalValue,  val:fmtMoney(totalValue,{compact:true,currency:p.currency||"USD"}) },
                     {
                       label:t.roi,
-                      val:`${pRoi>=0?"+":""}${pRoi.toFixed(1)}%`,
+                      val:`${pRoi>=0?"+":""}${pRoi.toFixed(3)}%`,
                       color:pRoi>=0?T.positive:T.negative,
                       roiValue: fmtMoney(Number.isFinite(activePrincipal + (totalValue - pCost)) ? (activePrincipal + (totalValue - pCost)) : 0,{compact:true,currency:p.currency||"USD"}),
                     },
@@ -2592,7 +2613,7 @@ function ReadOnlyField({ label, value }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // INVESTMENTS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
-function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefill, navigationFilter, onModalPrefillConsumed }) {
+function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefill, navigationFilter, onModalPrefillConsumed, showPortfolioBack = false, onPortfolioBack }) {
 
   const { db, addItem, archiveItem, unarchiveItem, hardDeleteItem, patchItem, t, isRTL, font } = useApp();
   const [showModal, setShowModal] = useState(false);
@@ -2703,6 +2724,29 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
 
 
   useEffect(() => {
+    const saved = JSON.parse(localStorage.getItem(INVESTMENTS_COLLAPSE_STORAGE_KEY) || "{}");
+    if (!saved || typeof saved !== "object") return;
+    setCollapsedPortfolios(saved);
+  }, []);
+
+  useEffect(() => {
+    setCollapsedPortfolios((prev) => {
+      const next = { ...prev };
+      (portfolios || []).forEach((portfolio) => {
+        if (!Object.prototype.hasOwnProperty.call(next, portfolio.id)) next[portfolio.id] = false;
+      });
+      Object.keys(next).forEach((id) => {
+        if (!(portfolios || []).some((portfolio) => portfolio.id === id)) delete next[id];
+      });
+      return next;
+    });
+  }, [portfolios]);
+
+  useEffect(() => {
+    localStorage.setItem(INVESTMENTS_COLLAPSE_STORAGE_KEY, JSON.stringify(collapsedPortfolios));
+  }, [collapsedPortfolios]);
+
+  useEffect(() => {
     if (!navigationFilter?.portfolioId) return;
     setFilterPortfolio(navigationFilter.portfolioId);
     if (navigationFilter?.status) setFilterStatus(navigationFilter.status);
@@ -2725,8 +2769,17 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
         <div>
           <h2 style={{ margin:0,fontSize:"1.4rem",fontWeight:700,color:T.textPrimary }}>{t.investments}</h2>
           <div style={{ fontSize:"0.8rem",color:T.textMuted,marginTop:"2px" }}>{filteredInvestments.length} {t.investments.toLowerCase()}</div>
+          {showPortfolioBack && (
+            <button
+              type="button"
+              onClick={onPortfolioBack}
+              style={{ marginTop:"8px", background:"none", border:`1px solid ${T.border}`, borderRadius:"8px", cursor:"pointer", padding:"6px 10px", display:"inline-flex", alignItems:"center", gap:"6px", color:T.textSecondary, fontSize:"0.78rem", fontWeight:600 }}
+            >
+              <Undo2 size={14} /> رجوع
+            </button>
+          )}
         </div>
-        <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:"8px", flexWrap:"wrap" }}>
           <div style={{ display:"flex", alignItems:"center", gap:"6px", background:"#f8fafc", border:`1px solid ${T.border}`, borderRadius:"10px", padding:"4px 6px", overflow:"hidden" }}>
             <button onClick={() => setSearchOpen((v) => { const next = !v; if (!next) setSearchTerm(""); return next; })} style={{ border:"none", background:"transparent", color:T.textSecondary, cursor:"pointer", display:"flex", padding:"4px" }}>
               <Search size={14} />
@@ -2750,6 +2803,8 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
               }}
             />
           </div>
+          <Btn size="sm" variant="secondary" onClick={()=>setCollapsedPortfolios(Object.fromEntries(portfolios.map((p)=>[p.id,false])))}>{t.expandAll}</Btn>
+          <Btn size="sm" variant="secondary" onClick={()=>setCollapsedPortfolios(Object.fromEntries(portfolios.map((p)=>[p.id,true])))}>{t.collapseAll}</Btn>
           <Btn icon={<Plus size={15}/>} onClick={()=>{setForm(EMPTY);setEditItem(null);setModalMode("create");setShowModal(true); onModalPrefillConsumed?.();}}>{t.addInvestment}</Btn>
         </div>
       </div>
@@ -2818,7 +2873,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                             <td style={{ padding:"12px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{fmtMoney(cbVal,{currency:portfolioCurrency(db, inv.portfolioId)})}</td>
                             <td style={{ padding:"12px 14px",fontWeight:600,color:T.textPrimary,textAlign:isRTL?"right":"left" }}>{fmtMoney(cvVal,{currency:portfolioCurrency(db, inv.portfolioId)})}</td>
                             <td style={{ padding:"12px 14px",textAlign:isRTL?"right":"left" }}>
-                              <span style={{ fontWeight:600,color:roiVal>=0?T.positive:T.negative }}>{roiVal>=0?"+":""}{roiVal.toFixed(2)}%</span>
+                              <span style={{ fontWeight:600,color:roiVal>=0?T.positive:T.negative }}>{roiVal>=0?"+":""}{roiVal.toFixed(3)}%</span>
                             </td>
                             <td style={{ padding:"12px 14px",textAlign:isRTL?"right":"left" }} onClick={e=>e.stopPropagation()}>
                               {editingPrice===inv.id
@@ -2884,7 +2939,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
               <ReadOnlyField label={t.quantity} value={form.quantity} />
               <ReadOnlyField label={t.purchasePrice} value={form.purchasePrice} />
               <ReadOnlyField label={t.currentPrice} value={form.currentPrice} />
-              <ReadOnlyField label="Balance" value={((Number(form.quantity)||0) * (Number(form.purchasePrice)||0)).toFixed(2)} />
+              <ReadOnlyField label="Balance" value={((Number(form.quantity)||0) * (Number(form.purchasePrice)||0)).toFixed(3)} />
               <ReadOnlyField label={t.purchaseDate} value={form.purchaseDate} />
               <ReadOnlyField label={t.startDate} value={form.startDate} />
               <ReadOnlyField label={t.endDate} value={form.endDate} />
@@ -2907,7 +2962,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
               <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
                 <FormField label={t.quantity}><Input type="number" value={form.quantity} onChange={e=>f("quantity")(e.target.value)} isRTL={isRTL} placeholder="0"/></FormField>
                 <FormField label={t.purchasePrice}><Input type="number" value={form.purchasePrice} onChange={e=>f("purchasePrice")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
-                <FormField label={t.totalInvestmentValue}><Input value={totalInvestmentValue.toFixed(2)} isRTL={isRTL} readOnly style={{ background:"#e2e8f0", color:T.textSecondary }}/></FormField>
+                <FormField label={t.totalInvestmentValue}><Input value={totalInvestmentValue.toFixed(3)} isRTL={isRTL} readOnly style={{ background:"#e2e8f0", color:T.textSecondary }}/></FormField>
                 <FormField label={t.currentPrice}><Input type="number" value={form.currentPrice} onChange={e=>f("currentPrice")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
               </div>
               <FormField label={t.splitFunding}>
@@ -2921,7 +2976,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                   ))}
                   <Btn size="sm" variant="secondary" onClick={()=>setForm(prev=>({ ...prev, funding:[...prev.funding,{source:"",amount:""}] }))}>{t.addSplit}</Btn>
                   <div style={{ padding:"8px", background:"#e2e8f0", borderRadius:"8px", color:T.textSecondary, fontSize:"0.8rem", fontWeight:600 }}>
-                    {t.totalSplitAmount}: {splitFundingTotal.toFixed(2)}
+                    {t.totalSplitAmount}: {splitFundingTotal.toFixed(3)}
                   </div>
                 </div>
               </FormField>
@@ -3068,7 +3123,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const [openMenu, setOpenMenu] = useState(null);
   const [formError, setFormError] = useState("");
 
-  const EMPTY = { portfolioId:"",investmentId:"",category:"",amount:"",date:"",dueDate:"",type:"income",status:"recorded",notes:"" };
+  const EMPTY = { portfolioId:"",investmentId:"",category:"",amount:"",date:"",dueDate:"",depositedAt:"",collectedAt:"",type:"income",status:"recorded",notes:"" };
   const [form, setForm] = useState(EMPTY);
   const f = k => v => setForm(p=>({...p,[k]:v}));
 
@@ -3127,14 +3182,24 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
         return;
       }
     }
-    if (editItem) { patchItem("transactions",editItem.id,form); }
-    else { addItem("transactions",form); }
+    const payload = {
+      ...form,
+      dueDate: form.dueDate || "",
+      due_date: form.dueDate || "",
+      depositedAt: form.depositedAt || "",
+      deposited_at: form.depositedAt || "",
+      collectedAt: form.collectedAt || "",
+      collected_at: form.collectedAt || "",
+    };
+
+    if (editItem) { patchItem("transactions",editItem.id,payload); }
+    else { addItem("transactions",payload); }
     setForm(EMPTY); setShowModal(false); setEditItem(null); setModalMode("create");
   };
 
   const openView = (tx) => {
     setForm({ portfolioId:tx.portfolioId||"",investmentId:tx.investmentId||"",category:tx.category||"",
-      amount:tx.amount||"",date:tx.date||"",dueDate:tx.dueDate||"",type:tx.type||"income",status:tx.status||"recorded",notes:tx.notes||"" });
+      amount:tx.amount||"",date:tx.date||"",dueDate:tx.dueDate||tx.due_date||"",depositedAt:tx.depositedAt||tx.deposited_at||"",collectedAt:tx.collectedAt||tx.collected_at||"",type:tx.type||"income",status:tx.status||"recorded",notes:tx.notes||"" });
     setEditItem(tx); setModalMode("view"); setFormError(""); setShowModal(true);
   };
 
@@ -3143,6 +3208,16 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
 
   const typeOpts = [{value:"income",label:t.income},{value:"expense",label:t.expense}];
   const statusOpts = ((db?.settings?.transactionStatuses&&db.settings.transactionStatuses.length)?db.settings.transactionStatuses:["recorded","scheduled","cancelled"]).map(v=>({ value:v, label:v }));
+
+  const normalizedStatus = String(form.status || "").toLowerCase();
+  const showDueDate = normalizedStatus.includes("schedule");
+  const showDepositedAt = normalizedStatus.includes("deposit");
+  const showCollectedAt = normalizedStatus.includes("collect");
+  const formatDateDisplay = (value) => {
+    if (!value) return "";
+    const raw = String(value);
+    return /^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0, 10) : raw;
+  };
 
   useEffect(() => {
     if (!modalPrefill) return;
@@ -3184,7 +3259,17 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
       </div>
       <div style={{ ...filterBarCss, marginBottom:"20px" }}>
         <Select value={filterPortfolio} onChange={e=>setFilterPortfolio(e.target.value)} options={[{value:"",label:t.allPortfolios},...portfolios.map(p=>({value:p.id,label:p.name}))]} isRTL={isRTL} style={filterInputCss(isRTL)} />
-        <Select value={filterInvestment} onChange={e=>setFilterInvestment(e.target.value)} options={[{value:"",label:t.filterByInvestment},...allInvestments.map(i=>({value:i.id,label:i.name}))]} isRTL={isRTL} style={filterInputCss(isRTL)} />
+        <SearchableSingleSelect
+          options={allInvestments.map(i=>({ value:i.id, label:i.name }))}
+          value={filterInvestment}
+          onChange={setFilterInvestment}
+          placeholder={t.filterByInvestment}
+          searchPlaceholder={t.filterByInvestment}
+          font={font}
+          minWidth="220px"
+          variant="light"
+          isRTL={isRTL}
+        />
         <FilterDateInput value={filterStartDate} onChange={(e)=>setFilterStartDate(e.target.value)} isRTL={isRTL} />
         <FilterDateInput value={filterEndDate} onChange={(e)=>setFilterEndDate(e.target.value)} isRTL={isRTL} />
         <Select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} options={[{ value:"", label:t.transactionStatusLabel }, ...statusOpts, { value:ARCHIVED_FILTER, label:t.archivedFilter }]} isRTL={isRTL} style={filterInputCss(isRTL)} />
@@ -3245,16 +3330,31 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
         <Modal title={modalMode==="create"?t.addTransaction:`${t.view} ${t.transactions}`} onClose={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>
           {modalMode === "view" ? (
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"10px" }}>
-              <ReadOnlyField label={t.portfolio} value={portfolios.find((p)=>p.id===form.portfolioId)?.name} />
-              <ReadOnlyField label={t.investment} value={allInvestments.find((i)=>i.id===form.investmentId)?.name} />
-              <ReadOnlyField label={t.category} value={form.category} />
-              <ReadOnlyField label={t.amount} value={form.amount} />
-              <ReadOnlyField label={t.date} value={form.date} />
-              <ReadOnlyField label={t.dueDate} value={form.dueDate} />
               <ReadOnlyField label={t.transactionType} value={form.type} />
               <ReadOnlyField label={t.status} value={form.status} />
+              <ReadOnlyField label={t.amount} value={fmtMoney(Number(form.amount || 0), { currency:portfolioCurrency(db, form.portfolioId) })} />
+              <ReadOnlyField label={t.portfolio} value={portfolios.find((p)=>p.id===form.portfolioId)?.name} />
+              <ReadOnlyField label="Due Date" value={formatDateDisplay(form.dueDate || editItem?.due_date) || "Pending"} />
+              <ReadOnlyField label="Deposited At" value={formatDateDisplay(form.depositedAt || editItem?.deposited_at) || "Pending"} />
+              <ReadOnlyField label="Collected At" value={formatDateDisplay(form.collectedAt || editItem?.collected_at) || "Pending"} />
               <ReadOnlyField label={t.notes} value={form.notes} />
-              <ReadOnlyField label="Created At" value={editItem?.created_at} />
+              <div style={{ gridColumn:"1 / -1", padding:"10px 12px", border:`1px solid ${T.border}`, borderRadius:"10px", background:T.bgApp }}>
+                <div style={{ fontSize:"0.75rem", fontWeight:700, color:T.textSecondary, marginBottom:"8px" }}>Transaction Timeline</div>
+                <div style={{ display:"grid", gap:"8px" }}>
+                  {[
+                    { label:"Scheduled", value: formatDateDisplay(form.dueDate || editItem?.due_date) || "" },
+                    { label:"Deposited", value: formatDateDisplay(form.depositedAt || editItem?.deposited_at) || "" },
+                    { label:"Collected", value: formatDateDisplay(form.collectedAt || editItem?.collected_at) || "" },
+                  ].map((stage) => (
+                    <div key={stage.label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:"10px", fontSize:"0.8rem" }}>
+                      <span style={{ color:T.textMuted }}>{stage.label}</span>
+                      <span style={{ color:T.textPrimary, fontWeight: stage.value ? 700 : 500 }}>
+                        {stage.value ? stage.value : "Pending"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           ) : (
             <>
@@ -3279,9 +3379,11 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
             <FormField label={t.date}><Input type="date" value={form.date} onChange={e=>f("date")(e.target.value)} isRTL={isRTL}/></FormField>
             <FormField label={t.status}><Select value={form.status} onChange={e=>f("status")(e.target.value)} options={statusOpts} isRTL={isRTL}/></FormField>
           </div>
-          {String(form.status||"" ).toLowerCase().includes("schedule") && (
-            <FormField label={t.dueDate}><Input type="date" value={form.dueDate} onChange={e=>f("dueDate")(e.target.value)} isRTL={isRTL}/></FormField>
-          )}
+          <div style={{ display:"grid",gridTemplateColumns:"1fr",gap:"12px" }}>
+            {showDueDate && <FormField label={t.dueDate}><Input type="date" value={form.dueDate} onChange={e=>f("dueDate")(e.target.value)} isRTL={isRTL}/></FormField>}
+            {showDepositedAt && <FormField label="Deposited At"><Input type="date" value={form.depositedAt} onChange={e=>f("depositedAt")(e.target.value)} isRTL={isRTL}/></FormField>}
+            {showCollectedAt && <FormField label="Collected At"><Input type="date" value={form.collectedAt} onChange={e=>f("collectedAt")(e.target.value)} isRTL={isRTL}/></FormField>}
+          </div>
           <FormField label={t.notes}><Input value={form.notes} onChange={e=>f("notes")(e.target.value)} isRTL={isRTL} placeholder={`(${t.optional})`}/></FormField>
             </>
           )}
@@ -3293,7 +3395,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
             </>)}
             {modalMode==="edit" && (<>
               <Btn onClick={handleSave}>{t.save}</Btn>
-              <Btn variant="secondary" onClick={()=>{ setForm({ portfolioId:editItem.portfolioId||"",investmentId:editItem.investmentId||"",category:editItem.category||"",amount:editItem.amount||"",date:editItem.date||"",dueDate:editItem.dueDate||"",type:editItem.type||"income",status:editItem.status||"recorded",notes:editItem.notes||"" }); setModalMode("view"); }}>{t.cancel}</Btn>
+              <Btn variant="secondary" onClick={()=>{ setForm({ portfolioId:editItem.portfolioId||"",investmentId:editItem.investmentId||"",category:editItem.category||"",amount:editItem.amount||"",date:editItem.date||"",dueDate:editItem.dueDate||editItem.due_date||"",depositedAt:editItem.depositedAt||editItem.deposited_at||"",collectedAt:editItem.collectedAt||editItem.collected_at||"",type:editItem.type||"income",status:editItem.status||"recorded",notes:editItem.notes||"" }); setModalMode("view"); }}>{t.cancel}</Btn>
             </>)}
             {modalMode==="create" && (<>
               <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>{t.cancel}</Btn>
@@ -3317,7 +3419,7 @@ function TxActionMenu({ tx, onClose }) {
   const doneStatus = statuses.find(s=>String(s).toLowerCase().includes("record")) || statuses[0];
   const queuedStatus = statuses.find(s=>String(s).toLowerCase().includes("schedule")) || statuses[1] || statuses[0];
   const actions = [
-    { label:t.markCollected, icon:<Check size={13}/>, color:T.positive, show:tx.status!==doneStatus, action:()=>{ patchItem("transactions",tx.id,{status:doneStatus,collected_at:new Date().toISOString()}); onClose(); } },
+    { label:t.markCollected, icon:<Check size={13}/>, color:T.positive, show:tx.status!==doneStatus, action:()=>{ patchItem("transactions",tx.id,{status:doneStatus,collected_at:new Date().toISOString(),collectedAt:new Date().toISOString()}); onClose(); } },
     { label:t.markScheduled, icon:<RefreshCw size={13}/>, color:T.warning, show:tx.status===doneStatus, action:()=>{ patchItem("transactions",tx.id,{status:queuedStatus}); onClose(); } },
     { label:tx.is_hidden ? t.unarchive : t.archive, icon:tx.is_hidden ? <Eye size={13}/> : <EyeOff size={13}/>, color:T.warning, show:true, action:()=>{ tx.is_hidden ? unarchiveItem("transactions",tx.id) : archiveItem("transactions",tx.id); onClose(); } },
     { label:t.deleteItem, icon:<Trash2 size={13}/>, color:T.negative, show:true, action:()=>{ if(window.confirm(t.deleteCascadeWarning)) hardDeleteItem("transactions",tx.id); onClose(); } },
@@ -3325,7 +3427,7 @@ function TxActionMenu({ tx, onClose }) {
   return (
     <div ref={ref} style={{ position:"absolute",right:0,top:"calc(100% + 4px)",zIndex:500,background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:"10px",minWidth:"170px",boxShadow:"0 8px 28px rgba(0,0,0,0.15)",overflow:"hidden" }}>
       {actions.map(a=>(
-        <button key={a.label} onClick={a.action} style={{ display:"flex",alignItems:"center",gap:"8px",width:"100%",padding:"9px 14px",background:"none",border:"none",color:a.color,fontSize:"0.78rem",fontWeight:500,cursor:"pointer",textAlign:"left" }}
+        <button key={a.label} onClick={a.action} style={{ display:"flex",alignItems:"center",gap:"8px",width:"100%",padding:"9px 14px",background:"none",border:"none",color:a.color,fontSize:"0.78rem",fontWeight:500,cursor:"pointer",textAlign:isRTL?"right":"left" }}
           onMouseEnter={e=>e.currentTarget.style.background=T.bgApp}
           onMouseLeave={e=>e.currentTarget.style.background="none"}
         >{a.icon}{a.label}</button>
@@ -3634,6 +3736,85 @@ function AccordionSection({ title, icon, children }) {
   );
 }
 
+function SearchableSingleSelect({ options, value, onChange, placeholder, searchPlaceholder, font, minWidth = "220px", variant = "dark", isRTL = false }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const filtered = options.filter((opt) => String(opt.label ?? opt.value ?? "").toLowerCase().includes(normalizedQuery));
+  const selected = options.find((opt) => (opt.value ?? opt) === value);
+
+  const palette = variant === "light"
+    ? {
+      buttonBg: "#ffffff",
+      buttonColor: T.textPrimary,
+      buttonBorder: "1px solid rgba(148,163,184,0.46)",
+      panelBg: "#ffffff",
+      panelBorder: "1px solid rgba(148,163,184,0.3)",
+      inputColor: T.textPrimary,
+      muted: T.textSecondary,
+      optionColor: T.textSecondary,
+      selectedOptionColor: T.textPrimary,
+      shadow: "0 8px 24px rgba(15,23,42,0.12)",
+      divider: "1px solid rgba(148,163,184,0.18)",
+    }
+    : {
+      buttonBg: "#111c33",
+      buttonColor: "#e2e8f0",
+      buttonBorder: "1px solid rgba(148,163,184,0.32)",
+      panelBg: "#0b1220",
+      panelBorder: "1px solid rgba(148,163,184,0.3)",
+      inputColor: "#e2e8f0",
+      muted: "#94a3b8",
+      optionColor: "#cbd5e1",
+      selectedOptionColor: "#f8fafc",
+      shadow: "0 8px 30px rgba(2,6,23,0.6)",
+      divider: "1px solid rgba(148,163,184,0.18)",
+    };
+
+  return (
+    <div ref={ref} style={{ position:"relative", minWidth }}>
+      <button type="button" onClick={()=>setOpen((v)=>!v)} style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between", gap:"8px", padding:"9px 10px", border:palette.buttonBorder, borderRadius:"8px", background:palette.buttonBg, color:palette.buttonColor, fontFamily:font, fontSize:"0.8rem", cursor:"pointer", minHeight:"38px" }}>
+        <span style={{ whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", textAlign:isRTL?"right":"left", flex:1 }}>{selected?.label || placeholder}</span>
+        <ChevronDown size={14} style={{ transform:open?"rotate(180deg)":"rotate(0deg)", transition:"transform 0.2s" }} />
+      </button>
+      {open && (
+        <div style={{ position:"absolute", top:"calc(100% + 6px)", left:0, right:0, border:palette.panelBorder, borderRadius:"10px", background:palette.panelBg, zIndex:30, padding:"10px", boxShadow:palette.shadow }}>
+          <div style={{ display:"flex", alignItems:"center", gap:"6px", border:"1px solid rgba(148,163,184,0.25)", borderRadius:"8px", padding:"6px 8px", marginBottom:"8px", color:palette.muted }}>
+            <Search size={14} />
+            <input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder={searchPlaceholder} style={{ flex:1, border:"none", outline:"none", background:"transparent", color:palette.inputColor, fontSize:"0.78rem", fontFamily:font, textAlign:isRTL?"right":"left" }} />
+          </div>
+          <div style={{ maxHeight:"200px", overflowY:"auto", borderTop:palette.divider, marginTop:"6px", paddingTop:"6px" }}>
+            <button type="button" onClick={()=>{onChange(""); setOpen(false); setQuery("");}} style={{ width:"100%", textAlign:isRTL?"right":"left", border:"none", background:"transparent", color:palette.buttonColor, fontSize:"0.78rem", padding:"6px 4px", cursor:"pointer" }}>{placeholder}</button>
+            {filtered.map((opt) => {
+              const optionValue = opt.value ?? opt;
+              const optionLabel = opt.label ?? opt;
+              return (
+                <button
+                  key={optionValue}
+                  type="button"
+                  onClick={()=>{onChange(optionValue); setOpen(false); setQuery("");}}
+                  style={{ width:"100%", textAlign:isRTL?"right":"left", border:"none", background:"transparent", color:optionValue===value?palette.selectedOptionColor:palette.optionColor, fontSize:"0.78rem", padding:"6px 4px", cursor:"pointer", fontWeight:optionValue===value?700:500 }}
+                >
+                  {optionLabel}
+                </button>
+              );
+            })}
+            {!filtered.length && <div style={{ color:"#64748b", fontSize:"0.75rem", padding:"8px 4px" }}>No matches</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SearchableMultiYearSelect({ options, selectedYears, onChange, t, font }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -3694,7 +3875,7 @@ function LegendList({ rows, currency = "USD", textColor = "#cbd5e1", valueColor 
         <div key={row.name} style={{ display:"grid", gridTemplateColumns:"14px 1fr auto", gap:"8px", alignItems:"center", fontSize:"0.76rem", color:textColor }}>
           <span style={{ width:"10px", height:"10px", borderRadius:"999px", background:row.color }} />
           <span>{row.name}</span>
-          <span style={{ color:valueColor, fontWeight:600 }}>{fmtMoney(row.value, { currency })} ({row.pct.toFixed(1)}%)</span>
+          <span style={{ color:valueColor, fontWeight:600 }}>{fmtMoney(row.value, { currency })} ({row.pct.toFixed(3)}%)</span>
         </div>
       ))}
     </div>
@@ -3732,7 +3913,7 @@ function StatisticsMatrixTable({ title, headers, rows, currency = "USD" }) {
   );
 }
 
-function FundingSourceBreakdownTable({ rows, currency }) {
+function FundingSourceBreakdownTable({ rows, currency, onOpenInvestments }) {
   const { isRTL, t } = useApp();
   return (
     <div style={{ overflowX:"auto" }}>
@@ -3750,11 +3931,22 @@ function FundingSourceBreakdownTable({ rows, currency }) {
               <td style={{ padding:"10px 12px", borderTop:"1px solid rgba(148,163,184,0.16)", color:"#f8fafc", fontWeight:600, textAlign:isRTL?"right":"left" }}>{row.source}</td>
               <td style={{ padding:"10px 12px", borderTop:"1px solid rgba(148,163,184,0.16)", color:"#cbd5e1", textAlign:isRTL?"right":"left" }}>{fmtMoney(row.total, { currency })}</td>
               <td style={{ padding:"10px 12px", borderTop:"1px solid rgba(148,163,184,0.16)", color:"#cbd5e1", textAlign:isRTL?"right":"left" }}>
-                {(row.breakdown || []).map((item, i) => (
-                  <div key={`${row.source}-${i}`} style={{ marginBottom:i===((row.breakdown||[]).length-1)?0:4 }}>
-                    {item.investment}: {fmtMoney(item.amount, { currency })}
-                  </div>
-                ))}
+                <button
+                  type="button"
+                  onClick={() => onOpenInvestments?.(row)}
+                  style={{
+                    background:"none",
+                    border:"none",
+                    padding:0,
+                    color:"#7dd3fc",
+                    cursor:"pointer",
+                    fontSize:"0.8rem",
+                    fontWeight:600,
+                    textDecoration:"underline",
+                  }}
+                >
+                  {`View ${row.breakdown?.length || 0} Investments`}
+                </button>
               </td>
             </tr>
           ))}
@@ -3767,11 +3959,22 @@ function FundingSourceBreakdownTable({ rows, currency }) {
 function StatisticsTab() {
   const { db, t, isRTL, font } = useApp();
   const [selectedYears, setSelectedYears] = useState([]);
+  const [selectedInvestmentStatus, setSelectedInvestmentStatus] = useState("");
+  const [fundingInvestmentsModal, setFundingInvestmentsModal] = useState(null);
 
   const investments = visible(db?.investments || []);
   const transactions = visible(db?.transactions || []);
   const portfolios = visible(db?.portfolios || []);
   const primaryCurrency = baseCurrencyCode(db);
+  const investmentStatuses = db?.settings?.investmentStatuses?.length ? db.settings.investmentStatuses : ["Active", "Paused", "Closed"];
+
+  const filteredInvestments = selectedInvestmentStatus
+    ? investments.filter((inv) => inv.status === selectedInvestmentStatus)
+    : investments;
+  const filteredInvestmentIds = new Set(filteredInvestments.map((inv) => inv.id));
+  const filteredTransactions = selectedInvestmentStatus
+    ? transactions.filter((tx) => filteredInvestmentIds.has(tx.investmentId))
+    : transactions;
 
   const toRiskBucket = (risk) => {
     const val = String(risk || "").toLowerCase();
@@ -3781,14 +3984,14 @@ function StatisticsTab() {
     return null;
   };
 
-  const invById = new Map(investments.map((i) => [i.id, i]));
-  const yearlyRows = [...new Set(transactions.map((tx) => new Date(tx.date || tx.created_at || Date.now()).getFullYear()))]
+  const invById = new Map(filteredInvestments.map((i) => [i.id, i]));
+  const yearlyRows = [...new Set(filteredTransactions.map((tx) => new Date(tx.date || tx.created_at || Date.now()).getFullYear()))]
     .filter((y) => Number.isFinite(y))
     .sort((a, b) => b - a);
   const visibleYears = selectedYears.length ? yearlyRows.filter((y) => selectedYears.includes(String(y))) : yearlyRows;
 
   const capitalByRisk = { low:0, medium:0, high:0 };
-  investments.forEach((inv) => {
+  filteredInvestments.forEach((inv) => {
     const bucket = toRiskBucket(inv.risk);
     if (!bucket) return;
     capitalByRisk[bucket] += toBaseAmount(db, costBasis(inv), portfolioCurrency(db, inv.portfolioId));
@@ -3799,7 +4002,7 @@ function StatisticsTab() {
   const incomeByYearStatus = {};
   const statuses = db?.settings?.transactionStatuses?.length ? db.settings.transactionStatuses : ["recorded", "scheduled", "cancelled"];
 
-  transactions.forEach((tx) => {
+  filteredTransactions.forEach((tx) => {
     const year = new Date(tx.date || tx.created_at || Date.now()).getFullYear();
     if (!Number.isFinite(year)) return;
     const inv = invById.get(tx.investmentId);
@@ -3852,7 +4055,7 @@ function StatisticsTab() {
   lossRows.push({ key:"loss-total", isTotal:true, values:[t.totalLabel, lossTotals[0], lossTotals[1], lossTotals[2], lossTotals[0]+lossTotals[1]+lossTotals[2]] });
 
   const allocationData = portfolios.map((portfolio) => {
-    const portfolioInvestments = inv_of_portfolio(db, portfolio.id);
+    const portfolioInvestments = filteredInvestments.filter((inv) => inv.portfolioId === portfolio.id);
     return {
       name: portfolio.name,
       value: portfolioInvestments.reduce((sum, inv) => sum + toBaseAmount(db, curVal(inv), portfolio.currency || "USD"), 0),
@@ -3865,20 +4068,19 @@ function StatisticsTab() {
     color: T.chart[idx % T.chart.length],
   }));
 
-  const fundingSourceUniverse = [...new Set([...(db?.settings?.fundingSources || []), ...investments.flatMap((inv) => (inv.funding || []).map((f) => f.source).filter(Boolean))])];
+  const fundingSourceUniverse = [...new Set([...(db?.settings?.fundingSources || []), ...filteredInvestments.flatMap((inv) => (inv.funding || []).map((f) => f.source).filter(Boolean))])];
   const fundingRows = fundingSourceUniverse.map((source) => {
     const breakdown = [];
     let total = 0;
-    investments.forEach((inv) => {
+    filteredInvestments.forEach((inv) => {
       const amount = (inv.funding || []).filter((f) => f.source === source).reduce((sum, f) => sum + toBaseAmount(db, parseFloat(f.amount) || 0, portfolioCurrency(db, inv.portfolioId)), 0);
       if (amount > 0) {
         breakdown.push({ investment:inv.name || t.unassignedInvestment, amount });
         total += amount;
       }
     });
-    if (!breakdown.length) breakdown.push({ investment:t.unassignedInvestment, amount:0 });
     return { source, total, breakdown };
-  }).filter((row) => row.total > 0 || row.breakdown.length).sort((a,b)=>b.total-a.total);
+  }).filter((row) => row.total > 0).sort((a,b)=>b.total-a.total);
 
   const fundingChartTotal = fundingRows.reduce((sum, row) => sum + row.total, 0);
   const fundingChartData = fundingRows.filter((row) => row.total > 0).map((row, idx) => ({ ...row, pct:fundingChartTotal ? (row.total / fundingChartTotal) * 100 : 0, color:T.chart[idx % T.chart.length], name:row.source, value:row.total }));
@@ -3907,9 +4109,24 @@ function StatisticsTab() {
           <h2 style={{ margin:0, fontSize:"1.45rem", color:"#f8fafc" }}>{t.statistics}</h2>
           <div style={{ marginTop:"4px", fontSize:"0.82rem", color:"#94a3b8" }}>{t.statisticsCenter}</div>
         </div>
-        <div>
-          <label style={{ display:"block", marginBottom:"6px", fontSize:"0.74rem", color:"#94a3b8" }}>{t.yearFilter}</label>
-          <SearchableMultiYearSelect options={yearlyRows} selectedYears={selectedYears} onChange={setSelectedYears} t={t} font={font} />
+        <div style={{ display:"flex", alignItems:"flex-end", gap:"8px", flexWrap:"wrap" }}>
+          <div>
+            <label style={{ display:"block", marginBottom:"6px", fontSize:"0.74rem", color:"#94a3b8" }}>{t.yearFilter}</label>
+            <SearchableMultiYearSelect options={yearlyRows} selectedYears={selectedYears} onChange={setSelectedYears} t={t} font={font} />
+          </div>
+          <div>
+            <label style={{ display:"block", marginBottom:"6px", fontSize:"0.74rem", color:"#94a3b8" }}>{t.investmentStatuses}</label>
+            <SearchableSingleSelect
+              options={investmentStatuses.map((status)=>({ value:status, label:status }))}
+              value={selectedInvestmentStatus}
+              onChange={setSelectedInvestmentStatus}
+              placeholder={t.investmentStatuses}
+              searchPlaceholder={t.searchUsersPlaceholder}
+              font={font}
+              minWidth="220px"
+              isRTL={isRTL}
+            />
+          </div>
         </div>
       </div>
 
@@ -4027,8 +4244,29 @@ function StatisticsTab() {
       </AccordionSection>
 
       <AccordionSection title={t.fundingSourceBreakdown} icon={<Landmark size={14} color="#94a3b8" />}>
-        <FundingSourceBreakdownTable rows={fundingRows} currency={primaryCurrency} />
+        <FundingSourceBreakdownTable rows={fundingRows} currency={primaryCurrency} onOpenInvestments={setFundingInvestmentsModal} />
       </AccordionSection>
+
+      {fundingInvestmentsModal && (
+        <Modal
+          title={`${fundingInvestmentsModal.source} Investments`}
+          onClose={() => setFundingInvestmentsModal(null)}
+          maxWidth="560px"
+        >
+          {(fundingInvestmentsModal.breakdown || []).length ? (
+            <div style={{ display:"grid", gap:"8px" }}>
+              {fundingInvestmentsModal.breakdown.map((item, idx) => (
+                <div key={`${fundingInvestmentsModal.source}-${item.investment}-${idx}`} style={{ display:"flex", justifyContent:"space-between", gap:"8px", padding:"10px", border:"1px solid rgba(148,163,184,0.25)", borderRadius:"8px", background:"rgba(15,23,42,0.6)" }}>
+                  <span style={{ color:"#e2e8f0", fontSize:"0.8rem", fontWeight:600 }}>{item.investment}</span>
+                  <span style={{ color:"#bfdbfe", fontSize:"0.78rem" }}>{fmtMoney(item.amount, { currency:primaryCurrency })}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState text={t.noInvestments} />
+          )}
+        </Modal>
+      )}
     </div>
   );
 }
@@ -4263,6 +4501,7 @@ function MainApp() {
   const [txNavigationFilter, setTxNavigationFilter] = useState(null);
   const [smartBackVisible, setSmartBackVisible] = useState(false);
   const [investmentNavigationFilter, setInvestmentNavigationFilter] = useState(null);
+  const [showPortfolioBackInInvestments, setShowPortfolioBackInInvestments] = useState(false);
   const mainRef = useRef(null);
   const isMobile = useIsMobile();
 
@@ -4289,6 +4528,8 @@ function MainApp() {
     if (activeTab !== "investments") {
       setInvestmentPrefill(null);
       setInvestmentNavigationFilter(null);
+      setShowPortfolioBackInInvestments(false);
+      sessionStorage.removeItem("investments_from_portfolio_link_v1");
     }
     if (activeTab !== "transactions") {
       setTransactionPrefill(null);
@@ -4303,7 +4544,9 @@ function MainApp() {
   };
 
   const goToInvestmentsForPortfolio = (portfolio, options = {}) => {
-    setInvestmentNavigationFilter({ portfolioId: portfolio.id, status: options.status || "", stamp: Date.now() });
+    setInvestmentNavigationFilter({ portfolioId: portfolio.id, status: options.status || "", fromPortfolioLink:true, stamp: Date.now() });
+    sessionStorage.setItem("investments_from_portfolio_link_v1", "1");
+    setShowPortfolioBackInInvestments(true);
     setActiveTab("investments");
   };
 
@@ -4328,10 +4571,16 @@ function MainApp() {
     setSmartBackVisible(false);
   };
 
+  const handlePortfolioBackFromInvestments = () => {
+    setActiveTab("portfolios");
+    setShowPortfolioBackInInvestments(false);
+    sessionStorage.removeItem("investments_from_portfolio_link_v1");
+  };
+
   const tabs = {
     dashboard:    <Dashboard />,
     portfolios:   <PortfoliosTab onQuickAddInvestment={quickAddInvestment} onViewInvestments={goToInvestmentsForPortfolio} />,
-    investments:  <InvestmentsTab onQuickAddTransaction={quickAddTransaction} onViewTransactions={goToTransactionsForInvestment} modalPrefill={investmentPrefill} navigationFilter={investmentNavigationFilter} onModalPrefillConsumed={() => setInvestmentPrefill(null)} />,
+    investments:  <InvestmentsTab onQuickAddTransaction={quickAddTransaction} onViewTransactions={goToTransactionsForInvestment} modalPrefill={investmentPrefill} navigationFilter={investmentNavigationFilter} onModalPrefillConsumed={() => setInvestmentPrefill(null)} showPortfolioBack={showPortfolioBackInInvestments || sessionStorage.getItem("investments_from_portfolio_link_v1") === "1"} onPortfolioBack={handlePortfolioBackFromInvestments} />,
     transactions: <TransactionsTab showSmartBack={smartBackVisible} onSmartBack={handleSmartBack} navigationFilter={txNavigationFilter} modalPrefill={transactionPrefill} />,
     statistics:   <StatisticsTab />,
     users:        canManageUsers ? <UserManagementTab /> : <Dashboard />,

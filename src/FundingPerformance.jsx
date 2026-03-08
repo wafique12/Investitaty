@@ -158,8 +158,8 @@ export default function FundingPerformance({ db }) {
                 >
                   +$
                   {s.profit.toLocaleString("en-US", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
+                    minimumFractionDigits: 3,
+                    maximumFractionDigits: 3,
                   })}
                 </span>
 
@@ -178,7 +178,7 @@ export default function FundingPerformance({ db }) {
                     padding: "1px 5px",
                   }}
                 >
-                  {s.roi.toFixed(1)}% ROI
+                  {s.roi.toFixed(3)}% ROI
                 </span>
               </div>
             </div>
@@ -194,8 +194,8 @@ export default function FundingPerformance({ db }) {
             >
               $
               {s.capital.toLocaleString("en-US", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
+                minimumFractionDigits: 3,
+                maximumFractionDigits: 3,
               })}{" "}
               deployed
             </div>

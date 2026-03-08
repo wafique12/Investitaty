@@ -130,7 +130,7 @@ function PortfolioCard({ type, investments, totalValue, allocationPct, colorSet,
           letterSpacing: "-0.01em",
         }}
       >
-        ${totalValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        ${totalValue.toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 })}
       </div>
 
       <div
@@ -141,7 +141,7 @@ function PortfolioCard({ type, investments, totalValue, allocationPct, colorSet,
           marginBottom: "14px",
         }}
       >
-        {allocationPct.toFixed(1)}% of portfolio
+        {allocationPct.toFixed(3)}% of portfolio
       </div>
 
       {/* Mini bar chart */}
