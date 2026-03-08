@@ -2370,6 +2370,16 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
 
   const allPortfolios = db?.portfolios||[];
   const statusOpts = ((db?.settings?.investmentStatuses&&db.settings.investmentStatuses.length)?db.settings.investmentStatuses:["Active","Paused","Closed"]).map((v)=>({ value:v, label:v }));
+
+  useEffect(() => {
+    setCollapsedPortfolios((prev) => {
+      const next = { ...prev };
+      (allPortfolios || []).forEach((portfolio) => {
+        if (!Object.prototype.hasOwnProperty.call(next, portfolio.id)) next[portfolio.id] = true;
+      });
+      return next;
+    });
+  }, [allPortfolios]);
   const portfolios = allPortfolios.filter((p) => {
     const matchesSearch = !searchTerm.trim() || String(p.name || "").toLowerCase().includes(searchTerm.trim().toLowerCase());
     if (!matchesSearch) return false;
@@ -2397,17 +2407,19 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
         <div style={{ display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap" }}>
           <Btn size="sm" variant="secondary" onClick={()=>setCollapsedPortfolios(Object.fromEntries(portfolios.map((p)=>[p.id,false])))}>{t.expandAll}</Btn>
           <Btn size="sm" variant="secondary" onClick={()=>setCollapsedPortfolios(Object.fromEntries(portfolios.map((p)=>[p.id,true])))}>{t.collapseAll}</Btn>
-          <button title={t.searchUsersPlaceholder} onClick={()=>setSearchOpen((v)=>!v)} style={{ width:"34px",height:"34px",borderRadius:"8px",border:`1px solid ${T.border}`,background:T.bgCard,color:T.textSecondary,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center" }}>
-            <Search size={15} />
-          </button>
+          <div style={{ display:"flex",alignItems:"center",gap:"6px" }}>
+            <button title={t.searchUsersPlaceholder} onClick={()=>setSearchOpen((v)=>!v)} style={{ width:"34px",height:"34px",borderRadius:"8px",border:`1px solid ${T.border}`,background:T.bgCard,color:T.textSecondary,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center" }}>
+              <Search size={15} />
+            </button>
+            {searchOpen && (
+              <div style={{ width:"220px",maxWidth:"52vw" }}>
+                <Input value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} isRTL={isRTL} placeholder={t.searchUsersPlaceholder} />
+              </div>
+            )}
+          </div>
           <Btn icon={<Plus size={15}/>} onClick={()=>{setForm(EMPTY);setEditItem(null);setModalMode("create");setShowModal(true);}}>{t.addPortfolio}</Btn>
         </div>
       </div>
-      {searchOpen && (
-        <div style={{ marginBottom:"12px",maxWidth:"320px" }}>
-          <Input value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} isRTL={isRTL} placeholder={t.searchUsersPlaceholder} />
-        </div>
-      )}
 
       <div style={{ ...filterBarCss, justifyContent:isRTL?"flex-start":"flex-end" }}>
         <div style={{ width:"220px", maxWidth:"100%" }}>
@@ -2509,22 +2521,12 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
                   ))}
                 </div>
                 {p.notes && <div style={{ fontSize:"0.75rem",color:T.textMuted,fontStyle:"italic",marginBottom:"10px" }}>{p.notes}</div>}
-                <div style={{ borderTop:`1px dashed ${T.border}`,paddingTop:"10px" }}>
-                  <div style={{ fontSize:"0.68rem",fontWeight:600,color:T.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:"8px" }}>{t.investments}</div>
-                  {invs.length === 0 ? (
-                    <div style={{ fontSize:"0.75rem",color:T.textMuted }}>{t.noInvestments}</div>
-                  ) : (
-                    <div style={{ display:"grid",gap:"6px" }}>
-                      {invs.slice(0,4).map((inv)=> (
-                        <div key={inv.id} style={{ display:"flex",justifyContent:"space-between",gap:"8px",fontSize:"0.76rem",color:T.textSecondary }}>
-                          <span style={{ color:T.textPrimary,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{inv.name}</span>
-                          <span style={{ whiteSpace:"nowrap" }}>{fmtMoney(curVal(inv),{compact:true,currency:p.currency||"USD"})}</span>
-                        </div>
-                      ))}
-                      {invs.length > 4 && <span style={{ fontSize:"0.72rem",color:T.textMuted }}>+{invs.length - 4}</span>}
-                    </div>
-                  )}
-                </div></>) }
+                </>) }
+                <div style={{ borderTop:`1px dashed ${T.border}`,paddingTop:"10px",marginTop:isCollapsed?"6px":"0" }}>
+                  <button onClick={()=>onViewInvestments?.(p)} style={{ background:"none",border:"none",padding:0,cursor:"pointer",color:T.info,fontSize:"0.8rem",fontWeight:600,textDecoration:"underline" }}>
+                    {t.investments}
+                  </button>
+                </div>
               </div>
             </Card>
           );
