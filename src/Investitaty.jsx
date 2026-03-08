@@ -2340,13 +2340,6 @@ function EmptyState({ text }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
 
-  useEffect(() => () => {
-    setShowModal(false);
-    setEditItem(null);
-    setModalMode("create");
-    setFilterStatus("");
-    setForm(EMPTY);
-  }, []);
   const { db, addItem, archiveItem, unarchiveItem, hardDeleteItem, patchItem, t, isRTL, font } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -2355,6 +2348,14 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
   const EMPTY = { name:"",type:"",risk:"",currency:"USD",status:"Active",color:T.chart[0],notes:"" };
   const [form, setForm] = useState(EMPTY);
   const f = k => v => setForm(p=>({...p,[k]:v}));
+
+  useEffect(() => () => {
+    setShowModal(false);
+    setEditItem(null);
+    setModalMode("create");
+    setFilterStatus("");
+    setForm(EMPTY);
+  }, []);
 
   const allPortfolios = db?.portfolios||[];
   const statusOpts = ((db?.settings?.investmentStatuses&&db.settings.investmentStatuses.length)?db.settings.investmentStatuses:["Active","Paused","Closed"]).map((v)=>({ value:v, label:v }));
@@ -2454,7 +2455,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
                     { label:t.roi, val:(
                       <span>
                         {`${pRoi>=0?"+":""}${pRoi.toFixed(1)}%`}
-                        <span style={{ fontSize:"0.74rem", marginInlineStart:"6px", color:T.textMuted }}>
+                        <span style={{ fontSize:"0.74rem", marginInlineStart:"6px", color:pRoi>=0?T.positive:T.negative }}>
                           ({fmtMoney(activePrincipal + (totalValue - pCost),{compact:true,currency:p.currency||"USD"})})
                         </span>
                       </span>
@@ -2539,15 +2540,6 @@ function ReadOnlyField({ label, value }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefill, navigationFilter, onModalPrefillConsumed }) {
 
-  useEffect(() => () => {
-    setShowModal(false);
-    setEditItem(null);
-    setModalMode("create");
-    setFilterPortfolio("");
-    setFilterStatus("");
-    setSearch("");
-    setForm(EMPTY);
-  }, []);
   const { db, addItem, archiveItem, unarchiveItem, hardDeleteItem, patchItem, t, isRTL, font } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -2609,6 +2601,24 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [formError, setFormError] = useState("");
+
+  useEffect(() => () => {
+    setShowModal(false);
+    setEditItem(null);
+    setEditingPrice(null);
+    setExpandedRow(null);
+    setCollapsedPortfolios({});
+    setModalMode("create");
+    setFilterStartDate("");
+    setFilterEndDate("");
+    setFilterStatus("");
+    setFilterPortfolio("");
+    setSearchOpen(false);
+    setSearchTerm("");
+    setForm(EMPTY);
+    setFormError("");
+    localStorage.removeItem("investments_filters_v1");
+  }, [EMPTY]);
 
   const closeModal = useCallback(() => {
     setShowModal(false);
@@ -2992,19 +3002,6 @@ function InvestmentDetailExpanded({ inv, txs, db }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmartBack }) {
 
-  useEffect(() => () => {
-    setShowModal(false);
-    setEditItem(null);
-    setModalMode("create");
-    setFilterPortfolio("");
-    setFilterStatus("");
-    setFilterInvestment("");
-    setFilterStartDate("");
-    setFilterEndDate("");
-    setOpenMenu(null);
-    setForm(EMPTY);
-    setFormError("");
-  }, []);
   const { db, addItem, archiveItem, hardDeleteItem, patchItem, t, isRTL, font } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -3020,6 +3017,20 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const EMPTY = { portfolioId:"",investmentId:"",category:"",amount:"",date:"",dueDate:"",type:"income",status:"recorded",notes:"" };
   const [form, setForm] = useState(EMPTY);
   const f = k => v => setForm(p=>({...p,[k]:v}));
+
+  useEffect(() => () => {
+    setShowModal(false);
+    setEditItem(null);
+    setModalMode("create");
+    setFilterPortfolio("");
+    setFilterStatus("");
+    setFilterInvestment("");
+    setFilterStartDate("");
+    setFilterEndDate("");
+    setOpenMenu(null);
+    setForm(EMPTY);
+    setFormError("");
+  }, []);
 
   const portfolios = visible(db?.portfolios||[]);
   const allInvestments = visible(db?.investments||[]);
