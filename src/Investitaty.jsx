@@ -228,6 +228,8 @@ const TRANSLATIONS = {
     ofLabel: "of",
     previous: "Previous",
     next: "Next",
+    expandAll: "Expand all",
+    collapseAll: "Collapse all",
     pageLabel: "Page",
     addItem: "Add",
     dataStorage: "Data stored in",
@@ -451,6 +453,8 @@ const TRANSLATIONS = {
     ofLabel: "من",
     previous: "السابق",
     next: "التالي",
+    expandAll: "فتح الكل",
+    collapseAll: "طي الكل",
     pageLabel: "الصفحة",
     addItem: "إضافة",
     dataStorage: "البيانات محفوظة في",
@@ -2346,6 +2350,9 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
   const [editItem, setEditItem] = useState(null);
   const [modalMode, setModalMode] = useState("create");
   const [filterStatus, setFilterStatus] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [collapsedPortfolios, setCollapsedPortfolios] = useState({});
   const EMPTY = { name:"",type:"",risk:"",currency:"USD",status:"Active",color:T.chart[0],notes:"" };
   const [form, setForm] = useState(EMPTY);
   const f = k => v => setForm(p=>({...p,[k]:v}));
@@ -2355,12 +2362,17 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
     setEditItem(null);
     setModalMode("create");
     setFilterStatus("");
+    setSearchOpen(false);
+    setSearchTerm("");
+    setCollapsedPortfolios({});
     setForm(EMPTY);
   }, []);
 
   const allPortfolios = db?.portfolios||[];
   const statusOpts = ((db?.settings?.investmentStatuses&&db.settings.investmentStatuses.length)?db.settings.investmentStatuses:["Active","Paused","Closed"]).map((v)=>({ value:v, label:v }));
   const portfolios = allPortfolios.filter((p) => {
+    const matchesSearch = !searchTerm.trim() || String(p.name || "").toLowerCase().includes(searchTerm.trim().toLowerCase());
+    if (!matchesSearch) return false;
     if (!filterStatus) return !p.is_hidden;
     if (filterStatus === ARCHIVED_FILTER) return Boolean(p.is_hidden);
     return !p.is_hidden && p.status === filterStatus;
@@ -2377,13 +2389,25 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
 
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font }}>
-      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"24px" }}>
+      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"24px",gap:"10px",flexWrap:"wrap" }}>
         <div>
           <h2 style={{ margin:0,fontSize:"1.4rem",fontWeight:700,color:T.textPrimary }}>{t.portfolios}</h2>
           <div style={{ fontSize:"0.8rem",color:T.textMuted,marginTop:"2px" }}>{allPortfolios.length} {t.portfolios.toLowerCase()}</div>
         </div>
-        <Btn icon={<Plus size={15}/>} onClick={()=>{setForm(EMPTY);setEditItem(null);setModalMode("create");setShowModal(true);}}>{t.addPortfolio}</Btn>
+        <div style={{ display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap" }}>
+          <Btn size="sm" variant="secondary" onClick={()=>setCollapsedPortfolios(Object.fromEntries(portfolios.map((p)=>[p.id,false])))}>{t.expandAll}</Btn>
+          <Btn size="sm" variant="secondary" onClick={()=>setCollapsedPortfolios(Object.fromEntries(portfolios.map((p)=>[p.id,true])))}>{t.collapseAll}</Btn>
+          <button title={t.searchUsersPlaceholder} onClick={()=>setSearchOpen((v)=>!v)} style={{ width:"34px",height:"34px",borderRadius:"8px",border:`1px solid ${T.border}`,background:T.bgCard,color:T.textSecondary,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center" }}>
+            <Search size={15} />
+          </button>
+          <Btn icon={<Plus size={15}/>} onClick={()=>{setForm(EMPTY);setEditItem(null);setModalMode("create");setShowModal(true);}}>{t.addPortfolio}</Btn>
+        </div>
       </div>
+      {searchOpen && (
+        <div style={{ marginBottom:"12px",maxWidth:"320px" }}>
+          <Input value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} isRTL={isRTL} placeholder={t.searchUsersPlaceholder} />
+        </div>
+      )}
 
       <div style={{ ...filterBarCss, justifyContent:isRTL?"flex-start":"flex-end" }}>
         <div style={{ width:"220px", maxWidth:"100%" }}>
@@ -2411,6 +2435,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
           const yearLabel = t.incomeYearLabel.replace("{year}", isRTL ? currentYear.toLocaleString("ar-EG") : String(currentYear));
           const pRoi   = pCost>0?((totalValue-pCost)/pCost)*100:0;
           const color  = p.color || T.chart[i%T.chart.length];
+          const isCollapsed = Boolean(collapsedPortfolios[p.id]);
           return (
             <Card key={p.id} style={{ overflow:"hidden" }}>
               <div style={{ height:"4px",background:`linear-gradient(90deg,${color},${color}80)` }}/>
@@ -2422,6 +2447,9 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
                       <div style={{ fontSize:"1rem",fontWeight:600,color:T.textPrimary,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{p.name}</div>
                     </div>
                     <div style={{ display:"flex",gap:"4px",flexShrink:0 }}>
+                      <button title={isCollapsed ? t.expandAll : t.collapseAll} onClick={()=>setCollapsedPortfolios((prev)=>({ ...prev, [p.id]: !Boolean(prev[p.id]) }))} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.info} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
+                        {isCollapsed ? <ChevronRight size={14}/> : <ChevronDown size={14}/>}
+                      </button>
                       <button title={t.viewDetails} onClick={()=>openView(p)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}
                         onMouseEnter={e=>{e.currentTarget.style.background=T.bgApp; e.currentTarget.style.color=T.warning;}} onMouseLeave={e=>{e.currentTarget.style.background="none"; e.currentTarget.style.color=T.textMuted;}}>
                         <Eye size={14}/>
@@ -2441,8 +2469,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
                     <Chip color={statusColor(p.status)}>{p.status || "—"}</Chip>
                   </div>
                 </div>
-                <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:"10px",marginBottom:"14px" }}>
-                  <button
+                {!isCollapsed && (<><div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:"10px",marginBottom:"14px" }}>                  <button
                     onClick={() => onViewInvestments?.(p, { status: "Active" })}
                     style={{ padding:"10px",background:T.bgApp,borderRadius:"8px",border:"none",cursor:"pointer",textAlign:isRTL?"right":"left" }}
                     onMouseEnter={e=>{ e.currentTarget.style.background="#e2e8f0"; }}
@@ -2481,7 +2508,23 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
                     </div>
                   ))}
                 </div>
-                {p.notes && <div style={{ fontSize:"0.75rem",color:T.textMuted,fontStyle:"italic" }}>{p.notes}</div>}
+                {p.notes && <div style={{ fontSize:"0.75rem",color:T.textMuted,fontStyle:"italic",marginBottom:"10px" }}>{p.notes}</div>}
+                <div style={{ borderTop:`1px dashed ${T.border}`,paddingTop:"10px" }}>
+                  <div style={{ fontSize:"0.68rem",fontWeight:600,color:T.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:"8px" }}>{t.investments}</div>
+                  {invs.length === 0 ? (
+                    <div style={{ fontSize:"0.75rem",color:T.textMuted }}>{t.noInvestments}</div>
+                  ) : (
+                    <div style={{ display:"grid",gap:"6px" }}>
+                      {invs.slice(0,4).map((inv)=> (
+                        <div key={inv.id} style={{ display:"flex",justifyContent:"space-between",gap:"8px",fontSize:"0.76rem",color:T.textSecondary }}>
+                          <span style={{ color:T.textPrimary,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{inv.name}</span>
+                          <span style={{ whiteSpace:"nowrap" }}>{fmtMoney(curVal(inv),{compact:true,currency:p.currency||"USD"})}</span>
+                        </div>
+                      ))}
+                      {invs.length > 4 && <span style={{ fontSize:"0.72rem",color:T.textMuted }}>+{invs.length - 4}</span>}
+                    </div>
+                  )}
+                </div></>) }
               </div>
             </Card>
           );
