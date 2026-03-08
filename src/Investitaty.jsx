@@ -791,6 +791,7 @@ function useGoogleAuth(lang = "en") {
     authLog("Origin check", {
       currentOrigin: window.location.origin,
       advice: "Ensure this exact origin is configured in Google OAuth + Supabase SITE_URL / redirect allowlist.",
+      accountChooserMode: "select_account + popup",
     });
   }, [authLog, lang]);
 
@@ -901,7 +902,7 @@ function useGoogleAuth(lang = "en") {
             authLog("Google callback error", response.error);
             if (response.error === "consent_required" || response.error === "interaction_required") {
               authLog("Retrying with consent prompt");
-              tokenClientRef.current.requestAccessToken({ prompt: "consent" });
+              tokenClientRef.current.requestAccessToken({ prompt: "select_account consent" });
               return;
             }
             setAuthLoading(false);
@@ -975,8 +976,13 @@ function useGoogleAuth(lang = "en") {
       });
     }
 
-    const prompt = hasGrantedConsent ? "none" : "consent";
-    authLog("Requesting access token", { prompt, attemptId });
+    const prompt = hasGrantedConsent ? "select_account" : "select_account consent";
+    authLog("Requesting access token (forced account chooser)", {
+      prompt,
+      display: "popup",
+      attemptId,
+      note: "Using Google account chooser flow to avoid legacy hanging OAuth route",
+    });
     tokenClientRef.current.requestAccessToken({ prompt });
   }, [authLog, gapiReady, hasGrantedConsent, storageReady, translations.drivePermissionRequired]);
 
