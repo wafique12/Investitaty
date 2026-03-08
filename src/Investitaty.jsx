@@ -27,6 +27,7 @@ const AUTH_CONSENT_STORAGE_KEY = "investitaty_auth_consent_v1";
 const AUTH_LOGIN_DAY_KEY = "investitaty_auth_login_day_v1";
 const TAB_STORAGE_KEY = "investitaty_active_tab_v1";
 const SESSION_EXPIRED_NOTICE_KEY = "investitaty_session_expired_notice_v1";
+const PORTFOLIOS_COLLAPSE_STORAGE_KEY = "investitaty_portfolios_collapsed_v1";
 const INACTIVITY_TIMEOUT_MS = 20 * 60 * 1000;
 const AUTH_DEBUG_PREFIX = "[AuthFlow]";
 const OWNER_PROTECTED_EMAIL = "wafique22@gmail.com";
@@ -2372,14 +2373,27 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
   const statusOpts = ((db?.settings?.investmentStatuses&&db.settings.investmentStatuses.length)?db.settings.investmentStatuses:["Active","Paused","Closed"]).map((v)=>({ value:v, label:v }));
 
   useEffect(() => {
+    const saved = JSON.parse(localStorage.getItem(PORTFOLIOS_COLLAPSE_STORAGE_KEY) || "{}");
+    if (!saved || typeof saved !== "object") return;
+    setCollapsedPortfolios(saved);
+  }, []);
+
+  useEffect(() => {
     setCollapsedPortfolios((prev) => {
       const next = { ...prev };
       (allPortfolios || []).forEach((portfolio) => {
         if (!Object.prototype.hasOwnProperty.call(next, portfolio.id)) next[portfolio.id] = true;
       });
+      Object.keys(next).forEach((id) => {
+        if (!(allPortfolios || []).some((portfolio) => portfolio.id === id)) delete next[id];
+      });
       return next;
     });
   }, [allPortfolios]);
+
+  useEffect(() => {
+    localStorage.setItem(PORTFOLIOS_COLLAPSE_STORAGE_KEY, JSON.stringify(collapsedPortfolios));
+  }, [collapsedPortfolios]);
   const portfolios = allPortfolios.filter((p) => {
     const matchesSearch = !searchTerm.trim() || String(p.name || "").toLowerCase().includes(searchTerm.trim().toLowerCase());
     if (!matchesSearch) return false;
@@ -3066,7 +3080,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const [openMenu, setOpenMenu] = useState(null);
   const [formError, setFormError] = useState("");
 
-  const EMPTY = { portfolioId:"",investmentId:"",category:"",amount:"",date:"",dueDate:"",type:"income",status:"recorded",notes:"" };
+  const EMPTY = { portfolioId:"",investmentId:"",category:"",amount:"",date:"",dueDate:"",depositedAt:"",collectedAt:"",type:"income",status:"recorded",notes:"" };
   const [form, setForm] = useState(EMPTY);
   const f = k => v => setForm(p=>({...p,[k]:v}));
 
@@ -3101,6 +3115,11 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
 
   const investmentsForPortfolio = form.portfolioId ? visible(db?.investments||[]).filter(i=>i.portfolioId===form.portfolioId) : [];
 
+  const statusValue = String(form.status || "").toLowerCase();
+  const isScheduledStatus = statusValue.includes("schedule");
+  const isDepositedStatus = statusValue.includes("deposit");
+  const isCollectedStatus = statusValue.includes("collect") || statusValue.includes("record");
+
   const handleSave = () => {
     setFormError("");
     if (!form.amount||!form.portfolioId) return;
@@ -3125,14 +3144,24 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
         return;
       }
     }
-    if (editItem) { patchItem("transactions",editItem.id,form); }
-    else { addItem("transactions",form); }
+    const payload = {
+      ...form,
+      dueDate: isScheduledStatus ? form.dueDate : "",
+      due_date: isScheduledStatus ? form.dueDate : "",
+      depositedAt: isDepositedStatus ? form.depositedAt : "",
+      deposited_at: isDepositedStatus ? form.depositedAt : "",
+      collectedAt: isCollectedStatus ? form.collectedAt : "",
+      collected_at: isCollectedStatus ? form.collectedAt : "",
+    };
+
+    if (editItem) { patchItem("transactions",editItem.id,payload); }
+    else { addItem("transactions",payload); }
     setForm(EMPTY); setShowModal(false); setEditItem(null); setModalMode("create");
   };
 
   const openView = (tx) => {
     setForm({ portfolioId:tx.portfolioId||"",investmentId:tx.investmentId||"",category:tx.category||"",
-      amount:tx.amount||"",date:tx.date||"",dueDate:tx.dueDate||"",type:tx.type||"income",status:tx.status||"recorded",notes:tx.notes||"" });
+      amount:tx.amount||"",date:tx.date||"",dueDate:tx.dueDate||tx.due_date||"",depositedAt:tx.depositedAt||tx.deposited_at||"",collectedAt:tx.collectedAt||tx.collected_at||"",type:tx.type||"income",status:tx.status||"recorded",notes:tx.notes||"" });
     setEditItem(tx); setModalMode("view"); setFormError(""); setShowModal(true);
   };
 
@@ -3190,6 +3219,8 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
           searchPlaceholder={t.filterByInvestment}
           font={font}
           minWidth="220px"
+          variant="light"
+          isRTL={isRTL}
         />
         <FilterDateInput value={filterStartDate} onChange={(e)=>setFilterStartDate(e.target.value)} isRTL={isRTL} />
         <FilterDateInput value={filterEndDate} onChange={(e)=>setFilterEndDate(e.target.value)} isRTL={isRTL} />
@@ -3256,11 +3287,12 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
               <ReadOnlyField label={t.category} value={form.category} />
               <ReadOnlyField label={t.amount} value={form.amount} />
               <ReadOnlyField label={t.date} value={form.date} />
-              <ReadOnlyField label={t.dueDate} value={form.dueDate} />
+              {String(form.status||"").toLowerCase().includes("schedule") && <ReadOnlyField label={t.dueDate} value={form.dueDate} />}
+              {String(form.status||"").toLowerCase().includes("deposit") && <ReadOnlyField label="Deposited At" value={form.depositedAt || editItem?.deposited_at} />}
+              {(String(form.status||"").toLowerCase().includes("collect") || String(form.status||"").toLowerCase().includes("record")) && <ReadOnlyField label="Collected At" value={form.collectedAt || editItem?.collected_at} />}
               <ReadOnlyField label={t.transactionType} value={form.type} />
               <ReadOnlyField label={t.status} value={form.status} />
               <ReadOnlyField label={t.notes} value={form.notes} />
-              <ReadOnlyField label="Created At" value={editItem?.created_at} />
             </div>
           ) : (
             <>
@@ -3285,8 +3317,14 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
             <FormField label={t.date}><Input type="date" value={form.date} onChange={e=>f("date")(e.target.value)} isRTL={isRTL}/></FormField>
             <FormField label={t.status}><Select value={form.status} onChange={e=>f("status")(e.target.value)} options={statusOpts} isRTL={isRTL}/></FormField>
           </div>
-          {String(form.status||"" ).toLowerCase().includes("schedule") && (
+          {isScheduledStatus && (
             <FormField label={t.dueDate}><Input type="date" value={form.dueDate} onChange={e=>f("dueDate")(e.target.value)} isRTL={isRTL}/></FormField>
+          )}
+          {isDepositedStatus && (
+            <FormField label="Deposited At"><Input type="date" value={form.depositedAt} onChange={e=>f("depositedAt")(e.target.value)} isRTL={isRTL}/></FormField>
+          )}
+          {isCollectedStatus && (
+            <FormField label="Collected At"><Input type="date" value={form.collectedAt} onChange={e=>f("collectedAt")(e.target.value)} isRTL={isRTL}/></FormField>
           )}
           <FormField label={t.notes}><Input value={form.notes} onChange={e=>f("notes")(e.target.value)} isRTL={isRTL} placeholder={`(${t.optional})`}/></FormField>
             </>
@@ -3299,7 +3337,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
             </>)}
             {modalMode==="edit" && (<>
               <Btn onClick={handleSave}>{t.save}</Btn>
-              <Btn variant="secondary" onClick={()=>{ setForm({ portfolioId:editItem.portfolioId||"",investmentId:editItem.investmentId||"",category:editItem.category||"",amount:editItem.amount||"",date:editItem.date||"",dueDate:editItem.dueDate||"",type:editItem.type||"income",status:editItem.status||"recorded",notes:editItem.notes||"" }); setModalMode("view"); }}>{t.cancel}</Btn>
+              <Btn variant="secondary" onClick={()=>{ setForm({ portfolioId:editItem.portfolioId||"",investmentId:editItem.investmentId||"",category:editItem.category||"",amount:editItem.amount||"",date:editItem.date||"",dueDate:editItem.dueDate||editItem.due_date||"",depositedAt:editItem.depositedAt||editItem.deposited_at||"",collectedAt:editItem.collectedAt||editItem.collected_at||"",type:editItem.type||"income",status:editItem.status||"recorded",notes:editItem.notes||"" }); setModalMode("view"); }}>{t.cancel}</Btn>
             </>)}
             {modalMode==="create" && (<>
               <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>{t.cancel}</Btn>
@@ -3331,7 +3369,7 @@ function TxActionMenu({ tx, onClose }) {
   return (
     <div ref={ref} style={{ position:"absolute",right:0,top:"calc(100% + 4px)",zIndex:500,background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:"10px",minWidth:"170px",boxShadow:"0 8px 28px rgba(0,0,0,0.15)",overflow:"hidden" }}>
       {actions.map(a=>(
-        <button key={a.label} onClick={a.action} style={{ display:"flex",alignItems:"center",gap:"8px",width:"100%",padding:"9px 14px",background:"none",border:"none",color:a.color,fontSize:"0.78rem",fontWeight:500,cursor:"pointer",textAlign:"left" }}
+        <button key={a.label} onClick={a.action} style={{ display:"flex",alignItems:"center",gap:"8px",width:"100%",padding:"9px 14px",background:"none",border:"none",color:a.color,fontSize:"0.78rem",fontWeight:500,cursor:"pointer",textAlign:isRTL?"right":"left" }}
           onMouseEnter={e=>e.currentTarget.style.background=T.bgApp}
           onMouseLeave={e=>e.currentTarget.style.background="none"}
         >{a.icon}{a.label}</button>
@@ -3640,7 +3678,7 @@ function AccordionSection({ title, icon, children }) {
   );
 }
 
-function SearchableSingleSelect({ options, value, onChange, placeholder, searchPlaceholder, font, minWidth = "220px" }) {
+function SearchableSingleSelect({ options, value, onChange, placeholder, searchPlaceholder, font, minWidth = "220px", variant = "dark", isRTL = false }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const ref = useRef(null);
@@ -3655,20 +3693,48 @@ function SearchableSingleSelect({ options, value, onChange, placeholder, searchP
   const filtered = options.filter((opt) => String(opt.label ?? opt.value ?? "").toLowerCase().includes(normalizedQuery));
   const selected = options.find((opt) => (opt.value ?? opt) === value);
 
+  const palette = variant === "light"
+    ? {
+      buttonBg: "#ffffff",
+      buttonColor: T.textPrimary,
+      buttonBorder: "1px solid rgba(148,163,184,0.46)",
+      panelBg: "#ffffff",
+      panelBorder: "1px solid rgba(148,163,184,0.3)",
+      inputColor: T.textPrimary,
+      muted: T.textSecondary,
+      optionColor: T.textSecondary,
+      selectedOptionColor: T.textPrimary,
+      shadow: "0 8px 24px rgba(15,23,42,0.12)",
+      divider: "1px solid rgba(148,163,184,0.18)",
+    }
+    : {
+      buttonBg: "#111c33",
+      buttonColor: "#e2e8f0",
+      buttonBorder: "1px solid rgba(148,163,184,0.32)",
+      panelBg: "#0b1220",
+      panelBorder: "1px solid rgba(148,163,184,0.3)",
+      inputColor: "#e2e8f0",
+      muted: "#94a3b8",
+      optionColor: "#cbd5e1",
+      selectedOptionColor: "#f8fafc",
+      shadow: "0 8px 30px rgba(2,6,23,0.6)",
+      divider: "1px solid rgba(148,163,184,0.18)",
+    };
+
   return (
     <div ref={ref} style={{ position:"relative", minWidth }}>
-      <button type="button" onClick={()=>setOpen((v)=>!v)} style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between", gap:"8px", padding:"9px 10px", border:"1px solid rgba(148,163,184,0.32)", borderRadius:"8px", background:"#111c33", color:"#e2e8f0", fontFamily:font, fontSize:"0.8rem", cursor:"pointer" }}>
-        <span style={{ whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{selected?.label || placeholder}</span>
+      <button type="button" onClick={()=>setOpen((v)=>!v)} style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between", gap:"8px", padding:"9px 10px", border:palette.buttonBorder, borderRadius:"8px", background:palette.buttonBg, color:palette.buttonColor, fontFamily:font, fontSize:"0.8rem", cursor:"pointer", minHeight:"38px" }}>
+        <span style={{ whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", textAlign:isRTL?"right":"left", flex:1 }}>{selected?.label || placeholder}</span>
         <ChevronDown size={14} style={{ transform:open?"rotate(180deg)":"rotate(0deg)", transition:"transform 0.2s" }} />
       </button>
       {open && (
-        <div style={{ position:"absolute", top:"calc(100% + 6px)", left:0, right:0, border:"1px solid rgba(148,163,184,0.3)", borderRadius:"10px", background:"#0b1220", zIndex:30, padding:"10px", boxShadow:"0 8px 30px rgba(2,6,23,0.6)" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:"6px", border:"1px solid rgba(148,163,184,0.25)", borderRadius:"8px", padding:"6px 8px", marginBottom:"8px", color:"#94a3b8" }}>
+        <div style={{ position:"absolute", top:"calc(100% + 6px)", left:0, right:0, border:palette.panelBorder, borderRadius:"10px", background:palette.panelBg, zIndex:30, padding:"10px", boxShadow:palette.shadow }}>
+          <div style={{ display:"flex", alignItems:"center", gap:"6px", border:"1px solid rgba(148,163,184,0.25)", borderRadius:"8px", padding:"6px 8px", marginBottom:"8px", color:palette.muted }}>
             <Search size={14} />
-            <input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder={searchPlaceholder} style={{ flex:1, border:"none", outline:"none", background:"transparent", color:"#e2e8f0", fontSize:"0.78rem", fontFamily:font }} />
+            <input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder={searchPlaceholder} style={{ flex:1, border:"none", outline:"none", background:"transparent", color:palette.inputColor, fontSize:"0.78rem", fontFamily:font, textAlign:isRTL?"right":"left" }} />
           </div>
-          <div style={{ maxHeight:"200px", overflowY:"auto", borderTop:"1px solid rgba(148,163,184,0.18)", marginTop:"6px", paddingTop:"6px" }}>
-            <button type="button" onClick={()=>{onChange(""); setOpen(false); setQuery("");}} style={{ width:"100%", textAlign:"left", border:"none", background:"transparent", color:"#e2e8f0", fontSize:"0.78rem", padding:"6px 4px", cursor:"pointer" }}>{placeholder}</button>
+          <div style={{ maxHeight:"200px", overflowY:"auto", borderTop:palette.divider, marginTop:"6px", paddingTop:"6px" }}>
+            <button type="button" onClick={()=>{onChange(""); setOpen(false); setQuery("");}} style={{ width:"100%", textAlign:isRTL?"right":"left", border:"none", background:"transparent", color:palette.buttonColor, fontSize:"0.78rem", padding:"6px 4px", cursor:"pointer" }}>{placeholder}</button>
             {filtered.map((opt) => {
               const optionValue = opt.value ?? opt;
               const optionLabel = opt.label ?? opt;
@@ -3677,7 +3743,7 @@ function SearchableSingleSelect({ options, value, onChange, placeholder, searchP
                   key={optionValue}
                   type="button"
                   onClick={()=>{onChange(optionValue); setOpen(false); setQuery("");}}
-                  style={{ width:"100%", textAlign:"left", border:"none", background:"transparent", color:optionValue===value?"#f8fafc":"#cbd5e1", fontSize:"0.78rem", padding:"6px 4px", cursor:"pointer", fontWeight:optionValue===value?700:500 }}
+                  style={{ width:"100%", textAlign:isRTL?"right":"left", border:"none", background:"transparent", color:optionValue===value?palette.selectedOptionColor:palette.optionColor, fontSize:"0.78rem", padding:"6px 4px", cursor:"pointer", fontWeight:optionValue===value?700:500 }}
                 >
                   {optionLabel}
                 </button>
@@ -3989,6 +4055,7 @@ function StatisticsTab() {
               searchPlaceholder={t.searchUsersPlaceholder}
               font={font}
               minWidth="220px"
+              isRTL={isRTL}
             />
           </div>
         </div>
