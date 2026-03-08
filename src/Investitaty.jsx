@@ -2454,14 +2454,15 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
               <div style={{ padding:"18px" }}>
                 <div style={{ marginBottom:"12px" }}>
                   <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",gap:"10px",marginBottom:"8px" }}>
-                    <div style={{ display:"flex",alignItems:"center",gap:"7px",minWidth:0 }}>
+                    <button
+                      title={isCollapsed ? t.expandAll : t.collapseAll}
+                      onClick={()=>setCollapsedPortfolios((prev)=>({ ...prev, [p.id]: !Boolean(prev[p.id]) }))}
+                      style={{ display:"flex",alignItems:"center",gap:"7px",minWidth:0,background:"none",border:"none",padding:0,cursor:"pointer" }}
+                    >
                       <FolderOpen size={14} color={T.textMuted}/>
                       <div style={{ fontSize:"1rem",fontWeight:600,color:T.textPrimary,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{p.name}</div>
-                    </div>
+                    </button>
                     <div style={{ display:"flex",gap:"4px",flexShrink:0 }}>
-                      <button title={isCollapsed ? t.expandAll : t.collapseAll} onClick={()=>setCollapsedPortfolios((prev)=>({ ...prev, [p.id]: !Boolean(prev[p.id]) }))} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.info} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
-                        {isCollapsed ? <ChevronRight size={14}/> : <ChevronDown size={14}/>}
-                      </button>
                       <button title={t.viewDetails} onClick={()=>openView(p)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}
                         onMouseEnter={e=>{e.currentTarget.style.background=T.bgApp; e.currentTarget.style.color=T.warning;}} onMouseLeave={e=>{e.currentTarget.style.background="none"; e.currentTarget.style.color=T.textMuted;}}>
                         <Eye size={14}/>
