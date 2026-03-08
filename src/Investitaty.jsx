@@ -1057,6 +1057,24 @@ function AppProvider({ children }) {
     return files;
   }, [auth.token]);
 
+  const manualSync = useCallback(async () => {
+    if (!auth.token || isBlocked || !userSyncDone) return false;
+    setSyncError(null);
+    setSyncing(true);
+    try {
+      const { fileId: fid, data } = await findOrCreateDB(auth.token);
+      setFileId(fid);
+      setDb(data);
+      try { await fetchBackups(); } catch (_) {}
+      return true;
+    } catch (error) {
+      setSyncError(`Sync failed: ${error?.message || "Unknown error"}`);
+      return false;
+    } finally {
+      setSyncing(false);
+    }
+  }, [auth.token, isBlocked, userSyncDone, fetchBackups]);
+
   const triggerBackup = useCallback(async ({ isAuto = false } = {}) => {
     if (!auth.token || !db || backupBusy) return null;
     setBackupBusy(true);
@@ -1510,7 +1528,7 @@ function AppProvider({ children }) {
     lang, setLang, t, isRTL, font,
     usersConfig, usersConfigReady, currentRole, isBlocked, hasPermission,
     updateUserEntry, deleteUserEntry, gatekeeperError, userSyncDone,
-    backupFiles, lastBackupAt, backupBusy, triggerBackup, restoreBackup, fetchBackups,
+    backupFiles, lastBackupAt, backupBusy, triggerBackup, restoreBackup, fetchBackups, manualSync,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
@@ -1906,7 +1924,7 @@ function LoadingScreen({ message }) {
 // SIDEBAR
 // ═══════════════════════════════════════════════════════════════════════════════
 function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileOpen, setMobileOpen }) {
-  const { user, signOut, syncing, t, font, lang, setLang, hasPermission, currentRole } = useApp();
+  const { user, signOut, syncing, t, font, lang, setLang, hasPermission, currentRole, manualSync } = useApp();
   const canManageUsers = currentRole === "Owner" || hasPermission("assign_role") || hasPermission("block_user") || hasPermission("unblock_user");
 
   const navItems = [
@@ -1937,9 +1955,9 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileO
         {showLabels && (
           <div style={{ display:"flex",alignItems:"center",gap:"6px",marginTop:"8px" }}>
             <div style={{ width:"6px",height:"6px",borderRadius:"50%",background:syncing?"#f59e0b":T.emerald,transition:"background 0.3s" }}/>
-            <span style={{ color:syncing?"#f59e0b90":`${T.emerald}80`,fontSize:"0.62rem",letterSpacing:"0.1em",textTransform:"uppercase" }}>
+            <button onClick={manualSync} style={{ background:"none",border:"none",padding:0,cursor:"pointer",color:syncing?"#f59e0b90":`${T.emerald}80`,fontSize:"0.62rem",letterSpacing:"0.1em",textTransform:"uppercase",textDecoration:"underline" }}>
               {syncing ? t.syncing : t.synced}
-            </span>
+            </button>
           </div>
         )}
       </div>
@@ -2321,6 +2339,14 @@ function EmptyState({ text }) {
 // PORTFOLIOS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
 function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
+
+  useEffect(() => () => {
+    setShowModal(false);
+    setEditItem(null);
+    setModalMode("create");
+    setFilterStatus("");
+    setForm(EMPTY);
+  }, []);
   const { db, addItem, archiveItem, unarchiveItem, hardDeleteItem, patchItem, t, isRTL, font } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -2425,7 +2451,14 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
                   </button>
                   {[
                     { label:t.totalValue,  val:fmtMoney(totalValue,{compact:true,currency:p.currency||"USD"}) },
-                    { label:t.roi,         val:`${pRoi>=0?"+":""}${pRoi.toFixed(1)}%`, color:pRoi>=0?T.positive:T.negative },
+                    { label:t.roi, val:(
+                      <span>
+                        {`${pRoi>=0?"+":""}${pRoi.toFixed(1)}%`}
+                        <span style={{ fontSize:"0.74rem", marginInlineStart:"6px", color:T.textMuted }}>
+                          ({fmtMoney(activePrincipal + (totalValue - pCost),{compact:true,currency:p.currency||"USD"})})
+                        </span>
+                      </span>
+                    ), color:pRoi>=0?T.positive:T.negative },
                     { label:t.positions,   val:invs.length },
                     { label:yearLabel, val:fmtMoney(pIncomeCurrentYear,{compact:true,currency:p.currency||"USD"}) },
                     { label:t.totalIncome, val:fmtMoney(pIncome,{compact:true,currency:p.currency||"USD"}) },
@@ -2505,6 +2538,16 @@ function ReadOnlyField({ label, value }) {
 // INVESTMENTS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
 function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefill, navigationFilter, onModalPrefillConsumed }) {
+
+  useEffect(() => () => {
+    setShowModal(false);
+    setEditItem(null);
+    setModalMode("create");
+    setFilterPortfolio("");
+    setFilterStatus("");
+    setSearch("");
+    setForm(EMPTY);
+  }, []);
   const { db, addItem, archiveItem, unarchiveItem, hardDeleteItem, patchItem, t, isRTL, font } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -2948,6 +2991,20 @@ function InvestmentDetailExpanded({ inv, txs, db }) {
 // TRANSACTIONS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
 function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmartBack }) {
+
+  useEffect(() => () => {
+    setShowModal(false);
+    setEditItem(null);
+    setModalMode("create");
+    setFilterPortfolio("");
+    setFilterStatus("");
+    setFilterInvestment("");
+    setFilterStartDate("");
+    setFilterEndDate("");
+    setOpenMenu(null);
+    setForm(EMPTY);
+    setFormError("");
+  }, []);
   const { db, addItem, archiveItem, hardDeleteItem, patchItem, t, isRTL, font } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -3449,7 +3506,7 @@ function SettingsTab() {
         ))}
       </div>
 
-      <Card style={{ marginTop:"20px",padding:"16px 20px" }}>
+      <Card style={{ marginTop:"20px",padding:"16px 20px",width:"min(100%, 360px)" }}>
         <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:"10px",flexWrap:"wrap",marginBottom:"10px" }}>
           <div>
             <h4 style={{ margin:"0 0 4px",fontSize:"0.92rem",color:T.textPrimary }}>{t.backupTitle}</h4>
@@ -4162,6 +4219,18 @@ function MainApp() {
   useEffect(() => {
     if (!canManageUsers && activeTab === "users") setActiveTab("dashboard");
   }, [canManageUsers, activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== "investments") {
+      setInvestmentPrefill(null);
+      setInvestmentNavigationFilter(null);
+    }
+    if (activeTab !== "transactions") {
+      setTransactionPrefill(null);
+      setTxNavigationFilter(null);
+      setSmartBackVisible(false);
+    }
+  }, [activeTab]);
 
   const quickAddInvestment = (portfolioId) => {
     setActiveTab("investments");
