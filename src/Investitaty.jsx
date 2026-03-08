@@ -2185,7 +2185,7 @@ function Dashboard() {
       </div>
 
       {/* Charts row */}
-      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"16px",marginBottom:"28px" }}>
+      <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:"16px",marginBottom:"28px" }}>
 
         {/* Donut allocation */}
         <Card style={{ padding:"18px" }}>
@@ -3115,11 +3115,6 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
 
   const investmentsForPortfolio = form.portfolioId ? visible(db?.investments||[]).filter(i=>i.portfolioId===form.portfolioId) : [];
 
-  const statusValue = String(form.status || "").toLowerCase();
-  const isScheduledStatus = statusValue.includes("schedule");
-  const isDepositedStatus = statusValue.includes("deposit");
-  const isCollectedStatus = statusValue.includes("collect") || statusValue.includes("record");
-
   const handleSave = () => {
     setFormError("");
     if (!form.amount||!form.portfolioId) return;
@@ -3146,12 +3141,12 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
     }
     const payload = {
       ...form,
-      dueDate: isScheduledStatus ? form.dueDate : "",
-      due_date: isScheduledStatus ? form.dueDate : "",
-      depositedAt: isDepositedStatus ? form.depositedAt : "",
-      deposited_at: isDepositedStatus ? form.depositedAt : "",
-      collectedAt: isCollectedStatus ? form.collectedAt : "",
-      collected_at: isCollectedStatus ? form.collectedAt : "",
+      dueDate: form.dueDate || "",
+      due_date: form.dueDate || "",
+      depositedAt: form.depositedAt || "",
+      deposited_at: form.depositedAt || "",
+      collectedAt: form.collectedAt || "",
+      collected_at: form.collectedAt || "",
     };
 
     if (editItem) { patchItem("transactions",editItem.id,payload); }
@@ -3287,9 +3282,21 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
               <ReadOnlyField label={t.category} value={form.category} />
               <ReadOnlyField label={t.amount} value={form.amount} />
               <ReadOnlyField label={t.date} value={form.date} />
-              {String(form.status||"").toLowerCase().includes("schedule") && <ReadOnlyField label={t.dueDate} value={form.dueDate} />}
-              {String(form.status||"").toLowerCase().includes("deposit") && <ReadOnlyField label="Deposited At" value={form.depositedAt || editItem?.deposited_at} />}
-              {(String(form.status||"").toLowerCase().includes("collect") || String(form.status||"").toLowerCase().includes("record")) && <ReadOnlyField label="Collected At" value={form.collectedAt || editItem?.collected_at} />}
+              <div style={{ gridColumn:"1 / -1", padding:"10px 12px", border:`1px solid ${T.border}`, borderRadius:"10px", background:T.bgApp }}>
+                <div style={{ fontSize:"0.75rem", fontWeight:700, color:T.textSecondary, marginBottom:"8px" }}>Transaction Timeline</div>
+                <div style={{ display:"grid", gap:"6px" }}>
+                  {[
+                    { label:"Scheduled For", value: form.dueDate || editItem?.due_date || "-" },
+                    { label:"Deposited On", value: form.depositedAt || editItem?.deposited_at || "-" },
+                    { label:"Collected On", value: form.collectedAt || editItem?.collected_at || "-" },
+                  ].map((stage) => (
+                    <div key={stage.label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:"12px", fontSize:"0.8rem" }}>
+                      <span style={{ color:T.textMuted }}>{stage.label}</span>
+                      <span style={{ color:T.textPrimary, fontWeight:600 }}>{stage.value || "-"}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
               <ReadOnlyField label={t.transactionType} value={form.type} />
               <ReadOnlyField label={t.status} value={form.status} />
               <ReadOnlyField label={t.notes} value={form.notes} />
@@ -3317,15 +3324,11 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
             <FormField label={t.date}><Input type="date" value={form.date} onChange={e=>f("date")(e.target.value)} isRTL={isRTL}/></FormField>
             <FormField label={t.status}><Select value={form.status} onChange={e=>f("status")(e.target.value)} options={statusOpts} isRTL={isRTL}/></FormField>
           </div>
-          {isScheduledStatus && (
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"12px" }}>
             <FormField label={t.dueDate}><Input type="date" value={form.dueDate} onChange={e=>f("dueDate")(e.target.value)} isRTL={isRTL}/></FormField>
-          )}
-          {isDepositedStatus && (
             <FormField label="Deposited At"><Input type="date" value={form.depositedAt} onChange={e=>f("depositedAt")(e.target.value)} isRTL={isRTL}/></FormField>
-          )}
-          {isCollectedStatus && (
             <FormField label="Collected At"><Input type="date" value={form.collectedAt} onChange={e=>f("collectedAt")(e.target.value)} isRTL={isRTL}/></FormField>
-          )}
+          </div>
           <FormField label={t.notes}><Input value={form.notes} onChange={e=>f("notes")(e.target.value)} isRTL={isRTL} placeholder={`(${t.optional})`}/></FormField>
             </>
           )}
@@ -3361,7 +3364,7 @@ function TxActionMenu({ tx, onClose }) {
   const doneStatus = statuses.find(s=>String(s).toLowerCase().includes("record")) || statuses[0];
   const queuedStatus = statuses.find(s=>String(s).toLowerCase().includes("schedule")) || statuses[1] || statuses[0];
   const actions = [
-    { label:t.markCollected, icon:<Check size={13}/>, color:T.positive, show:tx.status!==doneStatus, action:()=>{ patchItem("transactions",tx.id,{status:doneStatus,collected_at:new Date().toISOString()}); onClose(); } },
+    { label:t.markCollected, icon:<Check size={13}/>, color:T.positive, show:tx.status!==doneStatus, action:()=>{ patchItem("transactions",tx.id,{status:doneStatus,collected_at:new Date().toISOString(),collectedAt:new Date().toISOString()}); onClose(); } },
     { label:t.markScheduled, icon:<RefreshCw size={13}/>, color:T.warning, show:tx.status===doneStatus, action:()=>{ patchItem("transactions",tx.id,{status:queuedStatus}); onClose(); } },
     { label:tx.is_hidden ? t.unarchive : t.archive, icon:tx.is_hidden ? <Eye size={13}/> : <EyeOff size={13}/>, color:T.warning, show:true, action:()=>{ tx.is_hidden ? unarchiveItem("transactions",tx.id) : archiveItem("transactions",tx.id); onClose(); } },
     { label:t.deleteItem, icon:<Trash2 size={13}/>, color:T.negative, show:true, action:()=>{ if(window.confirm(t.deleteCascadeWarning)) hardDeleteItem("transactions",tx.id); onClose(); } },
