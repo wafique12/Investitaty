@@ -28,6 +28,7 @@ const AUTH_LOGIN_DAY_KEY = "investitaty_auth_login_day_v1";
 const TAB_STORAGE_KEY = "investitaty_active_tab_v1";
 const SESSION_EXPIRED_NOTICE_KEY = "investitaty_session_expired_notice_v1";
 const INACTIVITY_TIMEOUT_MS = 20 * 60 * 1000;
+const AUTH_DEBUG_PREFIX = "[AuthFlow]";
 const OWNER_PROTECTED_EMAIL = "wafique22@gmail.com";
 const ARCHIVED_FILTER = "__archived__";
 
@@ -714,8 +715,30 @@ async function saveDB(token, fileId, data) {
   );
 }
 
+function isLocalStorageAvailable() {
+  try {
+    const key = "__investitaty_storage_probe__";
+    localStorage.setItem(key, "1");
+    localStorage.removeItem(key);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function decodeJwtPayload(token) {
+  try {
+    if (!token || !String(token).includes(".")) return null;
+    const payload = token.split(".")[1];
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(atob(normalized));
+  } catch (_) {
+    return null;
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
-// AUTH HOOK (unchanged from Sprint 3 — battle-tested)
+// AUTH HOOK (robust login tracing)
 // ═══════════════════════════════════════════════════════════════════════════════
 function useGoogleAuth(lang = "en") {
   const translations = TRANSLATIONS[lang] || TRANSLATIONS.en;
@@ -742,9 +765,34 @@ function useGoogleAuth(lang = "en") {
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState(null);
   const [gapiReady, setGapiReady] = useState(false);
+  const [storageReady, setStorageReady] = useState(() => isLocalStorageAvailable());
   const tokenClientRef = useRef(null);
   const authTimeoutRef = useRef(null);
+  const activeAttemptRef = useRef(0);
   const [hasGrantedConsent, setHasGrantedConsent] = useState(() => localStorage.getItem(AUTH_CONSENT_STORAGE_KEY) === "true");
+
+  const authLog = useCallback((step, extra) => {
+    if (extra !== undefined) console.log(`${AUTH_DEBUG_PREFIX} ${step}`, extra);
+    else console.log(`${AUTH_DEBUG_PREFIX} ${step}`);
+  }, []);
+
+  useEffect(() => {
+    const storageOK = isLocalStorageAvailable();
+    setStorageReady(storageOK);
+    authLog("Boot", { origin: window.location.origin, storageOK, lang });
+
+    if (!storageOK) {
+      const msg = "Local storage is blocked. Please enable storage/cookies and retry login.";
+      setAuthError(msg);
+      window.alert(msg);
+    }
+
+    if (!window.location.origin) return;
+    authLog("Origin check", {
+      currentOrigin: window.location.origin,
+      advice: "Ensure this exact origin is configured in Google OAuth + Supabase SITE_URL / redirect allowlist.",
+    });
+  }, [authLog, lang]);
 
   useEffect(() => {
     try {
@@ -753,60 +801,106 @@ function useGoogleAuth(lang = "en") {
       if (!raw || !loginDay) return;
       const today = new Date().toISOString().slice(0, 10);
       if (today !== loginDay) {
+        authLog("Daily re-auth required", { loginDay, today });
         localStorage.removeItem(AUTH_STORAGE_KEY);
         localStorage.removeItem(AUTH_LOGIN_DAY_KEY);
         localStorage.setItem(SESSION_EXPIRED_NOTICE_KEY, "1");
         setUser(null);
         setToken(null);
       }
-    } catch (_) {
-      // noop
+    } catch (error) {
+      authLog("Daily re-auth check failed", error);
     }
-  }, []);
+  }, [authLog]);
 
   useEffect(() => {
     let gisLoaded = false;
     let gapiLoaded = false;
-    const trySetReady = () => { if (gisLoaded && gapiLoaded) setGapiReady(true); };
+    const trySetReady = () => {
+      if (gisLoaded && gapiLoaded) {
+        authLog("Google APIs ready");
+        setGapiReady(true);
+      }
+    };
 
+    authLog("Loading GIS/GAPI scripts");
     const gisScript = document.createElement("script");
     gisScript.src = "https://accounts.google.com/gsi/client";
     gisScript.async = true; gisScript.defer = true;
-    gisScript.onload = () => { gisLoaded = true; trySetReady(); };
-    gisScript.onerror = () => setAuthError("Failed to load Google Identity Services.");
+    gisScript.onload = () => { gisLoaded = true; authLog("GIS loaded"); trySetReady(); };
+    gisScript.onerror = () => {
+      authLog("GIS load failed");
+      setAuthError("Failed to load Google Identity Services.");
+    };
     document.head.appendChild(gisScript);
 
     const gapiScript = document.createElement("script");
     gapiScript.src = "https://apis.google.com/js/api.js";
     gapiScript.async = true; gapiScript.defer = true;
     gapiScript.onload = () => {
+      authLog("GAPI script loaded");
       window.gapi.load("client", async () => {
-        try { await window.gapi.client.init({ apiKey: API_KEY, discoveryDocs: [] }); } catch (_) {}
+        try {
+          await window.gapi.client.init({ apiKey: API_KEY, discoveryDocs: [] });
+          authLog("GAPI client initialized");
+        } catch (error) {
+          authLog("GAPI init warning", error);
+        }
         gapiLoaded = true; trySetReady();
       });
     };
-    gapiScript.onerror = () => setAuthError("Failed to load Google API.");
+    gapiScript.onerror = () => {
+      authLog("GAPI load failed");
+      setAuthError("Failed to load Google API.");
+    };
     document.head.appendChild(gapiScript);
     return () => { if (authTimeoutRef.current) clearTimeout(authTimeoutRef.current); };
-  }, []);
+  }, [authLog]);
 
   const signIn = useCallback(() => {
-    if (!gapiReady) return;
-    setAuthLoading(true); setAuthError(null);
+    authLog("Sign-in requested", { gapiReady, storageReady, hasGrantedConsent });
+    if (!storageReady) {
+      const msg = "Local storage is blocked. Enable storage/cookies, then retry sign-in.";
+      setAuthError(msg);
+      window.alert(msg);
+      return;
+    }
+    if (!gapiReady) {
+      authLog("Sign-in aborted: APIs not ready");
+      return;
+    }
+
+    setAuthLoading(true);
+    setAuthError(null);
+    const attemptId = Date.now();
+    activeAttemptRef.current = attemptId;
+
     if (authTimeoutRef.current) clearTimeout(authTimeoutRef.current);
     authTimeoutRef.current = setTimeout(() => {
+      if (activeAttemptRef.current !== attemptId) return;
+      authLog("Sign-in timed out waiting for callback", { attemptId });
       setAuthLoading(false);
-      setAuthError("Sign-in timed out. Please try again.");
+      setAuthError("Sign-in timed out. Popup may be blocked or redirect origin is not allowed.");
     }, 30000);
+
     if (!tokenClientRef.current) {
+      authLog("Initializing Google token client");
       tokenClientRef.current = window.google.accounts.oauth2.initTokenClient({
         client_id: CLIENT_ID,
         scope: REQUIRED_SCOPES.join(" "),
         include_granted_scopes: true,
         callback: async (response) => {
+          authLog("Token callback received", response);
           if (authTimeoutRef.current) clearTimeout(authTimeoutRef.current);
-          if (response.error) {
+          if (activeAttemptRef.current !== attemptId) {
+            authLog("Ignoring stale callback", { attemptId, activeAttempt: activeAttemptRef.current });
+            return;
+          }
+
+          if (response?.error) {
+            authLog("Google callback error", response.error);
             if (response.error === "consent_required" || response.error === "interaction_required") {
+              authLog("Retrying with consent prompt");
               tokenClientRef.current.requestAccessToken({ prompt: "consent" });
               return;
             }
@@ -814,7 +908,16 @@ function useGoogleAuth(lang = "en") {
             setAuthError(`Auth error: ${response.error}`);
             return;
           }
+
+          if (!response?.access_token) {
+            authLog("No access token in callback payload", response);
+            setAuthLoading(false);
+            setAuthError("Google returned no session token. Please retry (popup/redirect may be blocked).");
+            return;
+          }
+
           const grantedAllScopes = window.google.accounts.oauth2.hasGrantedAllScopes(response, ...REQUIRED_SCOPES);
+          authLog("Scope check", { grantedAllScopes });
           if (!grantedAllScopes) {
             setAuthLoading(false);
             setAuthError(translations.drivePermissionRequired);
@@ -825,40 +928,79 @@ function useGoogleAuth(lang = "en") {
             setHasGrantedConsent(false);
             return;
           }
+
           localStorage.setItem(AUTH_CONSENT_STORAGE_KEY, "true");
           setHasGrantedConsent(true);
           const accessToken = response.access_token;
+
           try {
-            const userRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", { headers: { Authorization: `Bearer ${accessToken}` } });
+            authLog("Fetching user profile via OAuth userinfo endpoint");
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 15000);
+            const userRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+              headers: { Authorization: `Bearer ${accessToken}` },
+              signal: controller.signal,
+            });
+            clearTimeout(timeout);
             if (!userRes.ok) throw new Error(`userinfo ${userRes.status}`);
             const userInfo = await userRes.json();
             const normalizedUser = { ...userInfo, id: userInfo?.id || userInfo?.sub || null };
-            setUser(normalizedUser); setToken(accessToken);
+            authLog("User profile loaded", { id: normalizedUser?.id, email: normalizedUser?.email });
+            setUser(normalizedUser);
+            setToken(accessToken);
             localStorage.setItem(AUTH_LOGIN_DAY_KEY, new Date().toISOString().slice(0, 10));
           } catch (err) {
-            setAuthError("Signed in but could not fetch profile. Check API key.");
-            setToken(accessToken);
-          } finally { setAuthLoading(false); }
+            authLog("User profile fetch failed; trying token payload fallback", err);
+            const payload = decodeJwtPayload(response.id_token);
+            if (payload?.sub || payload?.email) {
+              const fallbackUser = {
+                id: payload.sub || null,
+                email: payload.email || null,
+                name: payload.name || payload.given_name || "User",
+                picture: payload.picture || null,
+              };
+              setUser(fallbackUser);
+              setToken(accessToken);
+              localStorage.setItem(AUTH_LOGIN_DAY_KEY, new Date().toISOString().slice(0, 10));
+              authLog("Fallback profile created from id_token", fallbackUser);
+            } else {
+              setAuthError("Signed in but could not fetch profile. Check API key / redirect origin / popup policies.");
+              setToken(accessToken);
+            }
+          } finally {
+            authLog("Sign-in callback completed");
+            setAuthLoading(false);
+          }
         },
       });
     }
-    tokenClientRef.current.requestAccessToken({ prompt: hasGrantedConsent ? "none" : "consent" });
-  }, [gapiReady, hasGrantedConsent, translations.drivePermissionRequired]);
+
+    const prompt = hasGrantedConsent ? "none" : "consent";
+    authLog("Requesting access token", { prompt, attemptId });
+    tokenClientRef.current.requestAccessToken({ prompt });
+  }, [authLog, gapiReady, hasGrantedConsent, storageReady, translations.drivePermissionRequired]);
 
   const signOut = useCallback(() => {
+    authLog("Sign-out requested", { hasToken: Boolean(token) });
     if (token) { try { window.google.accounts.oauth2.revoke(token); } catch(_) {} }
     localStorage.removeItem(AUTH_STORAGE_KEY);
     localStorage.removeItem(AUTH_CONSENT_STORAGE_KEY);
     localStorage.removeItem(AUTH_LOGIN_DAY_KEY);
     setHasGrantedConsent(false);
     setUser(null); setToken(null); setAuthError(null); tokenClientRef.current = null;
-  }, [token]);
+  }, [authLog, token]);
 
   useEffect(() => {
     if (user && token) {
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ user, token }));
+      try {
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ user, token }));
+        authLog("Auth session persisted", { userId: user?.id, email: user?.email });
+      } catch (error) {
+        authLog("Auth session persistence failed", error);
+        setAuthError("Unable to save session locally. Check browser storage/cookie permissions.");
+      }
     }
-  }, [user, token]);
+  }, [user, token, authLog]);
 
   return { user, token, authLoading, authError, gapiReady, signIn, signOut };
 }
@@ -1181,6 +1323,13 @@ function AppProvider({ children }) {
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       const sessionExpired = Boolean(session?.expires_at && session.expires_at * 1000 <= Date.now());
       const shouldForceLogout = event === "SIGNED_OUT" || sessionExpired;
+      console.log(`${AUTH_DEBUG_PREFIX} Supabase auth state changed`, {
+        event,
+        hasSession: Boolean(session),
+        sessionExpired,
+        supabaseSessionReady,
+        authLoading: auth.authLoading,
+      });
       if (!supabaseSessionReady || auth.authLoading || !shouldForceLogout) return;
       clearLocalSessionState(true);
     });
