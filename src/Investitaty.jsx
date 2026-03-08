@@ -28,6 +28,8 @@ const AUTH_LOGIN_DAY_KEY = "investitaty_auth_login_day_v1";
 const TAB_STORAGE_KEY = "investitaty_active_tab_v1";
 const SESSION_EXPIRED_NOTICE_KEY = "investitaty_session_expired_notice_v1";
 const PORTFOLIOS_COLLAPSE_STORAGE_KEY = "investitaty_portfolios_collapsed_v1";
+const PORTFOLIOS_UI_STORAGE_KEY = "investitaty_portfolios_ui_v1";
+const INVESTMENTS_COLLAPSE_STORAGE_KEY = "investitaty_investments_collapsed_v1";
 const INACTIVITY_TIMEOUT_MS = 20 * 60 * 1000;
 const AUTH_DEBUG_PREFIX = "[AuthFlow]";
 const OWNER_PROTECTED_EMAIL = "wafique22@gmail.com";
@@ -2185,10 +2187,10 @@ function Dashboard() {
       </div>
 
       {/* Charts row */}
-      <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:"16px",marginBottom:"28px" }}>
+      <div style={{ display:"grid",gridTemplateColumns:"1fr 0.9fr 1.15fr",gap:"16px",marginBottom:"28px" }}>
 
         {/* Donut allocation */}
-        <Card style={{ padding:"18px" }}>
+        <Card style={{ padding:"18px", maxHeight:"450px", overflowY:"auto", scrollbarWidth:"thin", scrollbarColor:`${T.border} transparent` }}>
           <SectionHeader title={t.assetAllocation} />
           {pieData.length === 0
             ? <EmptyState text={t.noAllocation} />
@@ -2217,7 +2219,7 @@ function Dashboard() {
         </Card>
 
         {/* Upcoming cash flow */}
-        <Card style={{ padding:"18px" }}>
+        <Card style={{ padding:"18px", maxHeight:"450px", overflowY:"auto", scrollbarWidth:"thin", scrollbarColor:`${T.border} transparent` }}>
           <SectionHeader title={t.upcomingCashFlow} />
           {upcoming.length === 0
             ? <EmptyState text={t.noScheduled} />
@@ -2249,7 +2251,7 @@ function Dashboard() {
         </Card>
 
         {/* Funding source distribution */}
-        <Card style={{ padding:"18px" }}>
+        <Card style={{ padding:"18px", maxHeight:"450px", overflowY:"auto", scrollbarWidth:"thin", scrollbarColor:`${T.border} transparent` }}>
           <SectionHeader title={t.fundingSourcesDistribution} />
           {fundingDistribution.length === 0
             ? <EmptyState text={t.noFunding} />
@@ -2374,8 +2376,12 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
 
   useEffect(() => {
     const saved = JSON.parse(localStorage.getItem(PORTFOLIOS_COLLAPSE_STORAGE_KEY) || "{}");
-    if (!saved || typeof saved !== "object") return;
-    setCollapsedPortfolios(saved);
+    if (saved && typeof saved === "object") setCollapsedPortfolios(saved);
+    const savedUi = JSON.parse(localStorage.getItem(PORTFOLIOS_UI_STORAGE_KEY) || "null");
+    if (!savedUi || typeof savedUi !== "object") return;
+    setFilterStatus(savedUi.filterStatus || "");
+    setSearchTerm(savedUi.searchTerm || "");
+    setSearchOpen(Boolean(savedUi.searchOpen || savedUi.searchTerm));
   }, []);
 
   useEffect(() => {
@@ -2394,6 +2400,9 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
   useEffect(() => {
     localStorage.setItem(PORTFOLIOS_COLLAPSE_STORAGE_KEY, JSON.stringify(collapsedPortfolios));
   }, [collapsedPortfolios]);
+  useEffect(() => {
+    localStorage.setItem(PORTFOLIOS_UI_STORAGE_KEY, JSON.stringify({ filterStatus, searchTerm, searchOpen }));
+  }, [filterStatus, searchTerm, searchOpen]);
   const portfolios = allPortfolios.filter((p) => {
     const matchesSearch = !searchTerm.trim() || String(p.name || "").toLowerCase().includes(searchTerm.trim().toLowerCase());
     if (!matchesSearch) return false;
@@ -2604,7 +2613,7 @@ function ReadOnlyField({ label, value }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // INVESTMENTS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
-function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefill, navigationFilter, onModalPrefillConsumed }) {
+function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefill, navigationFilter, onModalPrefillConsumed, showPortfolioBack = false, onPortfolioBack }) {
 
   const { db, addItem, archiveItem, unarchiveItem, hardDeleteItem, patchItem, t, isRTL, font } = useApp();
   const [showModal, setShowModal] = useState(false);
@@ -2715,6 +2724,29 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
 
 
   useEffect(() => {
+    const saved = JSON.parse(localStorage.getItem(INVESTMENTS_COLLAPSE_STORAGE_KEY) || "{}");
+    if (!saved || typeof saved !== "object") return;
+    setCollapsedPortfolios(saved);
+  }, []);
+
+  useEffect(() => {
+    setCollapsedPortfolios((prev) => {
+      const next = { ...prev };
+      (portfolios || []).forEach((portfolio) => {
+        if (!Object.prototype.hasOwnProperty.call(next, portfolio.id)) next[portfolio.id] = false;
+      });
+      Object.keys(next).forEach((id) => {
+        if (!(portfolios || []).some((portfolio) => portfolio.id === id)) delete next[id];
+      });
+      return next;
+    });
+  }, [portfolios]);
+
+  useEffect(() => {
+    localStorage.setItem(INVESTMENTS_COLLAPSE_STORAGE_KEY, JSON.stringify(collapsedPortfolios));
+  }, [collapsedPortfolios]);
+
+  useEffect(() => {
     if (!navigationFilter?.portfolioId) return;
     setFilterPortfolio(navigationFilter.portfolioId);
     if (navigationFilter?.status) setFilterStatus(navigationFilter.status);
@@ -2737,8 +2769,17 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
         <div>
           <h2 style={{ margin:0,fontSize:"1.4rem",fontWeight:700,color:T.textPrimary }}>{t.investments}</h2>
           <div style={{ fontSize:"0.8rem",color:T.textMuted,marginTop:"2px" }}>{filteredInvestments.length} {t.investments.toLowerCase()}</div>
+          {showPortfolioBack && (
+            <button
+              type="button"
+              onClick={onPortfolioBack}
+              style={{ marginTop:"8px", background:"none", border:`1px solid ${T.border}`, borderRadius:"8px", cursor:"pointer", padding:"6px 10px", display:"inline-flex", alignItems:"center", gap:"6px", color:T.textSecondary, fontSize:"0.78rem", fontWeight:600 }}
+            >
+              <Undo2 size={14} /> رجوع
+            </button>
+          )}
         </div>
-        <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:"8px", flexWrap:"wrap" }}>
           <div style={{ display:"flex", alignItems:"center", gap:"6px", background:"#f8fafc", border:`1px solid ${T.border}`, borderRadius:"10px", padding:"4px 6px", overflow:"hidden" }}>
             <button onClick={() => setSearchOpen((v) => { const next = !v; if (!next) setSearchTerm(""); return next; })} style={{ border:"none", background:"transparent", color:T.textSecondary, cursor:"pointer", display:"flex", padding:"4px" }}>
               <Search size={14} />
@@ -2762,6 +2803,8 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
               }}
             />
           </div>
+          <Btn size="sm" variant="secondary" onClick={()=>setCollapsedPortfolios(Object.fromEntries(portfolios.map((p)=>[p.id,false])))}>{t.expandAll}</Btn>
+          <Btn size="sm" variant="secondary" onClick={()=>setCollapsedPortfolios(Object.fromEntries(portfolios.map((p)=>[p.id,true])))}>{t.collapseAll}</Btn>
           <Btn icon={<Plus size={15}/>} onClick={()=>{setForm(EMPTY);setEditItem(null);setModalMode("create");setShowModal(true); onModalPrefillConsumed?.();}}>{t.addInvestment}</Btn>
         </div>
       </div>
@@ -3166,6 +3209,16 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const typeOpts = [{value:"income",label:t.income},{value:"expense",label:t.expense}];
   const statusOpts = ((db?.settings?.transactionStatuses&&db.settings.transactionStatuses.length)?db.settings.transactionStatuses:["recorded","scheduled","cancelled"]).map(v=>({ value:v, label:v }));
 
+  const normalizedStatus = String(form.status || "").toLowerCase();
+  const showDueDate = normalizedStatus.includes("schedule");
+  const showDepositedAt = normalizedStatus.includes("deposit");
+  const showCollectedAt = normalizedStatus.includes("collect");
+  const formatDateDisplay = (value) => {
+    if (!value) return "";
+    const raw = String(value);
+    return /^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0, 10) : raw;
+  };
+
   useEffect(() => {
     if (!modalPrefill) return;
     setForm({ ...EMPTY, ...modalPrefill });
@@ -3277,29 +3330,31 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
         <Modal title={modalMode==="create"?t.addTransaction:`${t.view} ${t.transactions}`} onClose={()=>{setShowModal(false);setEditItem(null);setModalMode("create");}}>
           {modalMode === "view" ? (
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"10px" }}>
+              <ReadOnlyField label={t.transactionType} value={form.type} />
+              <ReadOnlyField label={t.status} value={form.status} />
+              <ReadOnlyField label={t.amount} value={fmtMoney(Number(form.amount || 0), { currency:portfolioCurrency(db, form.portfolioId) })} />
               <ReadOnlyField label={t.portfolio} value={portfolios.find((p)=>p.id===form.portfolioId)?.name} />
-              <ReadOnlyField label={t.investment} value={allInvestments.find((i)=>i.id===form.investmentId)?.name} />
-              <ReadOnlyField label={t.category} value={form.category} />
-              <ReadOnlyField label={t.amount} value={form.amount} />
-              <ReadOnlyField label={t.date} value={form.date} />
+              <ReadOnlyField label="Due Date" value={formatDateDisplay(form.dueDate || editItem?.due_date) || "Pending"} />
+              <ReadOnlyField label="Deposited At" value={formatDateDisplay(form.depositedAt || editItem?.deposited_at) || "Pending"} />
+              <ReadOnlyField label="Collected At" value={formatDateDisplay(form.collectedAt || editItem?.collected_at) || "Pending"} />
+              <ReadOnlyField label={t.notes} value={form.notes} />
               <div style={{ gridColumn:"1 / -1", padding:"10px 12px", border:`1px solid ${T.border}`, borderRadius:"10px", background:T.bgApp }}>
                 <div style={{ fontSize:"0.75rem", fontWeight:700, color:T.textSecondary, marginBottom:"8px" }}>Transaction Timeline</div>
-                <div style={{ display:"grid", gap:"6px" }}>
+                <div style={{ display:"grid", gap:"8px" }}>
                   {[
-                    { label:"Scheduled For", value: form.dueDate || editItem?.due_date || "-" },
-                    { label:"Deposited On", value: form.depositedAt || editItem?.deposited_at || "-" },
-                    { label:"Collected On", value: form.collectedAt || editItem?.collected_at || "-" },
+                    { label:"Scheduled", value: formatDateDisplay(form.dueDate || editItem?.due_date) || "" },
+                    { label:"Deposited", value: formatDateDisplay(form.depositedAt || editItem?.deposited_at) || "" },
+                    { label:"Collected", value: formatDateDisplay(form.collectedAt || editItem?.collected_at) || "" },
                   ].map((stage) => (
-                    <div key={stage.label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:"12px", fontSize:"0.8rem" }}>
+                    <div key={stage.label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:"10px", fontSize:"0.8rem" }}>
                       <span style={{ color:T.textMuted }}>{stage.label}</span>
-                      <span style={{ color:T.textPrimary, fontWeight:600 }}>{stage.value || "-"}</span>
+                      <span style={{ color:T.textPrimary, fontWeight: stage.value ? 700 : 500 }}>
+                        {stage.value ? stage.value : "Pending"}
+                      </span>
                     </div>
                   ))}
                 </div>
               </div>
-              <ReadOnlyField label={t.transactionType} value={form.type} />
-              <ReadOnlyField label={t.status} value={form.status} />
-              <ReadOnlyField label={t.notes} value={form.notes} />
             </div>
           ) : (
             <>
@@ -3324,10 +3379,10 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
             <FormField label={t.date}><Input type="date" value={form.date} onChange={e=>f("date")(e.target.value)} isRTL={isRTL}/></FormField>
             <FormField label={t.status}><Select value={form.status} onChange={e=>f("status")(e.target.value)} options={statusOpts} isRTL={isRTL}/></FormField>
           </div>
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"12px" }}>
-            <FormField label={t.dueDate}><Input type="date" value={form.dueDate} onChange={e=>f("dueDate")(e.target.value)} isRTL={isRTL}/></FormField>
-            <FormField label="Deposited At"><Input type="date" value={form.depositedAt} onChange={e=>f("depositedAt")(e.target.value)} isRTL={isRTL}/></FormField>
-            <FormField label="Collected At"><Input type="date" value={form.collectedAt} onChange={e=>f("collectedAt")(e.target.value)} isRTL={isRTL}/></FormField>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr",gap:"12px" }}>
+            {showDueDate && <FormField label={t.dueDate}><Input type="date" value={form.dueDate} onChange={e=>f("dueDate")(e.target.value)} isRTL={isRTL}/></FormField>}
+            {showDepositedAt && <FormField label="Deposited At"><Input type="date" value={form.depositedAt} onChange={e=>f("depositedAt")(e.target.value)} isRTL={isRTL}/></FormField>}
+            {showCollectedAt && <FormField label="Collected At"><Input type="date" value={form.collectedAt} onChange={e=>f("collectedAt")(e.target.value)} isRTL={isRTL}/></FormField>}
           </div>
           <FormField label={t.notes}><Input value={form.notes} onChange={e=>f("notes")(e.target.value)} isRTL={isRTL} placeholder={`(${t.optional})`}/></FormField>
             </>
@@ -3858,7 +3913,7 @@ function StatisticsMatrixTable({ title, headers, rows, currency = "USD" }) {
   );
 }
 
-function FundingSourceBreakdownTable({ rows, currency }) {
+function FundingSourceBreakdownTable({ rows, currency, onOpenInvestments }) {
   const { isRTL, t } = useApp();
   return (
     <div style={{ overflowX:"auto" }}>
@@ -3876,11 +3931,22 @@ function FundingSourceBreakdownTable({ rows, currency }) {
               <td style={{ padding:"10px 12px", borderTop:"1px solid rgba(148,163,184,0.16)", color:"#f8fafc", fontWeight:600, textAlign:isRTL?"right":"left" }}>{row.source}</td>
               <td style={{ padding:"10px 12px", borderTop:"1px solid rgba(148,163,184,0.16)", color:"#cbd5e1", textAlign:isRTL?"right":"left" }}>{fmtMoney(row.total, { currency })}</td>
               <td style={{ padding:"10px 12px", borderTop:"1px solid rgba(148,163,184,0.16)", color:"#cbd5e1", textAlign:isRTL?"right":"left" }}>
-                {(row.breakdown || []).map((item, i) => (
-                  <div key={`${row.source}-${i}`} style={{ marginBottom:i===((row.breakdown||[]).length-1)?0:4 }}>
-                    {item.investment}: {fmtMoney(item.amount, { currency })}
-                  </div>
-                ))}
+                <button
+                  type="button"
+                  onClick={() => onOpenInvestments?.(row)}
+                  style={{
+                    background:"none",
+                    border:"none",
+                    padding:0,
+                    color:"#7dd3fc",
+                    cursor:"pointer",
+                    fontSize:"0.8rem",
+                    fontWeight:600,
+                    textDecoration:"underline",
+                  }}
+                >
+                  {`View ${row.breakdown?.length || 0} Investments`}
+                </button>
               </td>
             </tr>
           ))}
@@ -3894,6 +3960,7 @@ function StatisticsTab() {
   const { db, t, isRTL, font } = useApp();
   const [selectedYears, setSelectedYears] = useState([]);
   const [selectedInvestmentStatus, setSelectedInvestmentStatus] = useState("");
+  const [fundingInvestmentsModal, setFundingInvestmentsModal] = useState(null);
 
   const investments = visible(db?.investments || []);
   const transactions = visible(db?.transactions || []);
@@ -4012,9 +4079,8 @@ function StatisticsTab() {
         total += amount;
       }
     });
-    if (!breakdown.length) breakdown.push({ investment:t.unassignedInvestment, amount:0 });
     return { source, total, breakdown };
-  }).filter((row) => row.total > 0 || row.breakdown.length).sort((a,b)=>b.total-a.total);
+  }).filter((row) => row.total > 0).sort((a,b)=>b.total-a.total);
 
   const fundingChartTotal = fundingRows.reduce((sum, row) => sum + row.total, 0);
   const fundingChartData = fundingRows.filter((row) => row.total > 0).map((row, idx) => ({ ...row, pct:fundingChartTotal ? (row.total / fundingChartTotal) * 100 : 0, color:T.chart[idx % T.chart.length], name:row.source, value:row.total }));
@@ -4178,8 +4244,29 @@ function StatisticsTab() {
       </AccordionSection>
 
       <AccordionSection title={t.fundingSourceBreakdown} icon={<Landmark size={14} color="#94a3b8" />}>
-        <FundingSourceBreakdownTable rows={fundingRows} currency={primaryCurrency} />
+        <FundingSourceBreakdownTable rows={fundingRows} currency={primaryCurrency} onOpenInvestments={setFundingInvestmentsModal} />
       </AccordionSection>
+
+      {fundingInvestmentsModal && (
+        <Modal
+          title={`${fundingInvestmentsModal.source} Investments`}
+          onClose={() => setFundingInvestmentsModal(null)}
+          maxWidth="560px"
+        >
+          {(fundingInvestmentsModal.breakdown || []).length ? (
+            <div style={{ display:"grid", gap:"8px" }}>
+              {fundingInvestmentsModal.breakdown.map((item, idx) => (
+                <div key={`${fundingInvestmentsModal.source}-${item.investment}-${idx}`} style={{ display:"flex", justifyContent:"space-between", gap:"8px", padding:"10px", border:"1px solid rgba(148,163,184,0.25)", borderRadius:"8px", background:"rgba(15,23,42,0.6)" }}>
+                  <span style={{ color:"#e2e8f0", fontSize:"0.8rem", fontWeight:600 }}>{item.investment}</span>
+                  <span style={{ color:"#bfdbfe", fontSize:"0.78rem" }}>{fmtMoney(item.amount, { currency:primaryCurrency })}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState text={t.noInvestments} />
+          )}
+        </Modal>
+      )}
     </div>
   );
 }
@@ -4414,6 +4501,7 @@ function MainApp() {
   const [txNavigationFilter, setTxNavigationFilter] = useState(null);
   const [smartBackVisible, setSmartBackVisible] = useState(false);
   const [investmentNavigationFilter, setInvestmentNavigationFilter] = useState(null);
+  const [showPortfolioBackInInvestments, setShowPortfolioBackInInvestments] = useState(false);
   const mainRef = useRef(null);
   const isMobile = useIsMobile();
 
@@ -4440,6 +4528,8 @@ function MainApp() {
     if (activeTab !== "investments") {
       setInvestmentPrefill(null);
       setInvestmentNavigationFilter(null);
+      setShowPortfolioBackInInvestments(false);
+      sessionStorage.removeItem("investments_from_portfolio_link_v1");
     }
     if (activeTab !== "transactions") {
       setTransactionPrefill(null);
@@ -4454,7 +4544,9 @@ function MainApp() {
   };
 
   const goToInvestmentsForPortfolio = (portfolio, options = {}) => {
-    setInvestmentNavigationFilter({ portfolioId: portfolio.id, status: options.status || "", stamp: Date.now() });
+    setInvestmentNavigationFilter({ portfolioId: portfolio.id, status: options.status || "", fromPortfolioLink:true, stamp: Date.now() });
+    sessionStorage.setItem("investments_from_portfolio_link_v1", "1");
+    setShowPortfolioBackInInvestments(true);
     setActiveTab("investments");
   };
 
@@ -4479,10 +4571,16 @@ function MainApp() {
     setSmartBackVisible(false);
   };
 
+  const handlePortfolioBackFromInvestments = () => {
+    setActiveTab("portfolios");
+    setShowPortfolioBackInInvestments(false);
+    sessionStorage.removeItem("investments_from_portfolio_link_v1");
+  };
+
   const tabs = {
     dashboard:    <Dashboard />,
     portfolios:   <PortfoliosTab onQuickAddInvestment={quickAddInvestment} onViewInvestments={goToInvestmentsForPortfolio} />,
-    investments:  <InvestmentsTab onQuickAddTransaction={quickAddTransaction} onViewTransactions={goToTransactionsForInvestment} modalPrefill={investmentPrefill} navigationFilter={investmentNavigationFilter} onModalPrefillConsumed={() => setInvestmentPrefill(null)} />,
+    investments:  <InvestmentsTab onQuickAddTransaction={quickAddTransaction} onViewTransactions={goToTransactionsForInvestment} modalPrefill={investmentPrefill} navigationFilter={investmentNavigationFilter} onModalPrefillConsumed={() => setInvestmentPrefill(null)} showPortfolioBack={showPortfolioBackInInvestments || sessionStorage.getItem("investments_from_portfolio_link_v1") === "1"} onPortfolioBack={handlePortfolioBackFromInvestments} />,
     transactions: <TransactionsTab showSmartBack={smartBackVisible} onSmartBack={handleSmartBack} navigationFilter={txNavigationFilter} modalPrefill={transactionPrefill} />,
     statistics:   <StatisticsTab />,
     users:        canManageUsers ? <UserManagementTab /> : <Dashboard />,
