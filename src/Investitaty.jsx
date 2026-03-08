@@ -1057,24 +1057,6 @@ function AppProvider({ children }) {
     return files;
   }, [auth.token]);
 
-  const manualSync = useCallback(async () => {
-    if (!auth.token || isBlocked || !userSyncDone) return false;
-    setSyncError(null);
-    setSyncing(true);
-    try {
-      const { fileId: fid, data } = await findOrCreateDB(auth.token);
-      setFileId(fid);
-      setDb(data);
-      try { await fetchBackups(); } catch (_) {}
-      return true;
-    } catch (error) {
-      setSyncError(`Sync failed: ${error?.message || "Unknown error"}`);
-      return false;
-    } finally {
-      setSyncing(false);
-    }
-  }, [auth.token, isBlocked, userSyncDone, fetchBackups]);
-
   const triggerBackup = useCallback(async ({ isAuto = false } = {}) => {
     if (!auth.token || !db || backupBusy) return null;
     setBackupBusy(true);
@@ -1178,6 +1160,25 @@ function AppProvider({ children }) {
     const rolePerms = usersConfig?.roles?.[currentRole]?.permissions || [];
     return rolePerms.includes("manage_everything") || rolePerms.includes(permission);
   }, [usersConfig, currentRole]);
+
+  const manualSync = useCallback(async () => {
+    if (!auth.token || isBlocked || !userSyncDone) return false;
+    setSyncError(null);
+    setSyncing(true);
+    try {
+      const { fileId: fid, data } = await findOrCreateDB(auth.token);
+      setFileId(fid);
+      setDb(data);
+      try { await fetchBackups(); } catch (_) {}
+      return true;
+    } catch (error) {
+      setSyncError(`Sync failed: ${error?.message || "Unknown error"}`);
+      return false;
+    } finally {
+      setSyncing(false);
+    }
+  }, [auth.token, isBlocked, userSyncDone, fetchBackups]);
+
 
   useEffect(() => {
     if (!usersConfigReady) return;
