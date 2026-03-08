@@ -139,7 +139,7 @@ export default function UpcomingCashFlow({ db }) {
             >
               +$
               {parseFloat(d.amount || 0).toLocaleString("en-US", {
-                minimumFractionDigits: 2,
+                minimumFractionDigits: 3,
               })}
             </span>
             <DaysAway dueDate={d.dueDate} />
