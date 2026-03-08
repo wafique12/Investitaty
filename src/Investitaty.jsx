@@ -2070,8 +2070,9 @@ const currencySymbol = (currency="USD") => ({ USD:"$", EUR:"€", GBP:"£", SAR:
 const fmtMoney = (v, { compact=false, currency="USD" } = {}) => {
   const n = Number(v||0);
   const symbol = currencySymbol(currency);
-  if (compact && n >= 1_000_000) return symbol + (n/1_000_000).toFixed(1)+"M";
-  if (compact && n >= 1_000) return symbol + (n/1_000).toFixed(1)+"K";
+  const abs = Math.abs(n);
+  if (compact && abs >= 1_000_000) return symbol + (n/1_000_000).toFixed(2)+"M";
+  if (compact && abs >= 1_000) return symbol + (n/1_000).toFixed(2)+"K";
   return symbol + n.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
 };
 const portfolioCurrency = (db, portfolioId) => (visible(db?.portfolios||[]).find(p=>p.id===portfolioId)?.currency || "USD");
@@ -3767,11 +3768,21 @@ function FundingSourceBreakdownTable({ rows, currency }) {
 function StatisticsTab() {
   const { db, t, isRTL, font } = useApp();
   const [selectedYears, setSelectedYears] = useState([]);
+  const [selectedInvestmentStatus, setSelectedInvestmentStatus] = useState("");
 
   const investments = visible(db?.investments || []);
   const transactions = visible(db?.transactions || []);
   const portfolios = visible(db?.portfolios || []);
   const primaryCurrency = baseCurrencyCode(db);
+  const investmentStatuses = db?.settings?.investmentStatuses?.length ? db.settings.investmentStatuses : ["Active", "Paused", "Closed"];
+
+  const filteredInvestments = selectedInvestmentStatus
+    ? investments.filter((inv) => inv.status === selectedInvestmentStatus)
+    : investments;
+  const filteredInvestmentIds = new Set(filteredInvestments.map((inv) => inv.id));
+  const filteredTransactions = selectedInvestmentStatus
+    ? transactions.filter((tx) => filteredInvestmentIds.has(tx.investmentId))
+    : transactions;
 
   const toRiskBucket = (risk) => {
     const val = String(risk || "").toLowerCase();
@@ -3781,14 +3792,14 @@ function StatisticsTab() {
     return null;
   };
 
-  const invById = new Map(investments.map((i) => [i.id, i]));
-  const yearlyRows = [...new Set(transactions.map((tx) => new Date(tx.date || tx.created_at || Date.now()).getFullYear()))]
+  const invById = new Map(filteredInvestments.map((i) => [i.id, i]));
+  const yearlyRows = [...new Set(filteredTransactions.map((tx) => new Date(tx.date || tx.created_at || Date.now()).getFullYear()))]
     .filter((y) => Number.isFinite(y))
     .sort((a, b) => b - a);
   const visibleYears = selectedYears.length ? yearlyRows.filter((y) => selectedYears.includes(String(y))) : yearlyRows;
 
   const capitalByRisk = { low:0, medium:0, high:0 };
-  investments.forEach((inv) => {
+  filteredInvestments.forEach((inv) => {
     const bucket = toRiskBucket(inv.risk);
     if (!bucket) return;
     capitalByRisk[bucket] += toBaseAmount(db, costBasis(inv), portfolioCurrency(db, inv.portfolioId));
@@ -3799,7 +3810,7 @@ function StatisticsTab() {
   const incomeByYearStatus = {};
   const statuses = db?.settings?.transactionStatuses?.length ? db.settings.transactionStatuses : ["recorded", "scheduled", "cancelled"];
 
-  transactions.forEach((tx) => {
+  filteredTransactions.forEach((tx) => {
     const year = new Date(tx.date || tx.created_at || Date.now()).getFullYear();
     if (!Number.isFinite(year)) return;
     const inv = invById.get(tx.investmentId);
@@ -3852,7 +3863,7 @@ function StatisticsTab() {
   lossRows.push({ key:"loss-total", isTotal:true, values:[t.totalLabel, lossTotals[0], lossTotals[1], lossTotals[2], lossTotals[0]+lossTotals[1]+lossTotals[2]] });
 
   const allocationData = portfolios.map((portfolio) => {
-    const portfolioInvestments = inv_of_portfolio(db, portfolio.id);
+    const portfolioInvestments = filteredInvestments.filter((inv) => inv.portfolioId === portfolio.id);
     return {
       name: portfolio.name,
       value: portfolioInvestments.reduce((sum, inv) => sum + toBaseAmount(db, curVal(inv), portfolio.currency || "USD"), 0),
@@ -3865,11 +3876,11 @@ function StatisticsTab() {
     color: T.chart[idx % T.chart.length],
   }));
 
-  const fundingSourceUniverse = [...new Set([...(db?.settings?.fundingSources || []), ...investments.flatMap((inv) => (inv.funding || []).map((f) => f.source).filter(Boolean))])];
+  const fundingSourceUniverse = [...new Set([...(db?.settings?.fundingSources || []), ...filteredInvestments.flatMap((inv) => (inv.funding || []).map((f) => f.source).filter(Boolean))])];
   const fundingRows = fundingSourceUniverse.map((source) => {
     const breakdown = [];
     let total = 0;
-    investments.forEach((inv) => {
+    filteredInvestments.forEach((inv) => {
       const amount = (inv.funding || []).filter((f) => f.source === source).reduce((sum, f) => sum + toBaseAmount(db, parseFloat(f.amount) || 0, portfolioCurrency(db, inv.portfolioId)), 0);
       if (amount > 0) {
         breakdown.push({ investment:inv.name || t.unassignedInvestment, amount });
@@ -3907,9 +3918,31 @@ function StatisticsTab() {
           <h2 style={{ margin:0, fontSize:"1.45rem", color:"#f8fafc" }}>{t.statistics}</h2>
           <div style={{ marginTop:"4px", fontSize:"0.82rem", color:"#94a3b8" }}>{t.statisticsCenter}</div>
         </div>
-        <div>
-          <label style={{ display:"block", marginBottom:"6px", fontSize:"0.74rem", color:"#94a3b8" }}>{t.yearFilter}</label>
-          <SearchableMultiYearSelect options={yearlyRows} selectedYears={selectedYears} onChange={setSelectedYears} t={t} font={font} />
+        <div style={{ display:"flex", alignItems:"flex-end", gap:"8px", flexWrap:"wrap" }}>
+          <div>
+            <label style={{ display:"block", marginBottom:"6px", fontSize:"0.74rem", color:"#94a3b8" }}>{t.yearFilter}</label>
+            <SearchableMultiYearSelect options={yearlyRows} selectedYears={selectedYears} onChange={setSelectedYears} t={t} font={font} />
+          </div>
+          <div>
+            <label style={{ display:"block", marginBottom:"6px", fontSize:"0.74rem", color:"#94a3b8" }}>{t.investmentStatuses}</label>
+            <div style={{ display:"flex", alignItems:"center", gap:"6px", background:"#f8fafc", border:`1px solid ${T.border}`, borderRadius:"10px", padding:"4px 6px", minHeight:"36px" }}>
+              <Select
+                value={selectedInvestmentStatus}
+                onChange={(e)=>setSelectedInvestmentStatus(e.target.value)}
+                options={[{ value:"", label:t.investmentStatuses }, ...investmentStatuses.map((status)=>({ value:status, label:status }))]}
+                isRTL={isRTL}
+                style={{
+                  border:"none",
+                  background:"transparent",
+                  color:T.textPrimary,
+                  fontSize:"0.8rem",
+                  minWidth:"190px",
+                  padding:"4px",
+                  outline:"none",
+                }}
+              />
+            </div>
+          </div>
         </div>
       </div>
 
