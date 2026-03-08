@@ -6,9 +6,10 @@ import {
   TrendingUp, Wallet, DollarSign, BarChart2, Globe, LogOut,
   Cloud, Shield, Layers, Tag, FolderOpen, ArrowUpRight, PieChart as PieChartIcon,
   ArrowDownRight, Eye, EyeOff, AlertCircle, CheckCircle2,
-  Menu, Search, Landmark, ListTree, CircleDollarSign, Lock, Unlock, Undo2,
+  Menu, Search, Landmark, ListTree, CircleDollarSign, Lock, Unlock, Undo2, RotateCcw,
 } from "lucide-react";
 import { supabase, hasSupabaseConfig, hasSupabaseClient } from "./lib/supabaseClient";
+import BackupService from "./services/BackupService";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONFIG
@@ -23,7 +24,11 @@ const REQUIRED_SCOPES = [
 const DB_FILENAME = "investitaty_db.json";
 const AUTH_STORAGE_KEY = "investitaty_auth_v1";
 const AUTH_CONSENT_STORAGE_KEY = "investitaty_auth_consent_v1";
+const AUTH_LOGIN_DAY_KEY = "investitaty_auth_login_day_v1";
 const TAB_STORAGE_KEY = "investitaty_active_tab_v1";
+const SESSION_EXPIRED_NOTICE_KEY = "investitaty_session_expired_notice_v1";
+const INACTIVITY_TIMEOUT_MS = 20 * 60 * 1000;
+const AUTH_DEBUG_PREFIX = "[AuthFlow]";
 const OWNER_PROTECTED_EMAIL = "wafique22@gmail.com";
 const ARCHIVED_FILTER = "__archived__";
 
@@ -154,6 +159,7 @@ const TRANSLATIONS = {
     returnLabel: "Back",
     smartBackToInvestments: "Return to Investments",
     viewTransactions: "View transactions",
+    viewInvestmentsTooltip: "View Investments",
     viewDetails: "View details",
     editInModal: "Edit",
     deleteItem: "Delete",
@@ -223,6 +229,8 @@ const TRANSLATIONS = {
     ofLabel: "of",
     previous: "Previous",
     next: "Next",
+    expandAll: "Expand all",
+    collapseAll: "Collapse all",
     pageLabel: "Page",
     addItem: "Add",
     dataStorage: "Data stored in",
@@ -240,7 +248,7 @@ const TRANSLATIONS = {
     positions: "Positions",
     allocation: "Allocation",
     totalValue: "Total Value",
-    activeInvestmentValue: "Active Value",
+    activeInvestmentValue: "Active Principal",
     usersName: "Name",
     usersEmail: "Email",
     usersLastLogin: "Last Login",
@@ -260,6 +268,14 @@ const TRANSLATIONS = {
     failedGAPI: "Failed to load Google API.",
     drivePermissionRequired: "Please grant Google Drive access to enable reading and updating your investment files.",
     failedDrive: "Failed to access Google Drive. Please try again.",
+    backupTitle: "Backup",
+    backupInfo: "Last backup date",
+    backupNow: "Backup Now",
+    backupRestoreConfirm: "Restore this backup and replace your current data?",
+    backupRestoreSuccess: "Backup restored successfully.",
+    backupNoDate: "No backup yet",
+    backupNoItems: "No backups available.",
+    sessionExpiredSecurity: "Session expired for your security",
     syncFailed: "Sync failed. Changes may not be saved.",
     days: "d",
     overdue: "Overdue",
@@ -369,6 +385,7 @@ const TRANSLATIONS = {
     returnLabel: "عودة",
     smartBackToInvestments: "العودة إلى الاستثمارات",
     viewTransactions: "عرض المعاملات",
+    viewInvestmentsTooltip: "عرض الاستثمارات",
     viewDetails: "عرض التفاصيل",
     editInModal: "تعديل",
     deleteItem: "حذف",
@@ -438,6 +455,8 @@ const TRANSLATIONS = {
     ofLabel: "من",
     previous: "السابق",
     next: "التالي",
+    expandAll: "فتح الكل",
+    collapseAll: "طي الكل",
     pageLabel: "الصفحة",
     addItem: "إضافة",
     dataStorage: "البيانات محفوظة في",
@@ -455,7 +474,7 @@ const TRANSLATIONS = {
     positions: "مراكز",
     allocation: "التخصيص",
     totalValue: "القيمة الإجمالية",
-    activeInvestmentValue: "قيمة الاستثمارات النشطة",
+    activeInvestmentValue: "اصل المبلغ النشط",
     usersName: "الاسم",
     usersEmail: "البريد الإلكتروني",
     usersLastLogin: "آخر تسجيل دخول",
@@ -475,6 +494,14 @@ const TRANSLATIONS = {
     failedGAPI: "فشل تحميل Google API.",
     drivePermissionRequired: "يرجى منح صلاحية الوصول لـ Google Drive لتتمكن من قراءة وتحديث ملفات الاستثمارات الخاصة بك.",
     failedDrive: "فشل الوصول إلى Google Drive.",
+    backupTitle: "النسخ الاحتياطي",
+    backupInfo: "تاريخ آخر نسخة احتياطية",
+    backupNow: "نسخ احتياطي الآن",
+    backupRestoreConfirm: "هل تريد استعادة هذه النسخة واستبدال البيانات الحالية؟",
+    backupRestoreSuccess: "تمت استعادة النسخة الاحتياطية بنجاح.",
+    backupNoDate: "لا توجد نسخة احتياطية بعد",
+    backupNoItems: "لا توجد نسخ احتياطية متاحة.",
+    sessionExpiredSecurity: "انتهت الجلسة حفاظًا على أمانك",
     syncFailed: "فشلت المزامنة. ربما لم تُحفظ التغييرات.",
     days: "يوم",
     overdue: "متأخر",
@@ -694,8 +721,30 @@ async function saveDB(token, fileId, data) {
   );
 }
 
+function isLocalStorageAvailable() {
+  try {
+    const key = "__investitaty_storage_probe__";
+    localStorage.setItem(key, "1");
+    localStorage.removeItem(key);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function decodeJwtPayload(token) {
+  try {
+    if (!token || !String(token).includes(".")) return null;
+    const payload = token.split(".")[1];
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(atob(normalized));
+  } catch (_) {
+    return null;
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
-// AUTH HOOK (unchanged from Sprint 3 — battle-tested)
+// AUTH HOOK (robust login tracing)
 // ═══════════════════════════════════════════════════════════════════════════════
 function useGoogleAuth(lang = "en") {
   const translations = TRANSLATIONS[lang] || TRANSLATIONS.en;
@@ -722,61 +771,160 @@ function useGoogleAuth(lang = "en") {
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState(null);
   const [gapiReady, setGapiReady] = useState(false);
+  const [storageReady, setStorageReady] = useState(() => isLocalStorageAvailable());
   const tokenClientRef = useRef(null);
   const authTimeoutRef = useRef(null);
+  const activeAttemptRef = useRef(0);
   const [hasGrantedConsent, setHasGrantedConsent] = useState(() => localStorage.getItem(AUTH_CONSENT_STORAGE_KEY) === "true");
+
+  const authLog = useCallback((step, extra) => {
+    if (extra !== undefined) console.log(`${AUTH_DEBUG_PREFIX} ${step}`, extra);
+    else console.log(`${AUTH_DEBUG_PREFIX} ${step}`);
+  }, []);
+
+  useEffect(() => {
+    const storageOK = isLocalStorageAvailable();
+    setStorageReady(storageOK);
+    authLog("Boot", { origin: window.location.origin, storageOK, lang });
+
+    if (!storageOK) {
+      const msg = "Local storage is blocked. Please enable storage/cookies and retry login.";
+      setAuthError(msg);
+      window.alert(msg);
+    }
+
+    if (!window.location.origin) return;
+    authLog("Origin check", {
+      currentOrigin: window.location.origin,
+      advice: "Ensure this exact origin is configured in Google OAuth + Supabase SITE_URL / redirect allowlist.",
+      accountChooserMode: "select_account + popup",
+    });
+  }, [authLog, lang]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+      const loginDay = localStorage.getItem(AUTH_LOGIN_DAY_KEY);
+      if (!raw || !loginDay) return;
+      const today = new Date().toISOString().slice(0, 10);
+      if (today !== loginDay) {
+        authLog("Daily re-auth required", { loginDay, today });
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+        localStorage.removeItem(AUTH_LOGIN_DAY_KEY);
+        localStorage.setItem(SESSION_EXPIRED_NOTICE_KEY, "1");
+        setUser(null);
+        setToken(null);
+      }
+    } catch (error) {
+      authLog("Daily re-auth check failed", error);
+    }
+  }, [authLog]);
 
   useEffect(() => {
     let gisLoaded = false;
     let gapiLoaded = false;
-    const trySetReady = () => { if (gisLoaded && gapiLoaded) setGapiReady(true); };
+    const trySetReady = () => {
+      if (gisLoaded && gapiLoaded) {
+        authLog("Google APIs ready");
+        setGapiReady(true);
+      }
+    };
 
+    authLog("Loading GIS/GAPI scripts");
     const gisScript = document.createElement("script");
     gisScript.src = "https://accounts.google.com/gsi/client";
     gisScript.async = true; gisScript.defer = true;
-    gisScript.onload = () => { gisLoaded = true; trySetReady(); };
-    gisScript.onerror = () => setAuthError("Failed to load Google Identity Services.");
+    gisScript.onload = () => { gisLoaded = true; authLog("GIS loaded"); trySetReady(); };
+    gisScript.onerror = () => {
+      authLog("GIS load failed");
+      setAuthError("Failed to load Google Identity Services.");
+    };
     document.head.appendChild(gisScript);
 
     const gapiScript = document.createElement("script");
     gapiScript.src = "https://apis.google.com/js/api.js";
     gapiScript.async = true; gapiScript.defer = true;
     gapiScript.onload = () => {
+      authLog("GAPI script loaded");
       window.gapi.load("client", async () => {
-        try { await window.gapi.client.init({ apiKey: API_KEY, discoveryDocs: [] }); } catch (_) {}
+        try {
+          await window.gapi.client.init({ apiKey: API_KEY, discoveryDocs: [] });
+          authLog("GAPI client initialized");
+        } catch (error) {
+          authLog("GAPI init warning", error);
+        }
         gapiLoaded = true; trySetReady();
       });
     };
-    gapiScript.onerror = () => setAuthError("Failed to load Google API.");
+    gapiScript.onerror = () => {
+      authLog("GAPI load failed");
+      setAuthError("Failed to load Google API.");
+    };
     document.head.appendChild(gapiScript);
     return () => { if (authTimeoutRef.current) clearTimeout(authTimeoutRef.current); };
-  }, []);
+  }, [authLog]);
 
   const signIn = useCallback(() => {
-    if (!gapiReady) return;
-    setAuthLoading(true); setAuthError(null);
+    authLog("Sign-in requested", { gapiReady, storageReady, hasGrantedConsent });
+    if (!storageReady) {
+      const msg = "Local storage is blocked. Enable storage/cookies, then retry sign-in.";
+      setAuthError(msg);
+      window.alert(msg);
+      return;
+    }
+    if (!gapiReady) {
+      authLog("Sign-in aborted: APIs not ready");
+      return;
+    }
+
+    setAuthLoading(true);
+    setAuthError(null);
+    const attemptId = Date.now();
+    activeAttemptRef.current = attemptId;
+
     if (authTimeoutRef.current) clearTimeout(authTimeoutRef.current);
     authTimeoutRef.current = setTimeout(() => {
+      if (activeAttemptRef.current !== attemptId) return;
+      authLog("Sign-in timed out waiting for callback", { attemptId });
       setAuthLoading(false);
-      setAuthError("Sign-in timed out. Please try again.");
+      setAuthError("Sign-in timed out. Popup may be blocked or redirect origin is not allowed.");
     }, 30000);
+
     if (!tokenClientRef.current) {
+      authLog("Initializing Google token client");
       tokenClientRef.current = window.google.accounts.oauth2.initTokenClient({
         client_id: CLIENT_ID,
         scope: REQUIRED_SCOPES.join(" "),
         include_granted_scopes: true,
         callback: async (response) => {
+          authLog("Token callback received", response);
           if (authTimeoutRef.current) clearTimeout(authTimeoutRef.current);
-          if (response.error) {
+          if (activeAttemptRef.current !== attemptId) {
+            authLog("Ignoring stale callback", { attemptId, activeAttempt: activeAttemptRef.current });
+            return;
+          }
+
+          if (response?.error) {
+            authLog("Google callback error", response.error);
             if (response.error === "consent_required" || response.error === "interaction_required") {
-              tokenClientRef.current.requestAccessToken({ prompt: "consent" });
+              authLog("Retrying with consent prompt");
+              tokenClientRef.current.requestAccessToken({ prompt: "select_account consent" });
               return;
             }
             setAuthLoading(false);
             setAuthError(`Auth error: ${response.error}`);
             return;
           }
+
+          if (!response?.access_token) {
+            authLog("No access token in callback payload", response);
+            setAuthLoading(false);
+            setAuthError("Google returned no session token. Please retry (popup/redirect may be blocked).");
+            return;
+          }
+
           const grantedAllScopes = window.google.accounts.oauth2.hasGrantedAllScopes(response, ...REQUIRED_SCOPES);
+          authLog("Scope check", { grantedAllScopes });
           if (!grantedAllScopes) {
             setAuthLoading(false);
             setAuthError(translations.drivePermissionRequired);
@@ -787,38 +935,84 @@ function useGoogleAuth(lang = "en") {
             setHasGrantedConsent(false);
             return;
           }
+
           localStorage.setItem(AUTH_CONSENT_STORAGE_KEY, "true");
           setHasGrantedConsent(true);
           const accessToken = response.access_token;
+
           try {
-            const userRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", { headers: { Authorization: `Bearer ${accessToken}` } });
+            authLog("Fetching user profile via OAuth userinfo endpoint");
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 15000);
+            const userRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+              headers: { Authorization: `Bearer ${accessToken}` },
+              signal: controller.signal,
+            });
+            clearTimeout(timeout);
             if (!userRes.ok) throw new Error(`userinfo ${userRes.status}`);
             const userInfo = await userRes.json();
             const normalizedUser = { ...userInfo, id: userInfo?.id || userInfo?.sub || null };
-            setUser(normalizedUser); setToken(accessToken);
-          } catch (err) {
-            setAuthError("Signed in but could not fetch profile. Check API key.");
+            authLog("User profile loaded", { id: normalizedUser?.id, email: normalizedUser?.email });
+            setUser(normalizedUser);
             setToken(accessToken);
-          } finally { setAuthLoading(false); }
+            localStorage.setItem(AUTH_LOGIN_DAY_KEY, new Date().toISOString().slice(0, 10));
+          } catch (err) {
+            authLog("User profile fetch failed; trying token payload fallback", err);
+            const payload = decodeJwtPayload(response.id_token);
+            if (payload?.sub || payload?.email) {
+              const fallbackUser = {
+                id: payload.sub || null,
+                email: payload.email || null,
+                name: payload.name || payload.given_name || "User",
+                picture: payload.picture || null,
+              };
+              setUser(fallbackUser);
+              setToken(accessToken);
+              localStorage.setItem(AUTH_LOGIN_DAY_KEY, new Date().toISOString().slice(0, 10));
+              authLog("Fallback profile created from id_token", fallbackUser);
+            } else {
+              setAuthError("Signed in but could not fetch profile. Check API key / redirect origin / popup policies.");
+              setToken(accessToken);
+            }
+          } finally {
+            authLog("Sign-in callback completed");
+            setAuthLoading(false);
+          }
         },
       });
     }
-    tokenClientRef.current.requestAccessToken({ prompt: hasGrantedConsent ? "none" : "consent" });
-  }, [gapiReady, hasGrantedConsent, translations.drivePermissionRequired]);
+
+    const prompt = hasGrantedConsent ? "select_account" : "select_account consent";
+    authLog("Requesting access token (forced account chooser)", {
+      prompt,
+      display: "popup",
+      attemptId,
+      note: "Using Google account chooser flow to avoid legacy hanging OAuth route",
+    });
+    tokenClientRef.current.requestAccessToken({ prompt });
+  }, [authLog, gapiReady, hasGrantedConsent, storageReady, translations.drivePermissionRequired]);
 
   const signOut = useCallback(() => {
+    authLog("Sign-out requested", { hasToken: Boolean(token) });
     if (token) { try { window.google.accounts.oauth2.revoke(token); } catch(_) {} }
     localStorage.removeItem(AUTH_STORAGE_KEY);
     localStorage.removeItem(AUTH_CONSENT_STORAGE_KEY);
+    localStorage.removeItem(AUTH_LOGIN_DAY_KEY);
     setHasGrantedConsent(false);
     setUser(null); setToken(null); setAuthError(null); tokenClientRef.current = null;
-  }, [token]);
+  }, [authLog, token]);
 
   useEffect(() => {
     if (user && token) {
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ user, token }));
+      try {
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ user, token }));
+        authLog("Auth session persisted", { userId: user?.id, email: user?.email });
+      } catch (error) {
+        authLog("Auth session persistence failed", error);
+        setAuthError("Unable to save session locally. Check browser storage/cookie permissions.");
+      }
     }
-  }, [user, token]);
+  }, [user, token, authLog]);
 
   return { user, token, authLoading, authError, gapiReady, signIn, signOut };
 }
@@ -839,18 +1033,66 @@ function AppProvider({ children }) {
   const [syncError, setSyncError] = useState(null);
   const [dbLoading, setDbLoading] = useState(false);
   const [supabaseSessionReady, setSupabaseSessionReady] = useState(!hasSupabaseClient);
+  const [backupFiles, setBackupFiles] = useState([]);
+  const [lastBackupAt, setLastBackupAt] = useState(() => BackupService.getStoredMeta()?.lastBackupAt || null);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const inactivityTimerRef = useRef(null);
   const saveTimerRef = useRef(null);
 
   const clearLocalSessionState = useCallback((shouldSignOut = false) => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
     setDb(null);
     setFileId(null);
     setSyncError(null);
     setDbLoading(false);
     setGatekeeperError(null);
     setUserSyncDone(false);
+    setBackupFiles([]);
     if (shouldSignOut) auth.signOut();
   }, [auth]);
+
+  const fetchBackups = useCallback(async () => {
+    if (!auth.token) return [];
+    const folderId = await BackupService.findOrCreateBackupFolder(auth.token);
+    const files = await BackupService.listBackups(auth.token, folderId);
+    setBackupFiles(files.slice(0, BackupService.MAX_BACKUPS));
+    const localMetaDate = BackupService.getStoredMeta()?.lastBackupAt || null;
+    const driveLatest = files[0]?.createdTime || null;
+    setLastBackupAt(localMetaDate || driveLatest);
+    return files;
+  }, [auth.token]);
+
+  const triggerBackup = useCallback(async ({ isAuto = false } = {}) => {
+    if (!auth.token || !db || backupBusy) return null;
+    setBackupBusy(true);
+    try {
+      const result = await BackupService.createBackup(auth.token, db);
+      setBackupFiles(result.backups || []);
+      setLastBackupAt(result.lastBackupAt || new Date().toISOString());
+      return result;
+    } catch (error) {
+      const label = isAuto ? "Auto backup failed" : "Backup failed";
+      setSyncError(`${label}: ${error?.message || "Unknown error"}`);
+      return null;
+    } finally {
+      setBackupBusy(false);
+    }
+  }, [auth.token, db, backupBusy]);
+
+  const restoreBackup = useCallback(async (backup) => {
+    if (!auth.token || !fileId || !backup?.id) return false;
+    try {
+      const snapshot = await BackupService.downloadBackup(auth.token, backup.id);
+      const migrated = migrateSchema(snapshot);
+      setDb(migrated);
+      await saveDB(auth.token, fileId, migrated);
+      return true;
+    } catch (error) {
+      setSyncError(`Restore failed: ${error?.message || "Unknown error"}`);
+      return false;
+    }
+  }, [auth.token, fileId]);
 
   const t = TRANSLATIONS[lang];
   const isRTL = lang === "ar";
@@ -924,6 +1166,25 @@ function AppProvider({ children }) {
     const rolePerms = usersConfig?.roles?.[currentRole]?.permissions || [];
     return rolePerms.includes("manage_everything") || rolePerms.includes(permission);
   }, [usersConfig, currentRole]);
+
+  const manualSync = useCallback(async () => {
+    if (!auth.token || isBlocked || !userSyncDone) return false;
+    setSyncError(null);
+    setSyncing(true);
+    try {
+      const { fileId: fid, data } = await findOrCreateDB(auth.token);
+      setFileId(fid);
+      setDb(data);
+      try { await fetchBackups(); } catch (_) {}
+      return true;
+    } catch (error) {
+      setSyncError(`Sync failed: ${error?.message || "Unknown error"}`);
+      return false;
+    } finally {
+      setSyncing(false);
+    }
+  }, [auth.token, isBlocked, userSyncDone, fetchBackups]);
+
 
   useEffect(() => {
     if (!usersConfigReady) return;
@@ -1037,6 +1298,47 @@ function AppProvider({ children }) {
   }, [auth.token, isBlocked, userSyncDone]);
 
   useEffect(() => {
+    if (!auth.token || !db || isBlocked || !userSyncDone) return;
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const files = await fetchBackups();
+        if (cancelled) return;
+        const localMetaDate = BackupService.getStoredMeta()?.lastBackupAt || null;
+        const mostRecent = localMetaDate || files?.[0]?.createdTime || null;
+        if (BackupService.shouldAutoBackup(mostRecent)) {
+          setTimeout(() => {
+            if (!cancelled) triggerBackup({ isAuto: true });
+          }, 0);
+        }
+      } catch (error) {
+        if (!cancelled) setSyncError(`Backup list failed: ${error?.message || "Unknown error"}`);
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [auth.token, db, isBlocked, userSyncDone, fetchBackups, triggerBackup]);
+
+  useEffect(() => {
+    if (!auth.user?.id || !auth.token) return;
+    const onExpire = () => {
+      localStorage.setItem(SESSION_EXPIRED_NOTICE_KEY, "1");
+      clearLocalSessionState(true);
+    };
+    const resetTimer = () => {
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      inactivityTimerRef.current = setTimeout(onExpire, INACTIVITY_TIMEOUT_MS);
+    };
+    const events = ["mousemove", "mousedown", "keydown", "touchstart", "click"];
+    events.forEach((name) => window.addEventListener(name, resetTimer));
+    resetTimer();
+    return () => {
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      events.forEach((name) => window.removeEventListener(name, resetTimer));
+    };
+  }, [auth.user?.id, auth.token, clearLocalSessionState]);
+
+  useEffect(() => {
     if (!hasSupabaseClient || !supabase?.auth?.getSession) return;
     let mounted = true;
     supabase.auth.getSession()
@@ -1052,6 +1354,13 @@ function AppProvider({ children }) {
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       const sessionExpired = Boolean(session?.expires_at && session.expires_at * 1000 <= Date.now());
       const shouldForceLogout = event === "SIGNED_OUT" || sessionExpired;
+      console.log(`${AUTH_DEBUG_PREFIX} Supabase auth state changed`, {
+        event,
+        hasSession: Boolean(session),
+        sessionExpired,
+        supabaseSessionReady,
+        authLoading: auth.authLoading,
+      });
       if (!supabaseSessionReady || auth.authLoading || !shouldForceLogout) return;
       clearLocalSessionState(true);
     });
@@ -1226,6 +1535,7 @@ function AppProvider({ children }) {
     lang, setLang, t, isRTL, font,
     usersConfig, usersConfigReady, currentRole, isBlocked, hasPermission,
     updateUserEntry, deleteUserEntry, gatekeeperError, userSyncDone,
+    backupFiles, lastBackupAt, backupBusy, triggerBackup, restoreBackup, fetchBackups, manualSync,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
@@ -1480,10 +1790,19 @@ function BrandingFooter({ text, isDark = false }) {
 import { version } from '../package.json'; 
 function LoginPage() {
   const { signIn, authLoading, gapiReady, authError, gatekeeperError, lang, setLang, t, isRTL, font } = useApp();
+  const [sessionExpiredNotice, setSessionExpiredNotice] = useState(false);
 
   useEffect(() => {
     if (!hasSupabaseConfig || !hasSupabaseClient) {
       console.log("[Supabase] Login page loaded without a working Supabase client.");
+    }
+  }, []);
+
+
+  useEffect(() => {
+    if (localStorage.getItem(SESSION_EXPIRED_NOTICE_KEY) === "1") {
+      setSessionExpiredNotice(true);
+      localStorage.removeItem(SESSION_EXPIRED_NOTICE_KEY);
     }
   }, []);
 
@@ -1562,6 +1881,11 @@ function LoginPage() {
         {!gapiReady && !authError && (
           <p style={{ marginTop:"12px",fontSize:"0.74rem",color:`${T.emerald}80` }}>{t.loadingApis}</p>
         )}
+        {sessionExpiredNotice && (
+          <div style={{ marginTop:"14px",padding:"10px 14px",background:"rgba(245,158,11,0.15)",border:"1px solid rgba(245,158,11,0.35)",borderRadius:"8px",color:"rgba(251,191,36,0.95)",fontSize:"0.76rem" }}>
+            ⚠ {t.sessionExpiredSecurity}
+          </div>
+        )}
         {(authError || gatekeeperError || !hasSupabaseConfig || !hasSupabaseClient) && (
           <div style={{ marginTop:"14px",padding:"10px 14px",background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.25)",borderRadius:"8px",color:"rgba(255,100,100,0.9)",fontSize:"0.76rem" }}>
             ⚠ {authError || gatekeeperError || ((!hasSupabaseConfig || !hasSupabaseClient) ? t.permissionsVerifyFailed : "")}
@@ -1607,7 +1931,7 @@ function LoadingScreen({ message }) {
 // SIDEBAR
 // ═══════════════════════════════════════════════════════════════════════════════
 function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileOpen, setMobileOpen }) {
-  const { user, signOut, syncing, t, font, lang, setLang, hasPermission, currentRole } = useApp();
+  const { user, signOut, syncing, t, font, lang, setLang, hasPermission, currentRole, manualSync } = useApp();
   const canManageUsers = currentRole === "Owner" || hasPermission("assign_role") || hasPermission("block_user") || hasPermission("unblock_user");
 
   const navItems = [
@@ -1638,9 +1962,9 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileO
         {showLabels && (
           <div style={{ display:"flex",alignItems:"center",gap:"6px",marginTop:"8px" }}>
             <div style={{ width:"6px",height:"6px",borderRadius:"50%",background:syncing?"#f59e0b":T.emerald,transition:"background 0.3s" }}/>
-            <span style={{ color:syncing?"#f59e0b90":`${T.emerald}80`,fontSize:"0.62rem",letterSpacing:"0.1em",textTransform:"uppercase" }}>
+            <button onClick={manualSync} style={{ background:"none",border:"none",padding:0,cursor:"pointer",color:syncing?"#f59e0b90":`${T.emerald}80`,fontSize:"0.62rem",letterSpacing:"0.1em",textTransform:"uppercase",textDecoration:"underline" }}>
               {syncing ? t.syncing : t.synced}
-            </span>
+            </button>
           </div>
         )}
       </div>
@@ -1931,8 +2255,8 @@ function Dashboard() {
           {fundingDistribution.length === 0
             ? <EmptyState text={t.noFunding} />
             : (
-              <div style={{ display:"flex", gap:"10px", alignItems:"center", flexWrap:"wrap" }}>
-                <div style={{ flex:"1 1 180px", height:"180px" }}>
+              <div style={{ display:"grid", gridTemplateColumns:"minmax(170px, 45%) minmax(200px, 1fr)", alignItems:"center", gap:"18px" }}>
+                <div style={{ height:"190px", minWidth:0 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
@@ -1949,7 +2273,7 @@ function Dashboard() {
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-                <LegendList rows={fundingDistribution} currency={baseCurrency} textColor="#0f172a" valueColor="#020617" />
+                <div style={{ minWidth:0 }}><LegendList rows={fundingDistribution} currency={baseCurrency} textColor="#0f172a" valueColor="#020617" /></div>
               </div>
             )
           }
@@ -2022,18 +2346,45 @@ function EmptyState({ text }) {
 // PORTFOLIOS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
 function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
+
   const { db, addItem, archiveItem, unarchiveItem, hardDeleteItem, patchItem, t, isRTL, font } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [modalMode, setModalMode] = useState("create");
   const [filterStatus, setFilterStatus] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [collapsedPortfolios, setCollapsedPortfolios] = useState({});
   const EMPTY = { name:"",type:"",risk:"",currency:"USD",status:"Active",color:T.chart[0],notes:"" };
   const [form, setForm] = useState(EMPTY);
   const f = k => v => setForm(p=>({...p,[k]:v}));
 
+  useEffect(() => () => {
+    setShowModal(false);
+    setEditItem(null);
+    setModalMode("create");
+    setFilterStatus("");
+    setSearchOpen(false);
+    setSearchTerm("");
+    setCollapsedPortfolios({});
+    setForm(EMPTY);
+  }, []);
+
   const allPortfolios = db?.portfolios||[];
   const statusOpts = ((db?.settings?.investmentStatuses&&db.settings.investmentStatuses.length)?db.settings.investmentStatuses:["Active","Paused","Closed"]).map((v)=>({ value:v, label:v }));
+
+  useEffect(() => {
+    setCollapsedPortfolios((prev) => {
+      const next = { ...prev };
+      (allPortfolios || []).forEach((portfolio) => {
+        if (!Object.prototype.hasOwnProperty.call(next, portfolio.id)) next[portfolio.id] = true;
+      });
+      return next;
+    });
+  }, [allPortfolios]);
   const portfolios = allPortfolios.filter((p) => {
+    const matchesSearch = !searchTerm.trim() || String(p.name || "").toLowerCase().includes(searchTerm.trim().toLowerCase());
+    if (!matchesSearch) return false;
     if (!filterStatus) return !p.is_hidden;
     if (filterStatus === ARCHIVED_FILTER) return Boolean(p.is_hidden);
     return !p.is_hidden && p.status === filterStatus;
@@ -2050,12 +2401,26 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
 
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font }}>
-      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"24px" }}>
+      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"24px",gap:"10px",flexWrap:"wrap" }}>
         <div>
           <h2 style={{ margin:0,fontSize:"1.4rem",fontWeight:700,color:T.textPrimary }}>{t.portfolios}</h2>
           <div style={{ fontSize:"0.8rem",color:T.textMuted,marginTop:"2px" }}>{allPortfolios.length} {t.portfolios.toLowerCase()}</div>
         </div>
-        <Btn icon={<Plus size={15}/>} onClick={()=>{setForm(EMPTY);setEditItem(null);setModalMode("create");setShowModal(true);}}>{t.addPortfolio}</Btn>
+        <div style={{ display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap" }}>
+          <Btn size="sm" variant="secondary" onClick={()=>setCollapsedPortfolios(Object.fromEntries(portfolios.map((p)=>[p.id,false])))}>{t.expandAll}</Btn>
+          <Btn size="sm" variant="secondary" onClick={()=>setCollapsedPortfolios(Object.fromEntries(portfolios.map((p)=>[p.id,true])))}>{t.collapseAll}</Btn>
+          <div style={{ display:"flex",alignItems:"center",gap:"6px" }}>
+            <button title={t.searchUsersPlaceholder} onClick={()=>setSearchOpen((v)=>!v)} style={{ width:"34px",height:"34px",borderRadius:"8px",border:`1px solid ${T.border}`,background:T.bgCard,color:T.textSecondary,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center" }}>
+              <Search size={15} />
+            </button>
+            {searchOpen && (
+              <div style={{ width:"220px",maxWidth:"52vw" }}>
+                <Input value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} isRTL={isRTL} placeholder={t.searchUsersPlaceholder} />
+              </div>
+            )}
+          </div>
+          <Btn icon={<Plus size={15}/>} onClick={()=>{setForm(EMPTY);setEditItem(null);setModalMode("create");setShowModal(true);}}>{t.addPortfolio}</Btn>
+        </div>
       </div>
 
       <div style={{ ...filterBarCss, justifyContent:isRTL?"flex-start":"flex-end" }}>
@@ -2064,10 +2429,10 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
         </div>
       </div>
 
-      <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:"16px" }}>
+      <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:"16px",alignItems:"start" }}>
         {portfolios.map((p,i) => {
           const invs = inv_of_portfolio(db,p.id);
-          const activeValue = invs.filter(isActiveInvestment).reduce((sum, inv) => sum + investmentValue(inv), 0);
+          const activePrincipal = invs.filter(isActiveInvestment).reduce((sum, inv) => sum + costBasis(inv), 0);
           const totalValue = invs.reduce((sum, inv)=>sum+curVal(inv),0);
           const pCost  = invs.reduce((s,i)=>s+costBasis(i),0);
           const pTx    = tx_of_portfolio(db,p.id);
@@ -2084,16 +2449,21 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
           const yearLabel = t.incomeYearLabel.replace("{year}", isRTL ? currentYear.toLocaleString("ar-EG") : String(currentYear));
           const pRoi   = pCost>0?((totalValue-pCost)/pCost)*100:0;
           const color  = p.color || T.chart[i%T.chart.length];
+          const isCollapsed = Boolean(collapsedPortfolios[p.id]);
           return (
-            <Card key={p.id} style={{ overflow:"hidden" }}>
+            <Card key={p.id} style={{ overflow:"hidden",height:"fit-content",alignSelf:"start" }}>
               <div style={{ height:"4px",background:`linear-gradient(90deg,${color},${color}80)` }}/>
-              <div style={{ padding:"18px" }}>
-                <div style={{ marginBottom:"12px" }}>
+              <div style={{ padding:isCollapsed?"10px 14px":"18px" }}>
+                <div style={{ marginBottom:isCollapsed?"0":"12px" }}>
                   <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",gap:"10px",marginBottom:"8px" }}>
-                    <div style={{ display:"flex",alignItems:"center",gap:"7px",minWidth:0 }}>
+                    <button
+                      title={isCollapsed ? t.expandAll : t.collapseAll}
+                      onClick={()=>setCollapsedPortfolios((prev)=>({ ...prev, [p.id]: !Boolean(prev[p.id]) }))}
+                      style={{ display:"flex",alignItems:"center",gap:"7px",minWidth:0,background:"none",border:"none",padding:0,cursor:"pointer" }}
+                    >
                       <FolderOpen size={14} color={T.textMuted}/>
                       <div style={{ fontSize:"1rem",fontWeight:600,color:T.textPrimary,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{p.name}</div>
-                    </div>
+                    </button>
                     <div style={{ display:"flex",gap:"4px",flexShrink:0 }}>
                       <button title={t.viewDetails} onClick={()=>openView(p)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}
                         onMouseEnter={e=>{e.currentTarget.style.background=T.bgApp; e.currentTarget.style.color=T.warning;}} onMouseLeave={e=>{e.currentTarget.style.background="none"; e.currentTarget.style.color=T.textMuted;}}>
@@ -2114,30 +2484,47 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
                     <Chip color={statusColor(p.status)}>{p.status || "—"}</Chip>
                   </div>
                 </div>
-                <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:"10px",marginBottom:"14px" }}>
-                  <button
+                {!isCollapsed && (<><div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:"10px",marginBottom:"14px" }}>                  <button
                     onClick={() => onViewInvestments?.(p, { status: "Active" })}
                     style={{ padding:"10px",background:T.bgApp,borderRadius:"8px",border:"none",cursor:"pointer",textAlign:isRTL?"right":"left" }}
                     onMouseEnter={e=>{ e.currentTarget.style.background="#e2e8f0"; }}
                     onMouseLeave={e=>{ e.currentTarget.style.background=T.bgApp; }}
                   >
                     <div style={{ fontSize:"0.68rem",color:T.textMuted,marginBottom:"3px" }}>{t.activeInvestmentValue}</div>
-                    <div style={{ fontSize:"0.95rem",fontWeight:600,color:T.info,textDecoration:"underline" }}>{fmtMoney(activeValue,{compact:true,currency:p.currency||"USD"})}</div>
+                    <div style={{ fontSize:"0.95rem",fontWeight:600,color:T.info,textDecoration:"underline" }}>{fmtMoney(activePrincipal,{compact:true,currency:p.currency||"USD"})}</div>
                   </button>
                   {[
                     { label:t.totalValue,  val:fmtMoney(totalValue,{compact:true,currency:p.currency||"USD"}) },
-                    { label:t.roi,         val:`${pRoi>=0?"+":""}${pRoi.toFixed(1)}%`, color:pRoi>=0?T.positive:T.negative },
+                    {
+                      label:t.roi,
+                      val:`${pRoi>=0?"+":""}${pRoi.toFixed(1)}%`,
+                      color:pRoi>=0?T.positive:T.negative,
+                      roiValue: fmtMoney(Number.isFinite(activePrincipal + (totalValue - pCost)) ? (activePrincipal + (totalValue - pCost)) : 0,{compact:true,currency:p.currency||"USD"}),
+                    },
                     { label:t.positions,   val:invs.length },
                     { label:yearLabel, val:fmtMoney(pIncomeCurrentYear,{compact:true,currency:p.currency||"USD"}) },
                     { label:t.totalIncome, val:fmtMoney(pIncome,{compact:true,currency:p.currency||"USD"}) },
                   ].map(m=>(
                     <div key={m.label} style={{ padding:"10px",background:T.bgApp,borderRadius:"8px" }}>
-                      <div style={{ fontSize:"0.68rem",color:T.textMuted,marginBottom:"3px" }}>{m.label}</div>
-                      <div style={{ fontSize:"0.95rem",fontWeight:600,color:m.color||T.textPrimary }}>{m.val}</div>
+                      {m.label === t.roi ? (
+                        <div style={{ display:"flex",flexDirection:"column",gap:"4px" }}>
+                          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",gap:"8px" }}>
+                            <span style={{ fontSize:"0.68rem",color:T.textMuted }}>{t.roi}:</span>
+                            <span style={{ fontSize:"0.95rem",fontWeight:600,color:m.color||T.textPrimary,whiteSpace:"nowrap" }}>{m.val}</span>
+                          </div>
+                          <div style={{ fontSize:"0.72rem",fontWeight:500,color:T.textMuted,whiteSpace:"nowrap",textAlign:isRTL?"right":"left" }}>{m.roiValue || fmtMoney(0,{compact:true,currency:p.currency||"USD"})}</div>
+                        </div>
+                      ) : (
+                        <>
+                          <div style={{ fontSize:"0.68rem",color:T.textMuted,marginBottom:"3px" }}>{m.label}</div>
+                          <div style={{ fontSize:"0.95rem",fontWeight:600,color:m.color||T.textPrimary }}>{m.val}</div>
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>
-                {p.notes && <div style={{ fontSize:"0.75rem",color:T.textMuted,fontStyle:"italic" }}>{p.notes}</div>}
+                {p.notes && <div style={{ fontSize:"0.75rem",color:T.textMuted,fontStyle:"italic",marginBottom:"10px" }}>{p.notes}</div>}
+                </>) }
               </div>
             </Card>
           );
@@ -2206,6 +2593,7 @@ function ReadOnlyField({ label, value }) {
 // INVESTMENTS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
 function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefill, navigationFilter, onModalPrefillConsumed }) {
+
   const { db, addItem, archiveItem, unarchiveItem, hardDeleteItem, patchItem, t, isRTL, font } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -2267,6 +2655,24 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [formError, setFormError] = useState("");
+
+  useEffect(() => () => {
+    setShowModal(false);
+    setEditItem(null);
+    setEditingPrice(null);
+    setExpandedRow(null);
+    setCollapsedPortfolios({});
+    setModalMode("create");
+    setFilterStartDate("");
+    setFilterEndDate("");
+    setFilterStatus("");
+    setFilterPortfolio("");
+    setSearchOpen(false);
+    setSearchTerm("");
+    setForm(EMPTY);
+    setFormError("");
+    localStorage.removeItem("investments_filters_v1");
+  }, [EMPTY]);
 
   const closeModal = useCallback(() => {
     setShowModal(false);
@@ -2649,6 +3055,7 @@ function InvestmentDetailExpanded({ inv, txs, db }) {
 // TRANSACTIONS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
 function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmartBack }) {
+
   const { db, addItem, archiveItem, hardDeleteItem, patchItem, t, isRTL, font } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -2664,6 +3071,20 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const EMPTY = { portfolioId:"",investmentId:"",category:"",amount:"",date:"",dueDate:"",type:"income",status:"recorded",notes:"" };
   const [form, setForm] = useState(EMPTY);
   const f = k => v => setForm(p=>({...p,[k]:v}));
+
+  useEffect(() => () => {
+    setShowModal(false);
+    setEditItem(null);
+    setModalMode("create");
+    setFilterPortfolio("");
+    setFilterStatus("");
+    setFilterInvestment("");
+    setFilterStartDate("");
+    setFilterEndDate("");
+    setOpenMenu(null);
+    setForm(EMPTY);
+    setFormError("");
+  }, []);
 
   const portfolios = visible(db?.portfolios||[]);
   const allInvestments = visible(db?.investments||[]);
@@ -2917,11 +3338,12 @@ function TxActionMenu({ tx, onClose }) {
 // SETTINGS TAB — Lookup Categories
 // ═══════════════════════════════════════════════════════════════════════════════
 function SettingsTab() {
-  const { db, updateDb, t, isRTL, font } = useApp();
+  const { db, updateDb, t, isRTL, font, backupFiles, lastBackupAt, backupBusy, triggerBackup, restoreBackup, fetchBackups } = useApp();
   const [newItems, setNewItems] = useState({});
   const [editingItems, setEditingItems] = useState({});
   const [currencyError, setCurrencyError] = useState("");
   const [editingCurrency, setEditingCurrency] = useState(null);
+  const [restoreCandidate, setRestoreCandidate] = useState(null);
 
   const sections = [
     { key:"portfolioTypes",        label:t.portfolioTypes,        icon:<FolderOpen size={15}/> },
@@ -3033,6 +3455,22 @@ function SettingsTab() {
     setCurrencyError("");
   };
 
+  const handleManualBackup = async () => {
+    await triggerBackup({ isAuto: false });
+    await fetchBackups();
+  };
+
+  const confirmRestore = async () => {
+    if (!restoreCandidate) return;
+    const ok = await restoreBackup(restoreCandidate);
+    if (ok) {
+      setRestoreCandidate(null);
+      window.alert(t.backupRestoreSuccess);
+    }
+  };
+
+  const shownDate = lastBackupAt ? new Date(lastBackupAt).toLocaleString() : t.backupNoDate;
+
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font }}>
       <div style={{ marginBottom:"24px" }}>
@@ -3133,6 +3571,32 @@ function SettingsTab() {
         ))}
       </div>
 
+      <Card style={{ marginTop:"20px",padding:"16px 20px",width:"min(100%, 360px)" }}>
+        <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:"10px",flexWrap:"wrap",marginBottom:"10px" }}>
+          <div>
+            <h4 style={{ margin:"0 0 4px",fontSize:"0.92rem",color:T.textPrimary }}>{t.backupTitle}</h4>
+            <div style={{ fontSize:"0.78rem",color:T.textMuted }}>{t.backupInfo}: <strong style={{ color:T.textSecondary }}>{shownDate}</strong></div>
+          </div>
+          <Btn onClick={handleManualBackup} disabled={backupBusy} icon={<RefreshCw size={14} />}>{t.backupNow}</Btn>
+        </div>
+        <div style={{ display:"grid",gap:"8px" }}>
+          {backupFiles.length === 0 && (
+            <div style={{ fontSize:"0.8rem",color:T.textMuted }}>{t.backupNoItems}</div>
+          )}
+          {backupFiles.slice(0, 5).map((backup) => (
+            <div key={backup.id} style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:"8px",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:"8px",background:T.bgApp }}>
+              <div style={{ display:"flex",flexDirection:"column",gap:"2px" }}>
+                <span style={{ fontSize:"0.78rem",color:T.textPrimary,fontWeight:500 }}>{backup.name}</span>
+                <span style={{ fontSize:"0.72rem",color:T.textMuted }}>{new Date(backup.createdTime).toLocaleString()}</span>
+              </div>
+              <button title="Restore" onClick={() => setRestoreCandidate(backup)} style={{ border:"none",background:"none",cursor:"pointer",color:T.emerald,display:"flex",padding:"3px" }}>
+                <RotateCcw size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </Card>
+
       {/* DB info card */}
       <Card style={{ marginTop:"20px",padding:"16px 20px" }}>
         <div style={{ display:"flex",alignItems:"center",gap:"10px" }}>
@@ -3142,6 +3606,16 @@ function SettingsTab() {
           </span>
         </div>
       </Card>
+
+      {restoreCandidate && (
+        <Modal title={t.backupTitle} onClose={() => setRestoreCandidate(null)} maxWidth="420px">
+          <p style={{ margin:"0 0 16px",fontSize:"0.84rem",color:T.textSecondary }}>{t.backupRestoreConfirm}</p>
+          <div style={{ display:"flex",justifyContent:"flex-end",gap:"8px" }}>
+            <Btn variant="secondary" onClick={() => setRestoreCandidate(null)}>{t.cancel}</Btn>
+            <Btn onClick={confirmRestore}>{t.save}</Btn>
+          </div>
+        </Modal>
+      )}
 
     </div>
   );
@@ -3780,6 +4254,7 @@ function UserManagementTab() {
 // ═══════════════════════════════════════════════════════════════════════════════
 function MainApp() {
   const { syncError, t, isRTL, font, hasPermission, currentRole } = useApp();
+  const [sessionNotice, setSessionNotice] = useState(false);
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem(TAB_STORAGE_KEY) || "dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -3795,11 +4270,32 @@ function MainApp() {
     localStorage.setItem(TAB_STORAGE_KEY, activeTab);
   }, [activeTab]);
 
+  useEffect(() => {
+    if (localStorage.getItem(SESSION_EXPIRED_NOTICE_KEY) === "1") {
+      setSessionNotice(true);
+      localStorage.removeItem(SESSION_EXPIRED_NOTICE_KEY);
+      const timer = setTimeout(() => setSessionNotice(false), 4500);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
   const canManageUsers = currentRole === "Owner" || hasPermission("assign_role") || hasPermission("block_user") || hasPermission("unblock_user");
 
   useEffect(() => {
     if (!canManageUsers && activeTab === "users") setActiveTab("dashboard");
   }, [canManageUsers, activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== "investments") {
+      setInvestmentPrefill(null);
+      setInvestmentNavigationFilter(null);
+    }
+    if (activeTab !== "transactions") {
+      setTransactionPrefill(null);
+      setTxNavigationFilter(null);
+      setSmartBackVisible(false);
+    }
+  }, [activeTab]);
 
   const quickAddInvestment = (portfolioId) => {
     setActiveTab("investments");
@@ -3872,6 +4368,11 @@ function MainApp() {
         {activeTab === "transactions" && smartBackVisible && (
           <div style={{ marginBottom:"12px" }}>
             <button title={t.smartBackToInvestments} onClick={handleSmartBack} style={{ background:"none",border:`1px solid ${T.border}`,borderRadius:"8px",cursor:"pointer",padding:"6px",display:"inline-flex",alignItems:"center",gap:"4px",color:T.textSecondary }}><Undo2 size={15}/><span style={{ fontSize:"0.78rem",fontWeight:600 }}>{t.returnLabel}</span></button>
+          </div>
+        )}
+        {sessionNotice && (
+          <div style={{ marginBottom:"16px",padding:"10px 16px",background:"rgba(245,158,11,0.12)",border:"1px solid rgba(245,158,11,0.35)",borderRadius:"8px",color:T.warning,fontSize:"0.8rem",display:"flex",alignItems:"center",gap:"8px" }}>
+            <AlertCircle size={14}/>{t.sessionExpiredSecurity}
           </div>
         )}
         {syncError && (
