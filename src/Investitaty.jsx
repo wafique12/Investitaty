@@ -2464,14 +2464,19 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
                     { label:t.totalIncome, val:fmtMoney(pIncome,{compact:true,currency:p.currency||"USD"}) },
                   ].map(m=>(
                     <div key={m.label} style={{ padding:"10px",background:T.bgApp,borderRadius:"8px" }}>
-                      <div style={{ fontSize:"0.68rem",color:T.textMuted,marginBottom:"3px" }}>{m.label}</div>
                       {m.label === t.roi ? (
-                        <div style={{ display:"flex",flexDirection:"column",alignItems:isRTL?"flex-end":"flex-start",gap:"2px" }}>
-                          <div style={{ fontSize:"0.95rem",fontWeight:600,color:m.color||T.textPrimary,whiteSpace:"nowrap" }}>{m.val}</div>
-                          <div style={{ fontSize:"0.72rem",fontWeight:500,color:m.color?`${m.color}B3`:T.textMuted,whiteSpace:"nowrap" }}>{m.roiValue || fmtMoney(0,{compact:true,currency:p.currency||"USD"})}</div>
+                        <div style={{ display:"flex",flexDirection:"column",gap:"4px" }}>
+                          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",gap:"8px" }}>
+                            <span style={{ fontSize:"0.68rem",color:T.textMuted }}>{t.roi}:</span>
+                            <span style={{ fontSize:"0.95rem",fontWeight:600,color:m.color||T.textPrimary,whiteSpace:"nowrap" }}>{m.val}</span>
+                          </div>
+                          <div style={{ fontSize:"0.72rem",fontWeight:500,color:T.textMuted,whiteSpace:"nowrap",textAlign:isRTL?"right":"left" }}>{m.roiValue || fmtMoney(0,{compact:true,currency:p.currency||"USD"})}</div>
                         </div>
                       ) : (
-                        <div style={{ fontSize:"0.95rem",fontWeight:600,color:m.color||T.textPrimary }}>{m.val}</div>
+                        <>
+                          <div style={{ fontSize:"0.68rem",color:T.textMuted,marginBottom:"3px" }}>{m.label}</div>
+                          <div style={{ fontSize:"0.95rem",fontWeight:600,color:m.color||T.textPrimary }}>{m.val}</div>
+                        </>
                       )}
                     </div>
                   ))}
