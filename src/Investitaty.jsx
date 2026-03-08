@@ -2453,21 +2453,26 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
                   </button>
                   {[
                     { label:t.totalValue,  val:fmtMoney(totalValue,{compact:true,currency:p.currency||"USD"}) },
-                    { label:t.roi, val:(
-                      <span>
-                        {`${pRoi>=0?"+":""}${pRoi.toFixed(1)}%`}
-                        <span style={{ fontSize:"0.74rem", marginInlineStart:"6px", color:pRoi>=0?T.positive:T.negative }}>
-                          ({fmtMoney(activePrincipal + (totalValue - pCost),{compact:true,currency:p.currency||"USD"})})
-                        </span>
-                      </span>
-                    ), color:pRoi>=0?T.positive:T.negative },
+                    {
+                      label:t.roi,
+                      val:`${pRoi>=0?"+":""}${pRoi.toFixed(1)}%`,
+                      color:pRoi>=0?T.positive:T.negative,
+                      roiValue: fmtMoney(Number.isFinite(activePrincipal + (totalValue - pCost)) ? (activePrincipal + (totalValue - pCost)) : 0,{compact:true,currency:p.currency||"USD"}),
+                    },
                     { label:t.positions,   val:invs.length },
                     { label:yearLabel, val:fmtMoney(pIncomeCurrentYear,{compact:true,currency:p.currency||"USD"}) },
                     { label:t.totalIncome, val:fmtMoney(pIncome,{compact:true,currency:p.currency||"USD"}) },
                   ].map(m=>(
                     <div key={m.label} style={{ padding:"10px",background:T.bgApp,borderRadius:"8px" }}>
                       <div style={{ fontSize:"0.68rem",color:T.textMuted,marginBottom:"3px" }}>{m.label}</div>
-                      <div style={{ fontSize:"0.95rem",fontWeight:600,color:m.color||T.textPrimary }}>{m.val}</div>
+                      {m.label === t.roi ? (
+                        <div style={{ display:"flex",flexDirection:"column",alignItems:isRTL?"flex-end":"flex-start",gap:"2px" }}>
+                          <div style={{ fontSize:"0.95rem",fontWeight:600,color:m.color||T.textPrimary,whiteSpace:"nowrap" }}>{m.val}</div>
+                          <div style={{ fontSize:"0.72rem",fontWeight:500,color:m.color?`${m.color}B3`:T.textMuted,whiteSpace:"nowrap" }}>{m.roiValue || fmtMoney(0,{compact:true,currency:p.currency||"USD"})}</div>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize:"0.95rem",fontWeight:600,color:m.color||T.textPrimary }}>{m.val}</div>
+                      )}
                     </div>
                   ))}
                 </div>
