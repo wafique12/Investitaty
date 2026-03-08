@@ -6,9 +6,10 @@ import {
   TrendingUp, Wallet, DollarSign, BarChart2, Globe, LogOut,
   Cloud, Shield, Layers, Tag, FolderOpen, ArrowUpRight, PieChart as PieChartIcon,
   ArrowDownRight, Eye, EyeOff, AlertCircle, CheckCircle2,
-  Menu, Search, Landmark, ListTree, CircleDollarSign, Lock, Unlock, Undo2,
+  Menu, Search, Landmark, ListTree, CircleDollarSign, Lock, Unlock, Undo2, RotateCcw,
 } from "lucide-react";
 import { supabase, hasSupabaseConfig, hasSupabaseClient } from "./lib/supabaseClient";
+import BackupService from "./services/BackupService";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONFIG
@@ -23,7 +24,11 @@ const REQUIRED_SCOPES = [
 const DB_FILENAME = "investitaty_db.json";
 const AUTH_STORAGE_KEY = "investitaty_auth_v1";
 const AUTH_CONSENT_STORAGE_KEY = "investitaty_auth_consent_v1";
+const AUTH_LOGIN_DAY_KEY = "investitaty_auth_login_day_v1";
 const TAB_STORAGE_KEY = "investitaty_active_tab_v1";
+const SESSION_EXPIRED_NOTICE_KEY = "investitaty_session_expired_notice_v1";
+const INACTIVITY_TIMEOUT_MS = 20 * 60 * 1000;
+const AUTH_DEBUG_PREFIX = "[AuthFlow]";
 const OWNER_PROTECTED_EMAIL = "wafique22@gmail.com";
 const ARCHIVED_FILTER = "__archived__";
 
@@ -240,7 +245,7 @@ const TRANSLATIONS = {
     positions: "Positions",
     allocation: "Allocation",
     totalValue: "Total Value",
-    activeInvestmentValue: "Active Value",
+    activeInvestmentValue: "Active Principal",
     usersName: "Name",
     usersEmail: "Email",
     usersLastLogin: "Last Login",
@@ -260,6 +265,14 @@ const TRANSLATIONS = {
     failedGAPI: "Failed to load Google API.",
     drivePermissionRequired: "Please grant Google Drive access to enable reading and updating your investment files.",
     failedDrive: "Failed to access Google Drive. Please try again.",
+    backupTitle: "Backup",
+    backupInfo: "Last backup date",
+    backupNow: "Backup Now",
+    backupRestoreConfirm: "Restore this backup and replace your current data?",
+    backupRestoreSuccess: "Backup restored successfully.",
+    backupNoDate: "No backup yet",
+    backupNoItems: "No backups available.",
+    sessionExpiredSecurity: "Session expired for your security",
     syncFailed: "Sync failed. Changes may not be saved.",
     days: "d",
     overdue: "Overdue",
@@ -455,7 +468,7 @@ const TRANSLATIONS = {
     positions: "مراكز",
     allocation: "التخصيص",
     totalValue: "القيمة الإجمالية",
-    activeInvestmentValue: "قيمة الاستثمارات النشطة",
+    activeInvestmentValue: "اصل المبلغ النشط",
     usersName: "الاسم",
     usersEmail: "البريد الإلكتروني",
     usersLastLogin: "آخر تسجيل دخول",
@@ -475,6 +488,14 @@ const TRANSLATIONS = {
     failedGAPI: "فشل تحميل Google API.",
     drivePermissionRequired: "يرجى منح صلاحية الوصول لـ Google Drive لتتمكن من قراءة وتحديث ملفات الاستثمارات الخاصة بك.",
     failedDrive: "فشل الوصول إلى Google Drive.",
+    backupTitle: "النسخ الاحتياطي",
+    backupInfo: "تاريخ آخر نسخة احتياطية",
+    backupNow: "نسخ احتياطي الآن",
+    backupRestoreConfirm: "هل تريد استعادة هذه النسخة واستبدال البيانات الحالية؟",
+    backupRestoreSuccess: "تمت استعادة النسخة الاحتياطية بنجاح.",
+    backupNoDate: "لا توجد نسخة احتياطية بعد",
+    backupNoItems: "لا توجد نسخ احتياطية متاحة.",
+    sessionExpiredSecurity: "انتهت الجلسة حفاظًا على أمانك",
     syncFailed: "فشلت المزامنة. ربما لم تُحفظ التغييرات.",
     days: "يوم",
     overdue: "متأخر",
@@ -694,8 +715,30 @@ async function saveDB(token, fileId, data) {
   );
 }
 
+function isLocalStorageAvailable() {
+  try {
+    const key = "__investitaty_storage_probe__";
+    localStorage.setItem(key, "1");
+    localStorage.removeItem(key);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function decodeJwtPayload(token) {
+  try {
+    if (!token || !String(token).includes(".")) return null;
+    const payload = token.split(".")[1];
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(atob(normalized));
+  } catch (_) {
+    return null;
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
-// AUTH HOOK (unchanged from Sprint 3 — battle-tested)
+// AUTH HOOK (robust login tracing)
 // ═══════════════════════════════════════════════════════════════════════════════
 function useGoogleAuth(lang = "en") {
   const translations = TRANSLATIONS[lang] || TRANSLATIONS.en;
@@ -722,61 +765,160 @@ function useGoogleAuth(lang = "en") {
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState(null);
   const [gapiReady, setGapiReady] = useState(false);
+  const [storageReady, setStorageReady] = useState(() => isLocalStorageAvailable());
   const tokenClientRef = useRef(null);
   const authTimeoutRef = useRef(null);
+  const activeAttemptRef = useRef(0);
   const [hasGrantedConsent, setHasGrantedConsent] = useState(() => localStorage.getItem(AUTH_CONSENT_STORAGE_KEY) === "true");
+
+  const authLog = useCallback((step, extra) => {
+    if (extra !== undefined) console.log(`${AUTH_DEBUG_PREFIX} ${step}`, extra);
+    else console.log(`${AUTH_DEBUG_PREFIX} ${step}`);
+  }, []);
+
+  useEffect(() => {
+    const storageOK = isLocalStorageAvailable();
+    setStorageReady(storageOK);
+    authLog("Boot", { origin: window.location.origin, storageOK, lang });
+
+    if (!storageOK) {
+      const msg = "Local storage is blocked. Please enable storage/cookies and retry login.";
+      setAuthError(msg);
+      window.alert(msg);
+    }
+
+    if (!window.location.origin) return;
+    authLog("Origin check", {
+      currentOrigin: window.location.origin,
+      advice: "Ensure this exact origin is configured in Google OAuth + Supabase SITE_URL / redirect allowlist.",
+      accountChooserMode: "select_account + popup",
+    });
+  }, [authLog, lang]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+      const loginDay = localStorage.getItem(AUTH_LOGIN_DAY_KEY);
+      if (!raw || !loginDay) return;
+      const today = new Date().toISOString().slice(0, 10);
+      if (today !== loginDay) {
+        authLog("Daily re-auth required", { loginDay, today });
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+        localStorage.removeItem(AUTH_LOGIN_DAY_KEY);
+        localStorage.setItem(SESSION_EXPIRED_NOTICE_KEY, "1");
+        setUser(null);
+        setToken(null);
+      }
+    } catch (error) {
+      authLog("Daily re-auth check failed", error);
+    }
+  }, [authLog]);
 
   useEffect(() => {
     let gisLoaded = false;
     let gapiLoaded = false;
-    const trySetReady = () => { if (gisLoaded && gapiLoaded) setGapiReady(true); };
+    const trySetReady = () => {
+      if (gisLoaded && gapiLoaded) {
+        authLog("Google APIs ready");
+        setGapiReady(true);
+      }
+    };
 
+    authLog("Loading GIS/GAPI scripts");
     const gisScript = document.createElement("script");
     gisScript.src = "https://accounts.google.com/gsi/client";
     gisScript.async = true; gisScript.defer = true;
-    gisScript.onload = () => { gisLoaded = true; trySetReady(); };
-    gisScript.onerror = () => setAuthError("Failed to load Google Identity Services.");
+    gisScript.onload = () => { gisLoaded = true; authLog("GIS loaded"); trySetReady(); };
+    gisScript.onerror = () => {
+      authLog("GIS load failed");
+      setAuthError("Failed to load Google Identity Services.");
+    };
     document.head.appendChild(gisScript);
 
     const gapiScript = document.createElement("script");
     gapiScript.src = "https://apis.google.com/js/api.js";
     gapiScript.async = true; gapiScript.defer = true;
     gapiScript.onload = () => {
+      authLog("GAPI script loaded");
       window.gapi.load("client", async () => {
-        try { await window.gapi.client.init({ apiKey: API_KEY, discoveryDocs: [] }); } catch (_) {}
+        try {
+          await window.gapi.client.init({ apiKey: API_KEY, discoveryDocs: [] });
+          authLog("GAPI client initialized");
+        } catch (error) {
+          authLog("GAPI init warning", error);
+        }
         gapiLoaded = true; trySetReady();
       });
     };
-    gapiScript.onerror = () => setAuthError("Failed to load Google API.");
+    gapiScript.onerror = () => {
+      authLog("GAPI load failed");
+      setAuthError("Failed to load Google API.");
+    };
     document.head.appendChild(gapiScript);
     return () => { if (authTimeoutRef.current) clearTimeout(authTimeoutRef.current); };
-  }, []);
+  }, [authLog]);
 
   const signIn = useCallback(() => {
-    if (!gapiReady) return;
-    setAuthLoading(true); setAuthError(null);
+    authLog("Sign-in requested", { gapiReady, storageReady, hasGrantedConsent });
+    if (!storageReady) {
+      const msg = "Local storage is blocked. Enable storage/cookies, then retry sign-in.";
+      setAuthError(msg);
+      window.alert(msg);
+      return;
+    }
+    if (!gapiReady) {
+      authLog("Sign-in aborted: APIs not ready");
+      return;
+    }
+
+    setAuthLoading(true);
+    setAuthError(null);
+    const attemptId = Date.now();
+    activeAttemptRef.current = attemptId;
+
     if (authTimeoutRef.current) clearTimeout(authTimeoutRef.current);
     authTimeoutRef.current = setTimeout(() => {
+      if (activeAttemptRef.current !== attemptId) return;
+      authLog("Sign-in timed out waiting for callback", { attemptId });
       setAuthLoading(false);
-      setAuthError("Sign-in timed out. Please try again.");
+      setAuthError("Sign-in timed out. Popup may be blocked or redirect origin is not allowed.");
     }, 30000);
+
     if (!tokenClientRef.current) {
+      authLog("Initializing Google token client");
       tokenClientRef.current = window.google.accounts.oauth2.initTokenClient({
         client_id: CLIENT_ID,
         scope: REQUIRED_SCOPES.join(" "),
         include_granted_scopes: true,
         callback: async (response) => {
+          authLog("Token callback received", response);
           if (authTimeoutRef.current) clearTimeout(authTimeoutRef.current);
-          if (response.error) {
+          if (activeAttemptRef.current !== attemptId) {
+            authLog("Ignoring stale callback", { attemptId, activeAttempt: activeAttemptRef.current });
+            return;
+          }
+
+          if (response?.error) {
+            authLog("Google callback error", response.error);
             if (response.error === "consent_required" || response.error === "interaction_required") {
-              tokenClientRef.current.requestAccessToken({ prompt: "consent" });
+              authLog("Retrying with consent prompt");
+              tokenClientRef.current.requestAccessToken({ prompt: "select_account consent" });
               return;
             }
             setAuthLoading(false);
             setAuthError(`Auth error: ${response.error}`);
             return;
           }
+
+          if (!response?.access_token) {
+            authLog("No access token in callback payload", response);
+            setAuthLoading(false);
+            setAuthError("Google returned no session token. Please retry (popup/redirect may be blocked).");
+            return;
+          }
+
           const grantedAllScopes = window.google.accounts.oauth2.hasGrantedAllScopes(response, ...REQUIRED_SCOPES);
+          authLog("Scope check", { grantedAllScopes });
           if (!grantedAllScopes) {
             setAuthLoading(false);
             setAuthError(translations.drivePermissionRequired);
@@ -787,38 +929,84 @@ function useGoogleAuth(lang = "en") {
             setHasGrantedConsent(false);
             return;
           }
+
           localStorage.setItem(AUTH_CONSENT_STORAGE_KEY, "true");
           setHasGrantedConsent(true);
           const accessToken = response.access_token;
+
           try {
-            const userRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", { headers: { Authorization: `Bearer ${accessToken}` } });
+            authLog("Fetching user profile via OAuth userinfo endpoint");
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 15000);
+            const userRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+              headers: { Authorization: `Bearer ${accessToken}` },
+              signal: controller.signal,
+            });
+            clearTimeout(timeout);
             if (!userRes.ok) throw new Error(`userinfo ${userRes.status}`);
             const userInfo = await userRes.json();
             const normalizedUser = { ...userInfo, id: userInfo?.id || userInfo?.sub || null };
-            setUser(normalizedUser); setToken(accessToken);
-          } catch (err) {
-            setAuthError("Signed in but could not fetch profile. Check API key.");
+            authLog("User profile loaded", { id: normalizedUser?.id, email: normalizedUser?.email });
+            setUser(normalizedUser);
             setToken(accessToken);
-          } finally { setAuthLoading(false); }
+            localStorage.setItem(AUTH_LOGIN_DAY_KEY, new Date().toISOString().slice(0, 10));
+          } catch (err) {
+            authLog("User profile fetch failed; trying token payload fallback", err);
+            const payload = decodeJwtPayload(response.id_token);
+            if (payload?.sub || payload?.email) {
+              const fallbackUser = {
+                id: payload.sub || null,
+                email: payload.email || null,
+                name: payload.name || payload.given_name || "User",
+                picture: payload.picture || null,
+              };
+              setUser(fallbackUser);
+              setToken(accessToken);
+              localStorage.setItem(AUTH_LOGIN_DAY_KEY, new Date().toISOString().slice(0, 10));
+              authLog("Fallback profile created from id_token", fallbackUser);
+            } else {
+              setAuthError("Signed in but could not fetch profile. Check API key / redirect origin / popup policies.");
+              setToken(accessToken);
+            }
+          } finally {
+            authLog("Sign-in callback completed");
+            setAuthLoading(false);
+          }
         },
       });
     }
-    tokenClientRef.current.requestAccessToken({ prompt: hasGrantedConsent ? "none" : "consent" });
-  }, [gapiReady, hasGrantedConsent, translations.drivePermissionRequired]);
+
+    const prompt = hasGrantedConsent ? "select_account" : "select_account consent";
+    authLog("Requesting access token (forced account chooser)", {
+      prompt,
+      display: "popup",
+      attemptId,
+      note: "Using Google account chooser flow to avoid legacy hanging OAuth route",
+    });
+    tokenClientRef.current.requestAccessToken({ prompt });
+  }, [authLog, gapiReady, hasGrantedConsent, storageReady, translations.drivePermissionRequired]);
 
   const signOut = useCallback(() => {
+    authLog("Sign-out requested", { hasToken: Boolean(token) });
     if (token) { try { window.google.accounts.oauth2.revoke(token); } catch(_) {} }
     localStorage.removeItem(AUTH_STORAGE_KEY);
     localStorage.removeItem(AUTH_CONSENT_STORAGE_KEY);
+    localStorage.removeItem(AUTH_LOGIN_DAY_KEY);
     setHasGrantedConsent(false);
     setUser(null); setToken(null); setAuthError(null); tokenClientRef.current = null;
-  }, [token]);
+  }, [authLog, token]);
 
   useEffect(() => {
     if (user && token) {
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ user, token }));
+      try {
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ user, token }));
+        authLog("Auth session persisted", { userId: user?.id, email: user?.email });
+      } catch (error) {
+        authLog("Auth session persistence failed", error);
+        setAuthError("Unable to save session locally. Check browser storage/cookie permissions.");
+      }
     }
-  }, [user, token]);
+  }, [user, token, authLog]);
 
   return { user, token, authLoading, authError, gapiReady, signIn, signOut };
 }
@@ -839,18 +1027,66 @@ function AppProvider({ children }) {
   const [syncError, setSyncError] = useState(null);
   const [dbLoading, setDbLoading] = useState(false);
   const [supabaseSessionReady, setSupabaseSessionReady] = useState(!hasSupabaseClient);
+  const [backupFiles, setBackupFiles] = useState([]);
+  const [lastBackupAt, setLastBackupAt] = useState(() => BackupService.getStoredMeta()?.lastBackupAt || null);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const inactivityTimerRef = useRef(null);
   const saveTimerRef = useRef(null);
 
   const clearLocalSessionState = useCallback((shouldSignOut = false) => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
     setDb(null);
     setFileId(null);
     setSyncError(null);
     setDbLoading(false);
     setGatekeeperError(null);
     setUserSyncDone(false);
+    setBackupFiles([]);
     if (shouldSignOut) auth.signOut();
   }, [auth]);
+
+  const fetchBackups = useCallback(async () => {
+    if (!auth.token) return [];
+    const folderId = await BackupService.findOrCreateBackupFolder(auth.token);
+    const files = await BackupService.listBackups(auth.token, folderId);
+    setBackupFiles(files.slice(0, BackupService.MAX_BACKUPS));
+    const localMetaDate = BackupService.getStoredMeta()?.lastBackupAt || null;
+    const driveLatest = files[0]?.createdTime || null;
+    setLastBackupAt(localMetaDate || driveLatest);
+    return files;
+  }, [auth.token]);
+
+  const triggerBackup = useCallback(async ({ isAuto = false } = {}) => {
+    if (!auth.token || !db || backupBusy) return null;
+    setBackupBusy(true);
+    try {
+      const result = await BackupService.createBackup(auth.token, db);
+      setBackupFiles(result.backups || []);
+      setLastBackupAt(result.lastBackupAt || new Date().toISOString());
+      return result;
+    } catch (error) {
+      const label = isAuto ? "Auto backup failed" : "Backup failed";
+      setSyncError(`${label}: ${error?.message || "Unknown error"}`);
+      return null;
+    } finally {
+      setBackupBusy(false);
+    }
+  }, [auth.token, db, backupBusy]);
+
+  const restoreBackup = useCallback(async (backup) => {
+    if (!auth.token || !fileId || !backup?.id) return false;
+    try {
+      const snapshot = await BackupService.downloadBackup(auth.token, backup.id);
+      const migrated = migrateSchema(snapshot);
+      setDb(migrated);
+      await saveDB(auth.token, fileId, migrated);
+      return true;
+    } catch (error) {
+      setSyncError(`Restore failed: ${error?.message || "Unknown error"}`);
+      return false;
+    }
+  }, [auth.token, fileId]);
 
   const t = TRANSLATIONS[lang];
   const isRTL = lang === "ar";
@@ -1037,6 +1273,47 @@ function AppProvider({ children }) {
   }, [auth.token, isBlocked, userSyncDone]);
 
   useEffect(() => {
+    if (!auth.token || !db || isBlocked || !userSyncDone) return;
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const files = await fetchBackups();
+        if (cancelled) return;
+        const localMetaDate = BackupService.getStoredMeta()?.lastBackupAt || null;
+        const mostRecent = localMetaDate || files?.[0]?.createdTime || null;
+        if (BackupService.shouldAutoBackup(mostRecent)) {
+          setTimeout(() => {
+            if (!cancelled) triggerBackup({ isAuto: true });
+          }, 0);
+        }
+      } catch (error) {
+        if (!cancelled) setSyncError(`Backup list failed: ${error?.message || "Unknown error"}`);
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [auth.token, db, isBlocked, userSyncDone, fetchBackups, triggerBackup]);
+
+  useEffect(() => {
+    if (!auth.user?.id || !auth.token) return;
+    const onExpire = () => {
+      localStorage.setItem(SESSION_EXPIRED_NOTICE_KEY, "1");
+      clearLocalSessionState(true);
+    };
+    const resetTimer = () => {
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      inactivityTimerRef.current = setTimeout(onExpire, INACTIVITY_TIMEOUT_MS);
+    };
+    const events = ["mousemove", "mousedown", "keydown", "touchstart", "click"];
+    events.forEach((name) => window.addEventListener(name, resetTimer));
+    resetTimer();
+    return () => {
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      events.forEach((name) => window.removeEventListener(name, resetTimer));
+    };
+  }, [auth.user?.id, auth.token, clearLocalSessionState]);
+
+  useEffect(() => {
     if (!hasSupabaseClient || !supabase?.auth?.getSession) return;
     let mounted = true;
     supabase.auth.getSession()
@@ -1052,6 +1329,13 @@ function AppProvider({ children }) {
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       const sessionExpired = Boolean(session?.expires_at && session.expires_at * 1000 <= Date.now());
       const shouldForceLogout = event === "SIGNED_OUT" || sessionExpired;
+      console.log(`${AUTH_DEBUG_PREFIX} Supabase auth state changed`, {
+        event,
+        hasSession: Boolean(session),
+        sessionExpired,
+        supabaseSessionReady,
+        authLoading: auth.authLoading,
+      });
       if (!supabaseSessionReady || auth.authLoading || !shouldForceLogout) return;
       clearLocalSessionState(true);
     });
@@ -1226,6 +1510,7 @@ function AppProvider({ children }) {
     lang, setLang, t, isRTL, font,
     usersConfig, usersConfigReady, currentRole, isBlocked, hasPermission,
     updateUserEntry, deleteUserEntry, gatekeeperError, userSyncDone,
+    backupFiles, lastBackupAt, backupBusy, triggerBackup, restoreBackup, fetchBackups,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
@@ -1480,10 +1765,19 @@ function BrandingFooter({ text, isDark = false }) {
 import { version } from '../package.json'; 
 function LoginPage() {
   const { signIn, authLoading, gapiReady, authError, gatekeeperError, lang, setLang, t, isRTL, font } = useApp();
+  const [sessionExpiredNotice, setSessionExpiredNotice] = useState(false);
 
   useEffect(() => {
     if (!hasSupabaseConfig || !hasSupabaseClient) {
       console.log("[Supabase] Login page loaded without a working Supabase client.");
+    }
+  }, []);
+
+
+  useEffect(() => {
+    if (localStorage.getItem(SESSION_EXPIRED_NOTICE_KEY) === "1") {
+      setSessionExpiredNotice(true);
+      localStorage.removeItem(SESSION_EXPIRED_NOTICE_KEY);
     }
   }, []);
 
@@ -1561,6 +1855,11 @@ function LoginPage() {
 
         {!gapiReady && !authError && (
           <p style={{ marginTop:"12px",fontSize:"0.74rem",color:`${T.emerald}80` }}>{t.loadingApis}</p>
+        )}
+        {sessionExpiredNotice && (
+          <div style={{ marginTop:"14px",padding:"10px 14px",background:"rgba(245,158,11,0.15)",border:"1px solid rgba(245,158,11,0.35)",borderRadius:"8px",color:"rgba(251,191,36,0.95)",fontSize:"0.76rem" }}>
+            ⚠ {t.sessionExpiredSecurity}
+          </div>
         )}
         {(authError || gatekeeperError || !hasSupabaseConfig || !hasSupabaseClient) && (
           <div style={{ marginTop:"14px",padding:"10px 14px",background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.25)",borderRadius:"8px",color:"rgba(255,100,100,0.9)",fontSize:"0.76rem" }}>
@@ -2067,7 +2366,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
       <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:"16px" }}>
         {portfolios.map((p,i) => {
           const invs = inv_of_portfolio(db,p.id);
-          const activeValue = invs.filter(isActiveInvestment).reduce((sum, inv) => sum + investmentValue(inv), 0);
+          const activePrincipal = invs.filter(isActiveInvestment).reduce((sum, inv) => sum + costBasis(inv), 0);
           const totalValue = invs.reduce((sum, inv)=>sum+curVal(inv),0);
           const pCost  = invs.reduce((s,i)=>s+costBasis(i),0);
           const pTx    = tx_of_portfolio(db,p.id);
@@ -2122,7 +2421,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
                     onMouseLeave={e=>{ e.currentTarget.style.background=T.bgApp; }}
                   >
                     <div style={{ fontSize:"0.68rem",color:T.textMuted,marginBottom:"3px" }}>{t.activeInvestmentValue}</div>
-                    <div style={{ fontSize:"0.95rem",fontWeight:600,color:T.info,textDecoration:"underline" }}>{fmtMoney(activeValue,{compact:true,currency:p.currency||"USD"})}</div>
+                    <div style={{ fontSize:"0.95rem",fontWeight:600,color:T.info,textDecoration:"underline" }}>{fmtMoney(activePrincipal,{compact:true,currency:p.currency||"USD"})}</div>
                   </button>
                   {[
                     { label:t.totalValue,  val:fmtMoney(totalValue,{compact:true,currency:p.currency||"USD"}) },
@@ -2917,11 +3216,12 @@ function TxActionMenu({ tx, onClose }) {
 // SETTINGS TAB — Lookup Categories
 // ═══════════════════════════════════════════════════════════════════════════════
 function SettingsTab() {
-  const { db, updateDb, t, isRTL, font } = useApp();
+  const { db, updateDb, t, isRTL, font, backupFiles, lastBackupAt, backupBusy, triggerBackup, restoreBackup, fetchBackups } = useApp();
   const [newItems, setNewItems] = useState({});
   const [editingItems, setEditingItems] = useState({});
   const [currencyError, setCurrencyError] = useState("");
   const [editingCurrency, setEditingCurrency] = useState(null);
+  const [restoreCandidate, setRestoreCandidate] = useState(null);
 
   const sections = [
     { key:"portfolioTypes",        label:t.portfolioTypes,        icon:<FolderOpen size={15}/> },
@@ -3033,6 +3333,22 @@ function SettingsTab() {
     setCurrencyError("");
   };
 
+  const handleManualBackup = async () => {
+    await triggerBackup({ isAuto: false });
+    await fetchBackups();
+  };
+
+  const confirmRestore = async () => {
+    if (!restoreCandidate) return;
+    const ok = await restoreBackup(restoreCandidate);
+    if (ok) {
+      setRestoreCandidate(null);
+      window.alert(t.backupRestoreSuccess);
+    }
+  };
+
+  const shownDate = lastBackupAt ? new Date(lastBackupAt).toLocaleString() : t.backupNoDate;
+
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font }}>
       <div style={{ marginBottom:"24px" }}>
@@ -3133,6 +3449,32 @@ function SettingsTab() {
         ))}
       </div>
 
+      <Card style={{ marginTop:"20px",padding:"16px 20px" }}>
+        <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:"10px",flexWrap:"wrap",marginBottom:"10px" }}>
+          <div>
+            <h4 style={{ margin:"0 0 4px",fontSize:"0.92rem",color:T.textPrimary }}>{t.backupTitle}</h4>
+            <div style={{ fontSize:"0.78rem",color:T.textMuted }}>{t.backupInfo}: <strong style={{ color:T.textSecondary }}>{shownDate}</strong></div>
+          </div>
+          <Btn onClick={handleManualBackup} disabled={backupBusy} icon={<RefreshCw size={14} />}>{t.backupNow}</Btn>
+        </div>
+        <div style={{ display:"grid",gap:"8px" }}>
+          {backupFiles.length === 0 && (
+            <div style={{ fontSize:"0.8rem",color:T.textMuted }}>{t.backupNoItems}</div>
+          )}
+          {backupFiles.slice(0, 5).map((backup) => (
+            <div key={backup.id} style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:"8px",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:"8px",background:T.bgApp }}>
+              <div style={{ display:"flex",flexDirection:"column",gap:"2px" }}>
+                <span style={{ fontSize:"0.78rem",color:T.textPrimary,fontWeight:500 }}>{backup.name}</span>
+                <span style={{ fontSize:"0.72rem",color:T.textMuted }}>{new Date(backup.createdTime).toLocaleString()}</span>
+              </div>
+              <button title="Restore" onClick={() => setRestoreCandidate(backup)} style={{ border:"none",background:"none",cursor:"pointer",color:T.emerald,display:"flex",padding:"3px" }}>
+                <RotateCcw size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </Card>
+
       {/* DB info card */}
       <Card style={{ marginTop:"20px",padding:"16px 20px" }}>
         <div style={{ display:"flex",alignItems:"center",gap:"10px" }}>
@@ -3142,6 +3484,16 @@ function SettingsTab() {
           </span>
         </div>
       </Card>
+
+      {restoreCandidate && (
+        <Modal title={t.backupTitle} onClose={() => setRestoreCandidate(null)} maxWidth="420px">
+          <p style={{ margin:"0 0 16px",fontSize:"0.84rem",color:T.textSecondary }}>{t.backupRestoreConfirm}</p>
+          <div style={{ display:"flex",justifyContent:"flex-end",gap:"8px" }}>
+            <Btn variant="secondary" onClick={() => setRestoreCandidate(null)}>{t.cancel}</Btn>
+            <Btn onClick={confirmRestore}>{t.save}</Btn>
+          </div>
+        </Modal>
+      )}
 
     </div>
   );
@@ -3780,6 +4132,7 @@ function UserManagementTab() {
 // ═══════════════════════════════════════════════════════════════════════════════
 function MainApp() {
   const { syncError, t, isRTL, font, hasPermission, currentRole } = useApp();
+  const [sessionNotice, setSessionNotice] = useState(false);
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem(TAB_STORAGE_KEY) || "dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -3794,6 +4147,15 @@ function MainApp() {
   useEffect(() => {
     localStorage.setItem(TAB_STORAGE_KEY, activeTab);
   }, [activeTab]);
+
+  useEffect(() => {
+    if (localStorage.getItem(SESSION_EXPIRED_NOTICE_KEY) === "1") {
+      setSessionNotice(true);
+      localStorage.removeItem(SESSION_EXPIRED_NOTICE_KEY);
+      const timer = setTimeout(() => setSessionNotice(false), 4500);
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
   const canManageUsers = currentRole === "Owner" || hasPermission("assign_role") || hasPermission("block_user") || hasPermission("unblock_user");
 
@@ -3872,6 +4234,11 @@ function MainApp() {
         {activeTab === "transactions" && smartBackVisible && (
           <div style={{ marginBottom:"12px" }}>
             <button title={t.smartBackToInvestments} onClick={handleSmartBack} style={{ background:"none",border:`1px solid ${T.border}`,borderRadius:"8px",cursor:"pointer",padding:"6px",display:"inline-flex",alignItems:"center",gap:"4px",color:T.textSecondary }}><Undo2 size={15}/><span style={{ fontSize:"0.78rem",fontWeight:600 }}>{t.returnLabel}</span></button>
+          </div>
+        )}
+        {sessionNotice && (
+          <div style={{ marginBottom:"16px",padding:"10px 16px",background:"rgba(245,158,11,0.12)",border:"1px solid rgba(245,158,11,0.35)",borderRadius:"8px",color:T.warning,fontSize:"0.8rem",display:"flex",alignItems:"center",gap:"8px" }}>
+            <AlertCircle size={14}/>{t.sessionExpiredSecurity}
           </div>
         )}
         {syncError && (
