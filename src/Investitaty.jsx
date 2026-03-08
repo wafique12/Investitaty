@@ -2255,8 +2255,8 @@ function Dashboard() {
           {fundingDistribution.length === 0
             ? <EmptyState text={t.noFunding} />
             : (
-              <div style={{ display:"flex", gap:"10px", alignItems:"center", flexWrap:"wrap" }}>
-                <div style={{ flex:"1 1 180px", height:"180px" }}>
+              <div style={{ display:"grid", gridTemplateColumns:"minmax(170px, 45%) minmax(200px, 1fr)", alignItems:"center", gap:"18px" }}>
+                <div style={{ height:"190px", minWidth:0 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
@@ -2273,7 +2273,7 @@ function Dashboard() {
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-                <LegendList rows={fundingDistribution} currency={baseCurrency} textColor="#0f172a" valueColor="#020617" />
+                <div style={{ minWidth:0 }}><LegendList rows={fundingDistribution} currency={baseCurrency} textColor="#0f172a" valueColor="#020617" /></div>
               </div>
             )
           }
@@ -2429,7 +2429,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
         </div>
       </div>
 
-      <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:"16px" }}>
+      <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:"16px",alignItems:"start" }}>
         {portfolios.map((p,i) => {
           const invs = inv_of_portfolio(db,p.id);
           const activePrincipal = invs.filter(isActiveInvestment).reduce((sum, inv) => sum + costBasis(inv), 0);
@@ -2451,9 +2451,9 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
           const color  = p.color || T.chart[i%T.chart.length];
           const isCollapsed = Boolean(collapsedPortfolios[p.id]);
           return (
-            <Card key={p.id} style={{ overflow:"hidden" }}>
+            <Card key={p.id} style={{ overflow:"hidden",height:"fit-content",alignSelf:"start" }}>
               <div style={{ height:"4px",background:`linear-gradient(90deg,${color},${color}80)` }}/>
-              <div style={{ padding:isCollapsed?"12px 16px":"18px" }}>
+              <div style={{ padding:isCollapsed?"10px 14px":"18px" }}>
                 <div style={{ marginBottom:isCollapsed?"0":"12px" }}>
                   <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",gap:"10px",marginBottom:"8px" }}>
                     <button
@@ -2478,13 +2478,11 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
                       </button>
                     </div>
                   </div>
-                  {!isCollapsed && (
-                    <div style={{ display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap",paddingLeft:isRTL?0:"21px",paddingRight:isRTL?"21px":0 }}>
-                      <Chip color={color}>{p.type}</Chip>
-                      <Chip color={T.info}>{p.risk}</Chip>
-                      <Chip color={statusColor(p.status)}>{p.status || "—"}</Chip>
-                    </div>
-                  )}
+                  <div style={{ display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap",paddingLeft:isRTL?0:"21px",paddingRight:isRTL?"21px":0 }}>
+                    <Chip color={color}>{p.type}</Chip>
+                    <Chip color={T.info}>{p.risk}</Chip>
+                    <Chip color={statusColor(p.status)}>{p.status || "—"}</Chip>
+                  </div>
                 </div>
                 {!isCollapsed && (<><div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:"10px",marginBottom:"14px" }}>                  <button
                     onClick={() => onViewInvestments?.(p, { status: "Active" })}
@@ -2527,13 +2525,6 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
                 </div>
                 {p.notes && <div style={{ fontSize:"0.75rem",color:T.textMuted,fontStyle:"italic",marginBottom:"10px" }}>{p.notes}</div>}
                 </>) }
-                {!isCollapsed && (
-                  <div style={{ borderTop:`1px dashed ${T.border}`,paddingTop:"10px",display:"flex",justifyContent:isRTL?"flex-start":"flex-end" }}>
-                    <button title={t.viewInvestmentsTooltip} onClick={()=>onViewInvestments?.(p)} style={{ background:"none",border:`1px solid ${T.border}`,padding:"6px",cursor:"pointer",color:T.info,borderRadius:"8px",display:"inline-flex",alignItems:"center",justifyContent:"center" }}>
-                      <ListTree size={14}/>
-                    </button>
-                  </div>
-                )}
               </div>
             </Card>
           );
