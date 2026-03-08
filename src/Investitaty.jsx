@@ -28,6 +28,8 @@ const AUTH_LOGIN_DAY_KEY = "investitaty_auth_login_day_v1";
 const TAB_STORAGE_KEY = "investitaty_active_tab_v1";
 const SESSION_EXPIRED_NOTICE_KEY = "investitaty_session_expired_notice_v1";
 const PORTFOLIOS_COLLAPSE_STORAGE_KEY = "investitaty_portfolios_collapsed_v1";
+const PORTFOLIOS_UI_STORAGE_KEY = "investitaty_portfolios_ui_v1";
+const INVESTMENTS_COLLAPSE_STORAGE_KEY = "investitaty_investments_collapsed_v1";
 const INACTIVITY_TIMEOUT_MS = 20 * 60 * 1000;
 const AUTH_DEBUG_PREFIX = "[AuthFlow]";
 const OWNER_PROTECTED_EMAIL = "wafique22@gmail.com";
@@ -2374,8 +2376,12 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
 
   useEffect(() => {
     const saved = JSON.parse(localStorage.getItem(PORTFOLIOS_COLLAPSE_STORAGE_KEY) || "{}");
-    if (!saved || typeof saved !== "object") return;
-    setCollapsedPortfolios(saved);
+    if (saved && typeof saved === "object") setCollapsedPortfolios(saved);
+    const savedUi = JSON.parse(localStorage.getItem(PORTFOLIOS_UI_STORAGE_KEY) || "null");
+    if (!savedUi || typeof savedUi !== "object") return;
+    setFilterStatus(savedUi.filterStatus || "");
+    setSearchTerm(savedUi.searchTerm || "");
+    setSearchOpen(Boolean(savedUi.searchOpen || savedUi.searchTerm));
   }, []);
 
   useEffect(() => {
@@ -2394,6 +2400,9 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
   useEffect(() => {
     localStorage.setItem(PORTFOLIOS_COLLAPSE_STORAGE_KEY, JSON.stringify(collapsedPortfolios));
   }, [collapsedPortfolios]);
+  useEffect(() => {
+    localStorage.setItem(PORTFOLIOS_UI_STORAGE_KEY, JSON.stringify({ filterStatus, searchTerm, searchOpen }));
+  }, [filterStatus, searchTerm, searchOpen]);
   const portfolios = allPortfolios.filter((p) => {
     const matchesSearch = !searchTerm.trim() || String(p.name || "").toLowerCase().includes(searchTerm.trim().toLowerCase());
     if (!matchesSearch) return false;
@@ -2604,7 +2613,7 @@ function ReadOnlyField({ label, value }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // INVESTMENTS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
-function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefill, navigationFilter, onModalPrefillConsumed }) {
+function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefill, navigationFilter, onModalPrefillConsumed, showPortfolioBack = false, onPortfolioBack }) {
 
   const { db, addItem, archiveItem, unarchiveItem, hardDeleteItem, patchItem, t, isRTL, font } = useApp();
   const [showModal, setShowModal] = useState(false);
@@ -2715,6 +2724,29 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
 
 
   useEffect(() => {
+    const saved = JSON.parse(localStorage.getItem(INVESTMENTS_COLLAPSE_STORAGE_KEY) || "{}");
+    if (!saved || typeof saved !== "object") return;
+    setCollapsedPortfolios(saved);
+  }, []);
+
+  useEffect(() => {
+    setCollapsedPortfolios((prev) => {
+      const next = { ...prev };
+      (portfolios || []).forEach((portfolio) => {
+        if (!Object.prototype.hasOwnProperty.call(next, portfolio.id)) next[portfolio.id] = false;
+      });
+      Object.keys(next).forEach((id) => {
+        if (!(portfolios || []).some((portfolio) => portfolio.id === id)) delete next[id];
+      });
+      return next;
+    });
+  }, [portfolios]);
+
+  useEffect(() => {
+    localStorage.setItem(INVESTMENTS_COLLAPSE_STORAGE_KEY, JSON.stringify(collapsedPortfolios));
+  }, [collapsedPortfolios]);
+
+  useEffect(() => {
     if (!navigationFilter?.portfolioId) return;
     setFilterPortfolio(navigationFilter.portfolioId);
     if (navigationFilter?.status) setFilterStatus(navigationFilter.status);
@@ -2737,8 +2769,17 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
         <div>
           <h2 style={{ margin:0,fontSize:"1.4rem",fontWeight:700,color:T.textPrimary }}>{t.investments}</h2>
           <div style={{ fontSize:"0.8rem",color:T.textMuted,marginTop:"2px" }}>{filteredInvestments.length} {t.investments.toLowerCase()}</div>
+          {showPortfolioBack && (
+            <button
+              type="button"
+              onClick={onPortfolioBack}
+              style={{ marginTop:"8px", background:"none", border:`1px solid ${T.border}`, borderRadius:"8px", cursor:"pointer", padding:"6px 10px", display:"inline-flex", alignItems:"center", gap:"6px", color:T.textSecondary, fontSize:"0.78rem", fontWeight:600 }}
+            >
+              <Undo2 size={14} /> رجوع
+            </button>
+          )}
         </div>
-        <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:"8px", flexWrap:"wrap" }}>
           <div style={{ display:"flex", alignItems:"center", gap:"6px", background:"#f8fafc", border:`1px solid ${T.border}`, borderRadius:"10px", padding:"4px 6px", overflow:"hidden" }}>
             <button onClick={() => setSearchOpen((v) => { const next = !v; if (!next) setSearchTerm(""); return next; })} style={{ border:"none", background:"transparent", color:T.textSecondary, cursor:"pointer", display:"flex", padding:"4px" }}>
               <Search size={14} />
@@ -2762,6 +2803,8 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
               }}
             />
           </div>
+          <Btn size="sm" variant="secondary" onClick={()=>setCollapsedPortfolios(Object.fromEntries(portfolios.map((p)=>[p.id,false])))}>{t.expandAll}</Btn>
+          <Btn size="sm" variant="secondary" onClick={()=>setCollapsedPortfolios(Object.fromEntries(portfolios.map((p)=>[p.id,true])))}>{t.collapseAll}</Btn>
           <Btn icon={<Plus size={15}/>} onClick={()=>{setForm(EMPTY);setEditItem(null);setModalMode("create");setShowModal(true); onModalPrefillConsumed?.();}}>{t.addInvestment}</Btn>
         </div>
       </div>
@@ -3170,6 +3213,11 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const showDueDate = normalizedStatus.includes("schedule");
   const showDepositedAt = normalizedStatus.includes("deposit");
   const showCollectedAt = normalizedStatus.includes("collect");
+  const formatDateDisplay = (value) => {
+    if (!value) return "";
+    const raw = String(value);
+    return /^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0, 10) : raw;
+  };
 
   useEffect(() => {
     if (!modalPrefill) return;
@@ -3284,25 +3332,25 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"10px" }}>
               <ReadOnlyField label={t.transactionType} value={form.type} />
               <ReadOnlyField label={t.status} value={form.status} />
-              <ReadOnlyField label={t.amount} value={form.amount} />
+              <ReadOnlyField label={t.amount} value={fmtMoney(Number(form.amount || 0), { currency:portfolioCurrency(db, form.portfolioId) })} />
               <ReadOnlyField label={t.portfolio} value={portfolios.find((p)=>p.id===form.portfolioId)?.name} />
-              <ReadOnlyField label="Due Date" value={form.dueDate || editItem?.due_date || "-"} />
-              <ReadOnlyField label="Deposited At" value={form.depositedAt || editItem?.deposited_at || "-"} />
-              <ReadOnlyField label="Collected At" value={form.collectedAt || editItem?.collected_at || "-"} />
+              <ReadOnlyField label="Due Date" value={formatDateDisplay(form.dueDate || editItem?.due_date) || "Pending"} />
+              <ReadOnlyField label="Deposited At" value={formatDateDisplay(form.depositedAt || editItem?.deposited_at) || "Pending"} />
+              <ReadOnlyField label="Collected At" value={formatDateDisplay(form.collectedAt || editItem?.collected_at) || "Pending"} />
               <ReadOnlyField label={t.notes} value={form.notes} />
               <div style={{ gridColumn:"1 / -1", padding:"10px 12px", border:`1px solid ${T.border}`, borderRadius:"10px", background:T.bgApp }}>
                 <div style={{ fontSize:"0.75rem", fontWeight:700, color:T.textSecondary, marginBottom:"8px" }}>Transaction Timeline</div>
-                <div style={{ display:"grid", gap:"6px" }}>
+                <div style={{ display:"grid", gap:"8px" }}>
                   {[
-                    { label:"Scheduled", value: form.dueDate || editItem?.due_date || "-" },
-                    { label:"Deposited", value: form.depositedAt || editItem?.deposited_at || "-" },
-                    { label:"Collected", value: form.collectedAt || editItem?.collected_at || "-" },
+                    { label:"Scheduled", value: formatDateDisplay(form.dueDate || editItem?.due_date) || "" },
+                    { label:"Deposited", value: formatDateDisplay(form.depositedAt || editItem?.deposited_at) || "" },
+                    { label:"Collected", value: formatDateDisplay(form.collectedAt || editItem?.collected_at) || "" },
                   ].map((stage) => (
-                    <div key={stage.label} style={{ display:"grid", gridTemplateColumns:"100px 1fr", alignItems:"center", gap:"10px", fontSize:"0.8rem" }}>
+                    <div key={stage.label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:"10px", fontSize:"0.8rem" }}>
                       <span style={{ color:T.textMuted }}>{stage.label}</span>
-                      <div style={{ position:"relative", height:"16px", borderRadius:"999px", background:"rgba(148,163,184,0.2)", overflow:"hidden" }}>
-                        <div style={{ position:"absolute", inset:0, width: stage.value && stage.value !== "-" ? "100%" : "0%", background:"linear-gradient(90deg, #34d399, #22d3ee)", transition:"width 0.2s ease" }} />
-                      </div>
+                      <span style={{ color:T.textPrimary, fontWeight: stage.value ? 700 : 500 }}>
+                        {stage.value ? stage.value : "Pending"}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -4453,6 +4501,7 @@ function MainApp() {
   const [txNavigationFilter, setTxNavigationFilter] = useState(null);
   const [smartBackVisible, setSmartBackVisible] = useState(false);
   const [investmentNavigationFilter, setInvestmentNavigationFilter] = useState(null);
+  const [showPortfolioBackInInvestments, setShowPortfolioBackInInvestments] = useState(false);
   const mainRef = useRef(null);
   const isMobile = useIsMobile();
 
@@ -4479,6 +4528,8 @@ function MainApp() {
     if (activeTab !== "investments") {
       setInvestmentPrefill(null);
       setInvestmentNavigationFilter(null);
+      setShowPortfolioBackInInvestments(false);
+      sessionStorage.removeItem("investments_from_portfolio_link_v1");
     }
     if (activeTab !== "transactions") {
       setTransactionPrefill(null);
@@ -4493,7 +4544,9 @@ function MainApp() {
   };
 
   const goToInvestmentsForPortfolio = (portfolio, options = {}) => {
-    setInvestmentNavigationFilter({ portfolioId: portfolio.id, status: options.status || "", stamp: Date.now() });
+    setInvestmentNavigationFilter({ portfolioId: portfolio.id, status: options.status || "", fromPortfolioLink:true, stamp: Date.now() });
+    sessionStorage.setItem("investments_from_portfolio_link_v1", "1");
+    setShowPortfolioBackInInvestments(true);
     setActiveTab("investments");
   };
 
@@ -4518,10 +4571,16 @@ function MainApp() {
     setSmartBackVisible(false);
   };
 
+  const handlePortfolioBackFromInvestments = () => {
+    setActiveTab("portfolios");
+    setShowPortfolioBackInInvestments(false);
+    sessionStorage.removeItem("investments_from_portfolio_link_v1");
+  };
+
   const tabs = {
     dashboard:    <Dashboard />,
     portfolios:   <PortfoliosTab onQuickAddInvestment={quickAddInvestment} onViewInvestments={goToInvestmentsForPortfolio} />,
-    investments:  <InvestmentsTab onQuickAddTransaction={quickAddTransaction} onViewTransactions={goToTransactionsForInvestment} modalPrefill={investmentPrefill} navigationFilter={investmentNavigationFilter} onModalPrefillConsumed={() => setInvestmentPrefill(null)} />,
+    investments:  <InvestmentsTab onQuickAddTransaction={quickAddTransaction} onViewTransactions={goToTransactionsForInvestment} modalPrefill={investmentPrefill} navigationFilter={investmentNavigationFilter} onModalPrefillConsumed={() => setInvestmentPrefill(null)} showPortfolioBack={showPortfolioBackInInvestments || sessionStorage.getItem("investments_from_portfolio_link_v1") === "1"} onPortfolioBack={handlePortfolioBackFromInvestments} />,
     transactions: <TransactionsTab showSmartBack={smartBackVisible} onSmartBack={handleSmartBack} navigationFilter={txNavigationFilter} modalPrefill={transactionPrefill} />,
     statistics:   <StatisticsTab />,
     users:        canManageUsers ? <UserManagementTab /> : <Dashboard />,
