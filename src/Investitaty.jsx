@@ -6,7 +6,7 @@ import {
   TrendingUp, Wallet, DollarSign, BarChart2, Globe, LogOut,
   Cloud, Shield, Layers, Tag, FolderOpen, ArrowUpRight, PieChart as PieChartIcon,
   ArrowDownRight, Eye, EyeOff, AlertCircle, CheckCircle2,
-  Menu, Search, Landmark, ListTree, CircleDollarSign, Lock, Unlock, Undo2, RotateCcw,
+  Menu, Search, Landmark, ListTree, CircleDollarSign, Lock, Unlock, Undo2, RotateCcw, CalendarClock,
 } from "lucide-react";
 import { supabase, hasSupabaseConfig, hasSupabaseClient } from "./lib/supabaseClient";
 import BackupService from "./services/BackupService";
@@ -91,6 +91,7 @@ const TRANSLATIONS = {
     totalPortfolioValue: "Total Portfolio Value",
     totalActivePrincipal: "Total Active Principal",
     totalAnnualIncomeYear: "Total Annual Income {year}",
+    expectedAnnualIncomeYear: "Expected Annual Income {year}",
     totalIncome: "Total Income",
     incomeYearLabel: "Income {year}",
     collectedTransactions: "collected transactions",
@@ -320,6 +321,7 @@ const TRANSLATIONS = {
     totalPortfolioValue: "إجمالي قيمة المحفظة",
     totalActivePrincipal: "إجمالي أصل المبلغ النشط",
     totalAnnualIncomeYear: "إجمالي دخل السنة {year}",
+    expectedAnnualIncomeYear: "إجمالي الدخل المتوقع {year}",
     totalIncome: "إجمالي الدخل",
     incomeYearLabel: "دخل عام {year}",
     collectedTransactions: "معاملات محصّلة",
@@ -2060,7 +2062,21 @@ const costBasis = (inv) => (parseFloat(inv.quantity)||0)*(parseFloat(inv.purchas
 const roi = (inv) => { const c=costBasis(inv); return c>0?((curVal(inv)-c)/c)*100:0; };
 const isCollectedTransaction = (tx) => {
   const status = String(tx?.status || "").toLowerCase();
-  return status.includes("collect") || Boolean(tx?.collectedAt || tx?.collected_at);
+  return status.includes("collect") || status.includes("record") || Boolean(tx?.collectedAt || tx?.collected_at);
+};
+const isDepositedTransaction = (tx) => {
+  const status = String(tx?.status || "").toLowerCase();
+  return status.includes("deposit") || status.includes("مودع") || Boolean(tx?.depositedAt || tx?.deposited_at);
+};
+const isScheduledTransaction = (tx) => {
+  const status = String(tx?.status || "").toLowerCase();
+  return status.includes("schedule") || status.includes("مجدول");
+};
+const txStatusDate = (tx) => {
+  if (isCollectedTransaction(tx)) return tx?.collectedAt || tx?.collected_at || tx?.depositedAt || tx?.deposited_at || tx?.dueDate || tx?.date || tx?.created_at;
+  if (isDepositedTransaction(tx)) return tx?.depositedAt || tx?.deposited_at || tx?.date || tx?.created_at;
+  if (isScheduledTransaction(tx)) return tx?.dueDate || tx?.date || tx?.created_at;
+  return tx?.date || tx?.created_at;
 };
 const txIncome = (txs) => txs.filter(t=>t.type==="income").reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
 const txExpense = (txs) => txs.filter(t=>t.type==="expense").reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
@@ -2143,6 +2159,17 @@ function Dashboard() {
       return new Date(dt).getFullYear() === currentYear;
     })
     .reduce((sum, tx)=>sum + toBaseAmount(db, parseFloat(tx.amount)||0, portfolioCurrency(db, tx.portfolioId)), 0);
+
+  const expectedAnnualIncome = transactions
+    .filter((tx) => {
+      if (tx.type !== "income") return false;
+      const expectedStatus = isCollectedTransaction(tx) || isDepositedTransaction(tx) || isScheduledTransaction(tx);
+      if (!expectedStatus) return false;
+      const dt = txStatusDate(tx);
+      if (!dt) return false;
+      return new Date(dt).getFullYear() === currentYear;
+    })
+    .reduce((sum, tx) => sum + toBaseAmount(db, parseFloat(tx.amount) || 0, portfolioCurrency(db, tx.portfolioId)), 0);
 
   const totalCollectedCount = transactions.filter((tx) => tx.type === "income" && isCollectedTransaction(tx)).length;
 
@@ -2231,6 +2258,13 @@ function Dashboard() {
           sub={`${totalCollectedCount} ${t.collectedTransactions}`}
           accent={T.positive}
           icon={ArrowUpRight}
+        />
+        <KPICard
+          label={t.expectedAnnualIncomeYear.replace("{year}", isRTL ? currentYear.toLocaleString("ar-EG") : String(currentYear))}
+          value={expectedAnnualIncome}
+          currency={baseCurrency}
+          accent={T.warning}
+          icon={CalendarClock}
         />
         <KPICard label={t.totalIncome} value={transactions.filter(t=>t.type==="income").reduce((sum, tx)=>sum + toBaseAmount(db, parseFloat(tx.amount)||0, portfolioCurrency(db, tx.portfolioId)), 0)} currency={baseCurrency} sub={`${transactions.filter(tx=>tx.type==="income").length} ${t.payments}`} accent={T.info} icon={Landmark} />
       </div>
@@ -3353,7 +3387,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
         <Select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} options={[{ value:"", label:t.transactionStatusLabel }, ...statusOpts, { value:ARCHIVED_FILTER, label:t.archivedFilter }]} isRTL={isRTL} style={filterInputCss(isRTL)} />
       </div>
 
-      <Card style={{ overflow:"hidden" }}>
+      <Card style={{ overflow:"visible" }}>
         {sorted.length===0
           ? <div style={{ padding:"32px" }}><EmptyState text={t.noRecords}/></div>
           : (
@@ -3368,10 +3402,11 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
               </thead>
               <tbody>
                 {sorted.map((tx,i)=>{
+                  const txRowId = tx?.id ?? `tx-row-${i}`;
                   const ptf = portfolios.find(p=>p.id===tx.portfolioId);
                   const inv = visible(db?.investments||[]).find(inv=>inv.id===tx.investmentId);
                   return (
-                    <tr key={tx.id||i} style={{ borderBottom:i<sorted.length-1?`1px solid ${T.border}`:"none",transition:"background 0.12s" }}
+                    <tr key={txRowId} style={{ borderBottom:i<sorted.length-1?`1px solid ${T.border}`:"none",transition:"background 0.12s" }}
                       onMouseEnter={e=>e.currentTarget.style.background=T.bgApp}
                       onMouseLeave={e=>e.currentTarget.style.background="transparent"}
                     >
@@ -3387,11 +3422,11 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
                       <td style={{ padding:"11px 10px",position:"relative" }} onClick={e=>e.stopPropagation()}>
                         <div style={{ display:"flex",gap:"3px",justifyContent:"flex-end" }}>
                           <button title={t.viewDetails} onClick={()=>openView(tx)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"5px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.info} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><Eye size={13}/></button>
-                          <button title={t.settings} onClick={()=>setOpenMenu(openMenu===tx.id?null:tx.id)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"5px",display:"flex",position:"relative" }}
+                          <button title={t.settings} onClick={()=>setOpenMenu(openMenu===txRowId?null:txRowId)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"5px",display:"flex",position:"relative" }}
                             onMouseEnter={e=>{e.currentTarget.style.background=T.bgApp; e.currentTarget.style.color=T.warning;}} onMouseLeave={e=>{e.currentTarget.style.background="none"; e.currentTarget.style.color=T.textMuted;}}>
                             <MoreVertical size={13}/>
                           </button>
-                          {openMenu===tx.id && <TxActionMenu tx={tx} onClose={()=>setOpenMenu(null)}/>}
+                          {openMenu===txRowId && <TxActionMenu tx={tx} onClose={()=>setOpenMenu(null)}/>}
                         </div>
                       </td>
                     </tr>
@@ -3487,8 +3522,9 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
 }
 
 function TxActionMenu({ tx, onClose }) {
-  const { patchItem, archiveItem, unarchiveItem, hardDeleteItem, t, db } = useApp();
+  const { patchItem, archiveItem, unarchiveItem, hardDeleteItem, t, db, isRTL } = useApp();
   const ref = useRef(null);
+  const txId = tx?.id;
   useEffect(() => {
     const h = e => { if(ref.current&&!ref.current.contains(e.target)) onClose(); };
     document.addEventListener("mousedown",h); return ()=>document.removeEventListener("mousedown",h);
@@ -3497,13 +3533,13 @@ function TxActionMenu({ tx, onClose }) {
   const doneStatus = statuses.find(s=>String(s).toLowerCase().includes("record")) || statuses[0];
   const queuedStatus = statuses.find(s=>String(s).toLowerCase().includes("schedule")) || statuses[1] || statuses[0];
   const actions = [
-    { label:t.markCollected, icon:<Check size={13}/>, color:T.positive, show:tx.status!==doneStatus, action:()=>{ patchItem("transactions",tx.id,{status:doneStatus,collected_at:new Date().toISOString(),collectedAt:new Date().toISOString()}); onClose(); } },
-    { label:t.markScheduled, icon:<RefreshCw size={13}/>, color:T.warning, show:tx.status===doneStatus, action:()=>{ patchItem("transactions",tx.id,{status:queuedStatus}); onClose(); } },
-    { label:tx.is_hidden ? t.unarchive : t.archive, icon:tx.is_hidden ? <Eye size={13}/> : <EyeOff size={13}/>, color:T.warning, show:true, action:()=>{ tx.is_hidden ? unarchiveItem("transactions",tx.id) : archiveItem("transactions",tx.id); onClose(); } },
-    { label:t.deleteItem, icon:<Trash2 size={13}/>, color:T.negative, show:true, action:()=>{ if(window.confirm(t.deleteCascadeWarning)) hardDeleteItem("transactions",tx.id); onClose(); } },
+    { label:t.markCollected, icon:<Check size={13}/>, color:T.positive, show:tx.status!==doneStatus, action:()=>{ if (!txId) return onClose(); patchItem("transactions",txId,{status:doneStatus,collected_at:new Date().toISOString(),collectedAt:new Date().toISOString()}); onClose(); } },
+    { label:t.markScheduled, icon:<RefreshCw size={13}/>, color:T.warning, show:tx.status===doneStatus, action:()=>{ if (!txId) return onClose(); patchItem("transactions",txId,{status:queuedStatus}); onClose(); } },
+    { label:tx.is_hidden ? t.unarchive : t.archive, icon:tx.is_hidden ? <Eye size={13}/> : <EyeOff size={13}/>, color:T.warning, show:true, action:()=>{ if (!txId) return onClose(); tx.is_hidden ? unarchiveItem("transactions",txId) : archiveItem("transactions",txId); onClose(); } },
+    { label:t.deleteItem, icon:<Trash2 size={13}/>, color:T.negative, show:true, action:()=>{ if (!txId) return onClose(); if(window.confirm(t.deleteCascadeWarning)) hardDeleteItem("transactions",txId); onClose(); } },
   ].filter(a=>a.show);
   return (
-    <div ref={ref} style={{ position:"absolute",right:0,top:"calc(100% + 4px)",zIndex:500,background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:"10px",minWidth:"170px",boxShadow:"0 8px 28px rgba(0,0,0,0.15)",overflow:"hidden" }}>
+    <div ref={ref} style={{ position:"absolute",right:0,top:"calc(100% + 4px)",zIndex:5000,background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:"10px",minWidth:"170px",boxShadow:"0 8px 28px rgba(0,0,0,0.15)",overflow:"hidden" }}>
       {actions.map(a=>(
         <button key={a.label} onClick={a.action} style={{ display:"flex",alignItems:"center",gap:"8px",width:"100%",padding:"9px 14px",background:"none",border:"none",color:a.color,fontSize:"0.78rem",fontWeight:500,cursor:"pointer",textAlign:isRTL?"right":"left" }}
           onMouseEnter={e=>e.currentTarget.style.background=T.bgApp}
