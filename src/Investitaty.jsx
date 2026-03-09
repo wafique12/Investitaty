@@ -89,9 +89,12 @@ const TRANSLATIONS = {
     goodAfternoon: "Good afternoon",
     goodEvening: "Good evening",
     totalPortfolioValue: "Total Portfolio Value",
-    totalNetProfit: "Total Net Profit",
+    totalActivePrincipal: "Total Active Principal",
+    totalAnnualIncomeYear: "Total Annual Income {year}",
     totalIncome: "Total Income",
     incomeYearLabel: "Income {year}",
+    collectedTransactions: "collected transactions",
+    performanceVsPrincipal: "vs active principal",
     capitalGains: "Capital Gains",
     activePositions: "active positions",
     dividendsCapital: "income + capital gains",
@@ -315,9 +318,12 @@ const TRANSLATIONS = {
     goodAfternoon: "مساء الخير",
     goodEvening: "طاب مساؤك",
     totalPortfolioValue: "إجمالي قيمة المحفظة",
-    totalNetProfit: "صافي الربح الإجمالي",
+    totalActivePrincipal: "إجمالي أصل المبلغ النشط",
+    totalAnnualIncomeYear: "إجمالي دخل السنة {year}",
     totalIncome: "إجمالي الدخل",
     incomeYearLabel: "دخل عام {year}",
+    collectedTransactions: "معاملات محصّلة",
+    performanceVsPrincipal: "مقابل أصل المبلغ النشط",
     capitalGains: "مكاسب رأس المال",
     activePositions: "مركز نشط",
     dividendsCapital: "دخل + مكاسب رأسمالية",
@@ -1741,7 +1747,7 @@ function Modal({ title, children, onClose, maxWidth = "520px", badge }) {
 }
 
 // ─── KPI number card ──────────────────────────────────────────────────────────
-function KPICard({ label, value, sub, trend, accent = T.emerald, icon: Icon_, currency = "USD" }) {
+function KPICard({ label, value, sub, trend, accent = T.emerald, icon: Icon_, currency = "USD", badge }) {
   const isPos = trend === undefined || trend >= 0;
   return (
     <Card style={{ padding:"20px",flex:1,minWidth:"160px" }}>
@@ -1764,6 +1770,7 @@ function KPICard({ label, value, sub, trend, accent = T.emerald, icon: Icon_, cu
           </span>
         )}
         {sub && <span style={{ fontSize:"0.72rem",color:T.textMuted }}>{sub}</span>}
+        {badge && <span style={{ fontSize:"0.72rem",color:badge.color||T.textSecondary,fontWeight:600,whiteSpace:"nowrap" }}>{badge.text}</span>}
       </div>
     </Card>
   );
@@ -2051,6 +2058,10 @@ const tx_of_portfolio  = (db, pid) => visible(db.transactions).filter(t=>t.portf
 const curVal = (inv) => (parseFloat(inv.quantity)||0)*(parseFloat(inv.currentPrice)||0);
 const costBasis = (inv) => (parseFloat(inv.quantity)||0)*(parseFloat(inv.purchasePrice)||0);
 const roi = (inv) => { const c=costBasis(inv); return c>0?((curVal(inv)-c)/c)*100:0; };
+const isCollectedTransaction = (tx) => {
+  const status = String(tx?.status || "").toLowerCase();
+  return status.includes("collect") || Boolean(tx?.collectedAt || tx?.collected_at);
+};
 const txIncome = (txs) => txs.filter(t=>t.type==="income").reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
 const txExpense = (txs) => txs.filter(t=>t.type==="expense").reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
 const baseCurrencyCode = (db) => db?.settings?.baseCurrency || "USD";
@@ -2115,14 +2126,25 @@ function Dashboard() {
   const transactions = visible(db.transactions);
   const baseCurrency = baseCurrencyCode(db);
 
-  const totalPortfolioValue = investments
-    .filter(isActiveInvestment)
+  const activeInvestments = investments.filter(isActiveInvestment);
+  const activePrincipal = activeInvestments
+    .reduce((s,i)=>s+toBaseAmount(db, costBasis(i), portfolioCurrency(db, i.portfolioId)),0);
+  const totalPortfolioValue = activeInvestments
     .reduce((s,i)=>s+toBaseAmount(db, investmentValue(i), portfolioCurrency(db, i.portfolioId)),0);
-  const totalCost = investments.reduce((s,i)=>s+toBaseAmount(db, costBasis(i), portfolioCurrency(db, i.portfolioId)),0);
-  const capitalGainsVal = totalPortfolioValue - totalCost;
-  const totalIncome = transactions.filter(t=>t.type==="income").reduce((sum, tx)=>sum + toBaseAmount(db, parseFloat(tx.amount)||0, portfolioCurrency(db, tx.portfolioId)), 0);
-  const totalExpense = transactions.filter(t=>t.type==="expense").reduce((sum, tx)=>sum + toBaseAmount(db, parseFloat(tx.amount)||0, portfolioCurrency(db, tx.portfolioId)), 0);
-  const netProfit = capitalGainsVal + totalIncome - totalExpense;
+  const portfolioDeltaValue = totalPortfolioValue - activePrincipal;
+  const portfolioDeltaPct = activePrincipal > 0 ? (portfolioDeltaValue / activePrincipal) * 100 : 0;
+
+  const currentYear = new Date().getFullYear();
+  const totalAnnualIncome = transactions
+    .filter((tx) => {
+      if (tx.type !== "income" || !isCollectedTransaction(tx)) return false;
+      const dt = tx.collectedAt || tx.collected_at || tx.date || tx.created_at;
+      if (!dt) return false;
+      return new Date(dt).getFullYear() === currentYear;
+    })
+    .reduce((sum, tx)=>sum + toBaseAmount(db, parseFloat(tx.amount)||0, portfolioCurrency(db, tx.portfolioId)), 0);
+
+  const totalCollectedCount = transactions.filter((tx) => tx.type === "income" && isCollectedTransaction(tx)).length;
 
   const hour = new Date().getHours();
   const greeting = hour<12?t.goodMorning:hour<18?t.goodAfternoon:t.goodEvening;
@@ -2189,10 +2211,28 @@ function Dashboard() {
       {/* KPI Row */}
       <SectionHeader title={t.portfolioOverview} />
       <div style={{ display:"flex",gap:"14px",flexWrap:"wrap",marginBottom:"28px" }}>
-        <KPICard label={t.totalPortfolioValue} value={totalPortfolioValue} currency={baseCurrency} sub={`${investments.filter(i=>i.status!=="Closed").length} ${t.activePositions}`} accent={T.emerald} icon={Wallet} />
-        <KPICard label={t.totalNetProfit} value={netProfit} currency={baseCurrency} sub={t.dividendsCapital} trend={netProfit} accent={netProfit>=0?T.positive:T.negative} icon={TrendingUp} />
-        <KPICard label={t.totalIncome} value={totalIncome} currency={baseCurrency} sub={`${transactions.filter(tx=>tx.type==="income").length} ${t.payments}`} accent={T.info} icon={ArrowUpRight} />
-        <KPICard label={t.capitalGains} value={capitalGainsVal} currency={baseCurrency} sub={t.unrealised} trend={capitalGainsVal} accent={capitalGainsVal>=0?T.positive:T.negative} icon={BarChart2} />
+        <KPICard label={t.totalActivePrincipal} value={activePrincipal} currency={baseCurrency} sub={`${activeInvestments.length} ${t.activePositions}`} accent={T.info} icon={Wallet} />
+        <KPICard
+          label={t.totalPortfolioValue}
+          value={totalPortfolioValue}
+          currency={baseCurrency}
+          sub={t.performanceVsPrincipal}
+          badge={{
+            text:`${portfolioDeltaPct>=0?"+":""}${portfolioDeltaPct.toFixed(3)}% (${portfolioDeltaValue>=0?"+":""}${fmtMoney(portfolioDeltaValue,{currency:baseCurrency})})`,
+            color:portfolioDeltaValue>=0?T.positive:T.negative,
+          }}
+          accent={portfolioDeltaValue>=0?T.positive:T.negative}
+          icon={TrendingUp}
+        />
+        <KPICard
+          label={t.totalAnnualIncomeYear.replace("{year}", isRTL ? currentYear.toLocaleString("ar-EG") : String(currentYear))}
+          value={totalAnnualIncome}
+          currency={baseCurrency}
+          sub={`${totalCollectedCount} ${t.collectedTransactions}`}
+          accent={T.positive}
+          icon={ArrowUpRight}
+        />
+        <KPICard label={t.totalIncome} value={transactions.filter(t=>t.type==="income").reduce((sum, tx)=>sum + toBaseAmount(db, parseFloat(tx.amount)||0, portfolioCurrency(db, tx.portfolioId)), 0)} currency={baseCurrency} sub={`${transactions.filter(tx=>tx.type==="income").length} ${t.payments}`} accent={T.info} icon={Landmark} />
       </div>
 
       {/* Charts row */}
@@ -2315,9 +2355,11 @@ function Dashboard() {
           <div style={{ display:"flex",gap:"14px",overflowX:"auto",paddingBottom:"8px",scrollbarWidth:"thin",scrollbarColor:`${T.border} transparent` }}>
             {portfolios.map((p,i)=>{
               const pvInvs = inv_of_portfolio(db,p.id);
-              const pValue = pvInvs.filter(isActiveInvestment).reduce((s,inv)=>s+investmentValue(inv),0);
-              const pCost  = pvInvs.reduce((s,inv)=>s+costBasis(inv),0);
-              const pRoi   = pCost>0?((pValue-pCost)/pCost)*100:0;
+              const pActiveInvs = pvInvs.filter(isActiveInvestment);
+              const pValue = pActiveInvs.reduce((s,inv)=>s+investmentValue(inv),0);
+              const pActivePrincipal = pActiveInvs.reduce((s,inv)=>s+costBasis(inv),0);
+              const pRealizedIncome = tx_of_portfolio(db,p.id).filter((tx)=>tx.type==="income" && isCollectedTransaction(tx)).reduce((s,tx)=>s+(parseFloat(tx.amount)||0),0);
+              const pRoi   = pActivePrincipal>0?(((pValue + pRealizedIncome)-pActivePrincipal)/pActivePrincipal)*100:0;
               const color  = p.color || T.chart[i%T.chart.length];
               return (
                 <Card key={p.id} hover style={{ minWidth:"195px",maxWidth:"220px",flexShrink:0,padding:"18px",borderTop:`3px solid ${color}` }}>
@@ -2463,10 +2505,10 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
         {portfolios.map((p,i) => {
           const invs = inv_of_portfolio(db,p.id);
           const activePrincipal = invs.filter(isActiveInvestment).reduce((sum, inv) => sum + costBasis(inv), 0);
-          const totalValue = invs.reduce((sum, inv)=>sum+curVal(inv),0);
-          const pCost  = invs.reduce((s,i)=>s+costBasis(i),0);
+          const totalValue = invs.filter(isActiveInvestment).reduce((sum, inv)=>sum+curVal(inv),0);
           const pTx    = tx_of_portfolio(db,p.id);
           const pIncome = txIncome(pTx);
+          const pRealizedIncome = txIncome(pTx.filter((tx)=>isCollectedTransaction(tx)));
           const currentYear = new Date().getFullYear();
           const pIncomeCurrentYear = txIncome(
             pTx.filter((tx) => {
@@ -2477,7 +2519,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
             })
           );
           const yearLabel = t.incomeYearLabel.replace("{year}", isRTL ? currentYear.toLocaleString("ar-EG") : String(currentYear));
-          const pRoi   = pCost>0?((totalValue-pCost)/pCost)*100:0;
+          const pRoi   = activePrincipal>0?(((totalValue + pRealizedIncome)-activePrincipal)/activePrincipal)*100:0;
           const color  = p.color || T.chart[i%T.chart.length];
           const isCollapsed = Boolean(collapsedPortfolios[p.id]);
           return (
@@ -2529,7 +2571,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
                       label:t.roi,
                       val:`${pRoi>=0?"+":""}${pRoi.toFixed(3)}%`,
                       color:pRoi>=0?T.positive:T.negative,
-                      roiValue: fmtMoney(Number.isFinite(activePrincipal + (totalValue - pCost)) ? (activePrincipal + (totalValue - pCost)) : 0,{compact:true,currency:p.currency||"USD"}),
+                      roiValue: fmtMoney(Number.isFinite(totalValue + pRealizedIncome) ? (totalValue + pRealizedIncome) : 0,{compact:true,currency:p.currency||"USD"}),
                     },
                     { label:t.positions,   val:invs.length },
                     { label:yearLabel, val:fmtMoney(pIncomeCurrentYear,{compact:true,currency:p.currency||"USD"}) },
