@@ -89,9 +89,12 @@ const TRANSLATIONS = {
     goodAfternoon: "Good afternoon",
     goodEvening: "Good evening",
     totalPortfolioValue: "Total Portfolio Value",
-    totalNetProfit: "Total Net Profit",
+    totalActivePrincipal: "Total Active Principal",
+    totalAnnualIncomeYear: "Total Annual Income {year}",
     totalIncome: "Total Income",
     incomeYearLabel: "Income {year}",
+    collectedTransactions: "collected transactions",
+    performanceVsPrincipal: "vs active principal",
     capitalGains: "Capital Gains",
     activePositions: "active positions",
     dividendsCapital: "income + capital gains",
@@ -315,9 +318,12 @@ const TRANSLATIONS = {
     goodAfternoon: "مساء الخير",
     goodEvening: "طاب مساؤك",
     totalPortfolioValue: "إجمالي قيمة المحفظة",
-    totalNetProfit: "صافي الربح الإجمالي",
+    totalActivePrincipal: "إجمالي أصل المبلغ النشط",
+    totalAnnualIncomeYear: "إجمالي دخل السنة {year}",
     totalIncome: "إجمالي الدخل",
     incomeYearLabel: "دخل عام {year}",
+    collectedTransactions: "معاملات محصّلة",
+    performanceVsPrincipal: "مقابل أصل المبلغ النشط",
     capitalGains: "مكاسب رأس المال",
     activePositions: "مركز نشط",
     dividendsCapital: "دخل + مكاسب رأسمالية",
@@ -1741,7 +1747,7 @@ function Modal({ title, children, onClose, maxWidth = "520px", badge }) {
 }
 
 // ─── KPI number card ──────────────────────────────────────────────────────────
-function KPICard({ label, value, sub, trend, accent = T.emerald, icon: Icon_, currency = "USD" }) {
+function KPICard({ label, value, sub, trend, accent = T.emerald, icon: Icon_, currency = "USD", badge }) {
   const isPos = trend === undefined || trend >= 0;
   return (
     <Card style={{ padding:"20px",flex:1,minWidth:"160px" }}>
@@ -1764,6 +1770,7 @@ function KPICard({ label, value, sub, trend, accent = T.emerald, icon: Icon_, cu
           </span>
         )}
         {sub && <span style={{ fontSize:"0.72rem",color:T.textMuted }}>{sub}</span>}
+        {badge && <span style={{ fontSize:"0.72rem",color:badge.color||T.textSecondary,fontWeight:600,whiteSpace:"nowrap" }}>{badge.text}</span>}
       </div>
     </Card>
   );
@@ -2051,6 +2058,10 @@ const tx_of_portfolio  = (db, pid) => visible(db.transactions).filter(t=>t.portf
 const curVal = (inv) => (parseFloat(inv.quantity)||0)*(parseFloat(inv.currentPrice)||0);
 const costBasis = (inv) => (parseFloat(inv.quantity)||0)*(parseFloat(inv.purchasePrice)||0);
 const roi = (inv) => { const c=costBasis(inv); return c>0?((curVal(inv)-c)/c)*100:0; };
+const isCollectedTransaction = (tx) => {
+  const status = String(tx?.status || "").toLowerCase();
+  return status.includes("collect") || Boolean(tx?.collectedAt || tx?.collected_at);
+};
 const txIncome = (txs) => txs.filter(t=>t.type==="income").reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
 const txExpense = (txs) => txs.filter(t=>t.type==="expense").reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
 const baseCurrencyCode = (db) => db?.settings?.baseCurrency || "USD";
@@ -2115,14 +2126,25 @@ function Dashboard() {
   const transactions = visible(db.transactions);
   const baseCurrency = baseCurrencyCode(db);
 
-  const totalPortfolioValue = investments
-    .filter(isActiveInvestment)
+  const activeInvestments = investments.filter(isActiveInvestment);
+  const activePrincipal = activeInvestments
+    .reduce((s,i)=>s+toBaseAmount(db, costBasis(i), portfolioCurrency(db, i.portfolioId)),0);
+  const totalPortfolioValue = activeInvestments
     .reduce((s,i)=>s+toBaseAmount(db, investmentValue(i), portfolioCurrency(db, i.portfolioId)),0);
-  const totalCost = investments.reduce((s,i)=>s+toBaseAmount(db, costBasis(i), portfolioCurrency(db, i.portfolioId)),0);
-  const capitalGainsVal = totalPortfolioValue - totalCost;
-  const totalIncome = transactions.filter(t=>t.type==="income").reduce((sum, tx)=>sum + toBaseAmount(db, parseFloat(tx.amount)||0, portfolioCurrency(db, tx.portfolioId)), 0);
-  const totalExpense = transactions.filter(t=>t.type==="expense").reduce((sum, tx)=>sum + toBaseAmount(db, parseFloat(tx.amount)||0, portfolioCurrency(db, tx.portfolioId)), 0);
-  const netProfit = capitalGainsVal + totalIncome - totalExpense;
+  const portfolioDeltaValue = totalPortfolioValue - activePrincipal;
+  const portfolioDeltaPct = activePrincipal > 0 ? (portfolioDeltaValue / activePrincipal) * 100 : 0;
+
+  const currentYear = new Date().getFullYear();
+  const totalAnnualIncome = transactions
+    .filter((tx) => {
+      if (tx.type !== "income" || !isCollectedTransaction(tx)) return false;
+      const dt = tx.collectedAt || tx.collected_at || tx.date || tx.created_at;
+      if (!dt) return false;
+      return new Date(dt).getFullYear() === currentYear;
+    })
+    .reduce((sum, tx)=>sum + toBaseAmount(db, parseFloat(tx.amount)||0, portfolioCurrency(db, tx.portfolioId)), 0);
+
+  const totalCollectedCount = transactions.filter((tx) => tx.type === "income" && isCollectedTransaction(tx)).length;
 
   const hour = new Date().getHours();
   const greeting = hour<12?t.goodMorning:hour<18?t.goodAfternoon:t.goodEvening;
@@ -2189,10 +2211,28 @@ function Dashboard() {
       {/* KPI Row */}
       <SectionHeader title={t.portfolioOverview} />
       <div style={{ display:"flex",gap:"14px",flexWrap:"wrap",marginBottom:"28px" }}>
-        <KPICard label={t.totalPortfolioValue} value={totalPortfolioValue} currency={baseCurrency} sub={`${investments.filter(i=>i.status!=="Closed").length} ${t.activePositions}`} accent={T.emerald} icon={Wallet} />
-        <KPICard label={t.totalNetProfit} value={netProfit} currency={baseCurrency} sub={t.dividendsCapital} trend={netProfit} accent={netProfit>=0?T.positive:T.negative} icon={TrendingUp} />
-        <KPICard label={t.totalIncome} value={totalIncome} currency={baseCurrency} sub={`${transactions.filter(tx=>tx.type==="income").length} ${t.payments}`} accent={T.info} icon={ArrowUpRight} />
-        <KPICard label={t.capitalGains} value={capitalGainsVal} currency={baseCurrency} sub={t.unrealised} trend={capitalGainsVal} accent={capitalGainsVal>=0?T.positive:T.negative} icon={BarChart2} />
+        <KPICard label={t.totalActivePrincipal} value={activePrincipal} currency={baseCurrency} sub={`${activeInvestments.length} ${t.activePositions}`} accent={T.info} icon={Wallet} />
+        <KPICard
+          label={t.totalPortfolioValue}
+          value={totalPortfolioValue}
+          currency={baseCurrency}
+          sub={t.performanceVsPrincipal}
+          badge={{
+            text:`${portfolioDeltaPct>=0?"+":""}${portfolioDeltaPct.toFixed(3)}% (${portfolioDeltaValue>=0?"+":""}${fmtMoney(portfolioDeltaValue,{currency:baseCurrency})})`,
+            color:portfolioDeltaValue>=0?T.positive:T.negative,
+          }}
+          accent={portfolioDeltaValue>=0?T.positive:T.negative}
+          icon={TrendingUp}
+        />
+        <KPICard
+          label={t.totalAnnualIncomeYear.replace("{year}", isRTL ? currentYear.toLocaleString("ar-EG") : String(currentYear))}
+          value={totalAnnualIncome}
+          currency={baseCurrency}
+          sub={`${totalCollectedCount} ${t.collectedTransactions}`}
+          accent={T.positive}
+          icon={ArrowUpRight}
+        />
+        <KPICard label={t.totalIncome} value={transactions.filter(t=>t.type==="income").reduce((sum, tx)=>sum + toBaseAmount(db, parseFloat(tx.amount)||0, portfolioCurrency(db, tx.portfolioId)), 0)} currency={baseCurrency} sub={`${transactions.filter(tx=>tx.type==="income").length} ${t.payments}`} accent={T.info} icon={Landmark} />
       </div>
 
       {/* Charts row */}
@@ -2315,9 +2355,11 @@ function Dashboard() {
           <div style={{ display:"flex",gap:"14px",overflowX:"auto",paddingBottom:"8px",scrollbarWidth:"thin",scrollbarColor:`${T.border} transparent` }}>
             {portfolios.map((p,i)=>{
               const pvInvs = inv_of_portfolio(db,p.id);
-              const pValue = pvInvs.filter(isActiveInvestment).reduce((s,inv)=>s+investmentValue(inv),0);
-              const pCost  = pvInvs.reduce((s,inv)=>s+costBasis(inv),0);
-              const pRoi   = pCost>0?((pValue-pCost)/pCost)*100:0;
+              const pActiveInvs = pvInvs.filter(isActiveInvestment);
+              const pValue = pActiveInvs.reduce((s,inv)=>s+investmentValue(inv),0);
+              const pActivePrincipal = pActiveInvs.reduce((s,inv)=>s+costBasis(inv),0);
+              const pRealizedIncome = tx_of_portfolio(db,p.id).filter((tx)=>tx.type==="income" && isCollectedTransaction(tx)).reduce((s,tx)=>s+(parseFloat(tx.amount)||0),0);
+              const pRoi   = pActivePrincipal>0?(((pValue + pRealizedIncome)-pActivePrincipal)/pActivePrincipal)*100:0;
               const color  = p.color || T.chart[i%T.chart.length];
               return (
                 <Card key={p.id} hover style={{ minWidth:"195px",maxWidth:"220px",flexShrink:0,padding:"18px",borderTop:`3px solid ${color}` }}>
@@ -2463,10 +2505,10 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
         {portfolios.map((p,i) => {
           const invs = inv_of_portfolio(db,p.id);
           const activePrincipal = invs.filter(isActiveInvestment).reduce((sum, inv) => sum + costBasis(inv), 0);
-          const totalValue = invs.reduce((sum, inv)=>sum+curVal(inv),0);
-          const pCost  = invs.reduce((s,i)=>s+costBasis(i),0);
+          const totalValue = invs.filter(isActiveInvestment).reduce((sum, inv)=>sum+curVal(inv),0);
           const pTx    = tx_of_portfolio(db,p.id);
           const pIncome = txIncome(pTx);
+          const pRealizedIncome = txIncome(pTx.filter((tx)=>isCollectedTransaction(tx)));
           const currentYear = new Date().getFullYear();
           const pIncomeCurrentYear = txIncome(
             pTx.filter((tx) => {
@@ -2477,7 +2519,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
             })
           );
           const yearLabel = t.incomeYearLabel.replace("{year}", isRTL ? currentYear.toLocaleString("ar-EG") : String(currentYear));
-          const pRoi   = pCost>0?((totalValue-pCost)/pCost)*100:0;
+          const pRoi   = activePrincipal>0?(((totalValue + pRealizedIncome)-activePrincipal)/activePrincipal)*100:0;
           const color  = p.color || T.chart[i%T.chart.length];
           const isCollapsed = Boolean(collapsedPortfolios[p.id]);
           return (
@@ -2529,7 +2571,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
                       label:t.roi,
                       val:`${pRoi>=0?"+":""}${pRoi.toFixed(3)}%`,
                       color:pRoi>=0?T.positive:T.negative,
-                      roiValue: fmtMoney(Number.isFinite(activePrincipal + (totalValue - pCost)) ? (activePrincipal + (totalValue - pCost)) : 0,{compact:true,currency:p.currency||"USD"}),
+                      roiValue: fmtMoney(Number.isFinite(totalValue + pRealizedIncome) ? (totalValue + pRealizedIncome) : 0,{compact:true,currency:p.currency||"USD"}),
                     },
                     { label:t.positions,   val:invs.length },
                     { label:yearLabel, val:fmtMoney(pIncomeCurrentYear,{compact:true,currency:p.currency||"USD"}) },
@@ -2814,7 +2856,14 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
           </div>
           <Btn size="sm" variant="secondary" onClick={()=>setCollapsedPortfolios(Object.fromEntries(portfolios.map((p)=>[p.id,false])))}>{t.expandAll}</Btn>
           <Btn size="sm" variant="secondary" onClick={()=>setCollapsedPortfolios(Object.fromEntries(portfolios.map((p)=>[p.id,true])))}>{t.collapseAll}</Btn>
-          <Btn icon={<Plus size={15}/>} onClick={()=>{setForm(EMPTY);setEditItem(null);setModalMode("create");setShowModal(true); onModalPrefillConsumed?.();}}>{t.addInvestment}</Btn>
+          <Btn icon={<Plus size={15}/>} onClick={()=>{
+            const nextForm = filterPortfolio ? { ...EMPTY, portfolioId:filterPortfolio } : { ...EMPTY };
+            setForm(nextForm);
+            setEditItem(null);
+            setModalMode("create");
+            setShowModal(true);
+            onModalPrefillConsumed?.();
+          }}>{t.addInvestment}</Btn>
         </div>
       </div>
 
@@ -2823,7 +2872,17 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
         <FilterDateInput value={filterStartDate} onChange={(e)=>setFilterStartDate(e.target.value)} isRTL={isRTL} />
         <FilterDateInput value={filterEndDate} onChange={(e)=>setFilterEndDate(e.target.value)} isRTL={isRTL} />
         <Select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} options={[{ value:"", label:t.investmentStatuses }, ...statusOpts, { value:ARCHIVED_FILTER, label:t.archivedFilter }]} isRTL={isRTL} style={filterInputCss(isRTL)} />
-        <Select value={filterPortfolio} onChange={e=>setFilterPortfolio(e.target.value)} options={[{value:"",label:t.allPortfolios},...portfolios.map(p=>({value:p.id,label:p.name}))]} isRTL={isRTL} style={filterInputCss(isRTL)} />
+        <SearchableSingleSelect
+          options={portfolios.map((p)=>({ value:p.id, label:p.name }))}
+          value={filterPortfolio}
+          onChange={setFilterPortfolio}
+          placeholder={t.allPortfolios}
+          searchPlaceholder={t.allPortfolios}
+          font={font}
+          minWidth="220px"
+          variant="lightFilter"
+          isRTL={isRTL}
+        />
       </div>
 
       {/* Grouped by portfolio */}
@@ -3252,7 +3311,17 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
           <div style={{ fontSize:"0.8rem",color:T.textMuted,marginTop:"2px" }}>{sorted.length} records</div>
           </div>
         </div>
-        <Btn icon={<Plus size={15}/>} onClick={()=>{setForm(EMPTY);setEditItem(null);setModalMode("create");setFormError("");setShowModal(true);}}>{t.addTransaction}</Btn>
+        <Btn icon={<Plus size={15}/>} onClick={()=>{
+          const selectedInvestment = allInvestments.find((inv) => inv.id === filterInvestment);
+          const nextForm = selectedInvestment
+            ? { ...EMPTY, portfolioId:selectedInvestment.portfolioId || "", investmentId:selectedInvestment.id || "" }
+            : { ...EMPTY };
+          setForm(nextForm);
+          setEditItem(null);
+          setModalMode("create");
+          setFormError("");
+          setShowModal(true);
+        }}>{t.addTransaction}</Btn>
       </div>
 
       {/* Summary + filter */}
@@ -3276,7 +3345,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
           searchPlaceholder={t.filterByInvestment}
           font={font}
           minWidth="220px"
-          variant="light"
+          variant="lightFilter"
           isRTL={isRTL}
         />
         <FilterDateInput value={filterStartDate} onChange={(e)=>setFilterStartDate(e.target.value)} isRTL={isRTL} />
@@ -3760,7 +3829,7 @@ function SearchableSingleSelect({ options, value, onChange, placeholder, searchP
   const filtered = options.filter((opt) => String(opt.label ?? opt.value ?? "").toLowerCase().includes(normalizedQuery));
   const selected = options.find((opt) => (opt.value ?? opt) === value);
 
-  const palette = variant === "light"
+  const palette = (variant === "light" || variant === "lightFilter")
     ? {
       buttonBg: "#ffffff",
       buttonColor: T.textPrimary,
@@ -3773,6 +3842,7 @@ function SearchableSingleSelect({ options, value, onChange, placeholder, searchP
       selectedOptionColor: T.textPrimary,
       shadow: "0 8px 24px rgba(15,23,42,0.12)",
       divider: "1px solid rgba(148,163,184,0.18)",
+      optionHoverBg: "rgba(15,23,42,0.05)",
     }
     : {
       buttonBg: "#111c33",
@@ -3786,6 +3856,7 @@ function SearchableSingleSelect({ options, value, onChange, placeholder, searchP
       selectedOptionColor: "#f8fafc",
       shadow: "0 8px 30px rgba(2,6,23,0.6)",
       divider: "1px solid rgba(148,163,184,0.18)",
+      optionHoverBg: "rgba(148,163,184,0.14)",
     };
 
   return (
@@ -3801,7 +3872,7 @@ function SearchableSingleSelect({ options, value, onChange, placeholder, searchP
             <input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder={searchPlaceholder} style={{ flex:1, border:"none", outline:"none", background:"transparent", color:palette.inputColor, fontSize:"0.78rem", fontFamily:font, textAlign:isRTL?"right":"left" }} />
           </div>
           <div style={{ maxHeight:"200px", overflowY:"auto", borderTop:palette.divider, marginTop:"6px", paddingTop:"6px" }}>
-            <button type="button" onClick={()=>{onChange(""); setOpen(false); setQuery("");}} style={{ width:"100%", textAlign:isRTL?"right":"left", border:"none", background:"transparent", color:palette.buttonColor, fontSize:"0.78rem", padding:"6px 4px", cursor:"pointer" }}>{placeholder}</button>
+            <button type="button" onClick={()=>{onChange(""); setOpen(false); setQuery("");}} style={{ width:"100%", textAlign:isRTL?"right":"left", border:"none", background:"transparent", color:palette.buttonColor, fontSize:"0.78rem", padding:"6px 4px", cursor:"pointer", borderRadius:"6px" }} onMouseEnter={(e)=>{e.currentTarget.style.background=palette.optionHoverBg;}} onMouseLeave={(e)=>{e.currentTarget.style.background="transparent";}}>{placeholder}</button>
             {filtered.map((opt) => {
               const optionValue = opt.value ?? opt;
               const optionLabel = opt.label ?? opt;
@@ -3810,7 +3881,9 @@ function SearchableSingleSelect({ options, value, onChange, placeholder, searchP
                   key={optionValue}
                   type="button"
                   onClick={()=>{onChange(optionValue); setOpen(false); setQuery("");}}
-                  style={{ width:"100%", textAlign:isRTL?"right":"left", border:"none", background:"transparent", color:optionValue===value?palette.selectedOptionColor:palette.optionColor, fontSize:"0.78rem", padding:"6px 4px", cursor:"pointer", fontWeight:optionValue===value?700:500 }}
+                  style={{ width:"100%", textAlign:isRTL?"right":"left", border:"none", background:"transparent", color:optionValue===value?palette.selectedOptionColor:palette.optionColor, fontSize:"0.78rem", padding:"6px 4px", cursor:"pointer", fontWeight:optionValue===value?700:500, borderRadius:"6px" }}
+                  onMouseEnter={(e)=>{e.currentTarget.style.background=palette.optionHoverBg;}}
+                  onMouseLeave={(e)=>{e.currentTarget.style.background="transparent";}}
                 >
                   {optionLabel}
                 </button>
@@ -3824,7 +3897,7 @@ function SearchableSingleSelect({ options, value, onChange, placeholder, searchP
   );
 }
 
-function SearchableMultiYearSelect({ options, selectedYears, onChange, t, font }) {
+function SearchableMultiYearSelect({ options, selectedYears, onChange, t, font, isRTL = false }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const ref = useRef(null);
@@ -3850,7 +3923,7 @@ function SearchableMultiYearSelect({ options, selectedYears, onChange, t, font }
         <div style={{ position:"absolute", top:"calc(100% + 6px)", left:0, right:0, border:"1px solid rgba(148,163,184,0.3)", borderRadius:"10px", background:"#0b1220", zIndex:30, padding:"10px", boxShadow:"0 8px 30px rgba(2,6,23,0.6)" }}>
           <div style={{ display:"flex", alignItems:"center", gap:"6px", border:"1px solid rgba(148,163,184,0.25)", borderRadius:"8px", padding:"6px 8px", marginBottom:"8px", color:"#94a3b8" }}>
             <Search size={14} />
-            <input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder={t.yearFilter} style={{ flex:1, border:"none", outline:"none", background:"transparent", color:"#e2e8f0", fontSize:"0.78rem", fontFamily:font }} />
+            <input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder={t.yearFilter} style={{ flex:1, border:"none", outline:"none", background:"transparent", color:"#e2e8f0", fontSize:"0.78rem", fontFamily:font, textAlign:isRTL?"right":"left" }} />
           </div>
           <label style={{ display:"flex", alignItems:"center", gap:"8px", padding:"6px 4px", color:"#e2e8f0", fontSize:"0.78rem", cursor:"pointer" }}>
             <input type="checkbox" checked={allSelected} onChange={()=>onChange([])} />
@@ -3969,6 +4042,8 @@ function StatisticsTab() {
   const { db, t, isRTL, font } = useApp();
   const [selectedYears, setSelectedYears] = useState([]);
   const [selectedInvestmentStatus, setSelectedInvestmentStatus] = useState("");
+  const [selectedPortfolioId, setSelectedPortfolioId] = useState("");
+  const [selectedInvestmentId, setSelectedInvestmentId] = useState("");
   const [fundingInvestmentsModal, setFundingInvestmentsModal] = useState(null);
 
   const investments = visible(db?.investments || []);
@@ -3977,13 +4052,14 @@ function StatisticsTab() {
   const primaryCurrency = baseCurrencyCode(db);
   const investmentStatuses = db?.settings?.investmentStatuses?.length ? db.settings.investmentStatuses : ["Active", "Paused", "Closed"];
 
-  const filteredInvestments = selectedInvestmentStatus
-    ? investments.filter((inv) => inv.status === selectedInvestmentStatus)
-    : investments;
+  const filteredInvestments = investments.filter((inv) => {
+    if (selectedInvestmentStatus && inv.status !== selectedInvestmentStatus) return false;
+    if (selectedPortfolioId && inv.portfolioId !== selectedPortfolioId) return false;
+    if (selectedInvestmentId && inv.id !== selectedInvestmentId) return false;
+    return true;
+  });
   const filteredInvestmentIds = new Set(filteredInvestments.map((inv) => inv.id));
-  const filteredTransactions = selectedInvestmentStatus
-    ? transactions.filter((tx) => filteredInvestmentIds.has(tx.investmentId))
-    : transactions;
+  const filteredTransactions = transactions.filter((tx) => filteredInvestmentIds.has(tx.investmentId));
 
   const toRiskBucket = (risk) => {
     const val = String(risk || "").toLowerCase();
@@ -4129,7 +4205,7 @@ function StatisticsTab() {
         <div style={{ display:"flex", alignItems:"flex-end", gap:"8px", flexWrap:"wrap" }}>
           <div>
             <label style={{ display:"block", marginBottom:"6px", fontSize:"0.74rem", color:"#94a3b8" }}>{t.yearFilter}</label>
-            <SearchableMultiYearSelect options={yearlyRows} selectedYears={selectedYears} onChange={setSelectedYears} t={t} font={font} />
+            <SearchableMultiYearSelect options={yearlyRows} selectedYears={selectedYears} onChange={setSelectedYears} t={t} font={font} isRTL={isRTL} />
           </div>
           <div>
             <label style={{ display:"block", marginBottom:"6px", fontSize:"0.74rem", color:"#94a3b8" }}>{t.investmentStatuses}</label>
@@ -4141,6 +4217,43 @@ function StatisticsTab() {
               searchPlaceholder={t.searchUsersPlaceholder}
               font={font}
               minWidth="220px"
+              variant="statsFilter"
+              isRTL={isRTL}
+            />
+          </div>
+          <div>
+            <label style={{ display:"block", marginBottom:"6px", fontSize:"0.74rem", color:"#94a3b8" }}>{t.portfolio}</label>
+            <SearchableSingleSelect
+              options={portfolios.map((portfolio)=>({ value:portfolio.id, label:portfolio.name }))}
+              value={selectedPortfolioId}
+              onChange={(next)=>{
+                setSelectedPortfolioId(next);
+                if (next && selectedInvestmentId) {
+                  const selected = investments.find((inv) => inv.id === selectedInvestmentId);
+                  if (selected && selected.portfolioId !== next) setSelectedInvestmentId("");
+                }
+              }}
+              placeholder={t.allPortfolios}
+              searchPlaceholder={t.allPortfolios}
+              font={font}
+              minWidth="220px"
+              variant="statsFilter"
+              isRTL={isRTL}
+            />
+          </div>
+          <div>
+            <label style={{ display:"block", marginBottom:"6px", fontSize:"0.74rem", color:"#94a3b8" }}>{t.investment}</label>
+            <SearchableSingleSelect
+              options={investments
+                .filter((inv) => !selectedPortfolioId || inv.portfolioId === selectedPortfolioId)
+                .map((inv)=>({ value:inv.id, label:inv.name }))}
+              value={selectedInvestmentId}
+              onChange={setSelectedInvestmentId}
+              placeholder={t.filterByInvestment}
+              searchPlaceholder={t.filterByInvestment}
+              font={font}
+              minWidth="220px"
+              variant="statsFilter"
               isRTL={isRTL}
             />
           </div>
@@ -4278,6 +4391,12 @@ function StatisticsTab() {
                   <span style={{ color:"#bfdbfe", fontSize:"0.78rem" }}>{fmtMoney(item.amount, { currency:primaryCurrency })}</span>
                 </div>
               ))}
+              <div style={{ display:"flex", justifyContent:"space-between", gap:"8px", padding:"10px", border:"1px solid rgba(56,189,248,0.45)", borderRadius:"8px", background:"rgba(15,23,42,0.9)", fontWeight:700 }}>
+                <span style={{ color:"#e2e8f0", fontSize:"0.82rem" }}>{t.totalLabel}</span>
+                <span style={{ color:"#7dd3fc", fontSize:"0.8rem" }}>
+                  {`${new Intl.NumberFormat("en-US", { minimumFractionDigits:3, maximumFractionDigits:3 }).format((fundingInvestmentsModal.breakdown || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0))} ${primaryCurrency}`}
+                </span>
+              </div>
             </div>
           ) : (
             <EmptyState text={t.noInvestments} />
