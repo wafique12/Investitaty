@@ -177,6 +177,8 @@ const TRANSLATIONS = {
     smartStatusDefaulted: "Defaulted",
     smartStatusEarly: "Early Payment",
     smartStatusSearchPlaceholder: "Filter by smart status",
+    transactionDateRange: "Transaction Date Range",
+    clearDateRange: "Clear",
     unarchive: "Unarchive",
     deleteCascadeWarning: "This will also delete all related investments and transactions. This action cannot be undone.",
     quantity: "Quantity",
@@ -413,6 +415,8 @@ const TRANSLATIONS = {
     smartStatusDefaulted: "متعثرة",
     smartStatusEarly: "سداد مبكر",
     smartStatusSearchPlaceholder: "تصفية حسب الحالة الذكية",
+    transactionDateRange: "نطاق تاريخ المعاملة",
+    clearDateRange: "مسح",
     unarchive: "إلغاء الأرشفة",
     deleteCascadeWarning: "سيؤدي هذا أيضًا إلى حذف جميع الاستثمارات والمعاملات المرتبطة. لا يمكن التراجع عن هذا الإجراء.",
     quantity: "الكمية",
@@ -1687,17 +1691,45 @@ const filterInputCss = (isRTL) => ({
   colorScheme:"light",
 });
 
-function FilterDateInput({ value, onChange, isRTL }) {
-  const [focused, setFocused] = useState(false);
+function DateRangeFilter({ startDate, endDate, onChange, onClear, isRTL, label, clearLabel }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+  useEffect(() => {
+    const close = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
+
+  const displayValue = startDate && endDate
+    ? `${startDate} → ${endDate}`
+    : startDate
+      ? `${startDate} → --`
+      : endDate
+        ? `-- → ${endDate}`
+        : label;
+
   return (
-    <input
-      type="date"
-      value={value}
-      onChange={onChange}
-      style={{ ...filterInputCss(isRTL), borderColor: focused ? T.emerald : "rgba(148,163,184,0.3)" }}
-      onFocus={()=>setFocused(true)}
-      onBlur={()=>setFocused(false)}
-    />
+    <div ref={wrapRef} style={{ position:"relative", minWidth:"240px" }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        style={{ ...filterInputCss(isRTL), display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", textAlign:isRTL?"right":"left" }}
+      >
+        <span style={{ color:(startDate || endDate) ? T.textPrimary : T.textMuted, fontSize:"0.82rem" }}>{displayValue}</span>
+        <CalendarClock size={14} color={T.textMuted} />
+      </button>
+      {open && (
+        <div style={{ position:"absolute", top:"calc(100% + 6px)", zIndex:1000, background:"#fff", border:"1px solid rgba(148,163,184,0.32)", borderRadius:"10px", boxShadow:"0 12px 28px rgba(15,23,42,0.14)", padding:"10px", minWidth:"250px" }}>
+          <div style={{ display:"grid", gap:"8px" }}>
+            <input type="date" value={startDate} onChange={(e)=>onChange(e.target.value, endDate)} style={{ ...filterInputCss(isRTL), minHeight:"34px" }} />
+            <input type="date" value={endDate} onChange={(e)=>onChange(startDate, e.target.value)} style={{ ...filterInputCss(isRTL), minHeight:"34px" }} />
+            <button type="button" onClick={()=>{ onClear(); setOpen(false); }} style={{ background:"none", border:"1px solid rgba(148,163,184,0.4)", borderRadius:"8px", padding:"6px 10px", cursor:"pointer", fontSize:"0.78rem", color:T.textSecondary }}>{clearLabel}</button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -2958,8 +2990,15 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
 
 
       <div style={filterBarCss}>
-        <FilterDateInput value={filterStartDate} onChange={(e)=>setFilterStartDate(e.target.value)} isRTL={isRTL} />
-        <FilterDateInput value={filterEndDate} onChange={(e)=>setFilterEndDate(e.target.value)} isRTL={isRTL} />
+        <DateRangeFilter
+          startDate={filterStartDate}
+          endDate={filterEndDate}
+          onChange={(start, end) => { setFilterStartDate(start); setFilterEndDate(end); }}
+          onClear={() => { setFilterStartDate(""); setFilterEndDate(""); }}
+          isRTL={isRTL}
+          label={t.transactionDateRange}
+          clearLabel={t.clearDateRange}
+        />
         <Select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} options={[{ value:"", label:t.investmentStatuses }, ...statusOpts, { value:ARCHIVED_FILTER, label:t.archivedFilter }]} isRTL={isRTL} style={filterInputCss(isRTL)} />
         <SearchableSingleSelect
           options={portfolios.map((p)=>({ value:p.id, label:p.name }))}
@@ -3320,14 +3359,16 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const allTx = db?.transactions||[];
   const filtered = allTx.filter((tx) => {
     const txDate = tx.date || "";
-    const due = tx.dueDate || "";
     const portfolioMatch = !filterPortfolio || tx.portfolioId===filterPortfolio;
     const statusMatch = !filterStatus || (filterStatus === ARCHIVED_FILTER ? Boolean(tx.is_hidden) : (!tx.is_hidden && tx.status===filterStatus));
     const investmentMatch = !filterInvestment || tx.investmentId===filterInvestment;
     const smartStatus = getSmartTxStatus(tx);
     const smartStatusMatch = !filterSmartStatus || smartStatus === filterSmartStatus;
-    const startMatch = !filterStartDate || txDate === filterStartDate;
-    const endMatch = !filterEndDate || due === filterEndDate;
+    const parsedTxDate = toDateOnly(txDate);
+    const parsedStartDate = toDateOnly(filterStartDate);
+    const parsedEndDate = toDateOnly(filterEndDate);
+    const startMatch = !parsedStartDate || (parsedTxDate && parsedTxDate >= parsedStartDate);
+    const endMatch = !parsedEndDate || (parsedTxDate && parsedTxDate <= parsedEndDate);
     return portfolioMatch && statusMatch && investmentMatch && smartStatusMatch && startMatch && endMatch && (filterStatus===ARCHIVED_FILTER ? true : !tx.is_hidden);
   });
   const sorted = [...filtered].sort((a,b)=>new Date(b.date||b.created_at||0)-new Date(a.date||a.created_at||0));
@@ -3483,8 +3524,15 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
           variant="lightFilter"
           isRTL={isRTL}
         />
-        <FilterDateInput value={filterStartDate} onChange={(e)=>setFilterStartDate(e.target.value)} isRTL={isRTL} />
-        <FilterDateInput value={filterEndDate} onChange={(e)=>setFilterEndDate(e.target.value)} isRTL={isRTL} />
+        <DateRangeFilter
+          startDate={filterStartDate}
+          endDate={filterEndDate}
+          onChange={(start, end) => { setFilterStartDate(start); setFilterEndDate(end); }}
+          onClear={() => { setFilterStartDate(""); setFilterEndDate(""); }}
+          isRTL={isRTL}
+          label={t.transactionDateRange}
+          clearLabel={t.clearDateRange}
+        />
         <Select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} options={[{ value:"", label:t.transactionStatusLabel }, ...statusOpts, { value:ARCHIVED_FILTER, label:t.archivedFilter }]} isRTL={isRTL} style={filterInputCss(isRTL)} />
       </div>
 
@@ -3548,7 +3596,15 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"10px" }}>
               <ReadOnlyField label={t.transactionType} value={form.type} />
               <ReadOnlyField label={t.status} value={form.status} />
-              <ReadOnlyField label={t.smartStatusLabel} value={smartStatusLabel(getSmartTxStatus(editItem || form))} />
+              <ReadOnlyField
+                label={t.smartStatusLabel}
+                value={(() => {
+                  const popupSmartStatus = getSmartTxStatus(editItem || form);
+                  return popupSmartStatus
+                    ? <Chip color={smartStatusColor(popupSmartStatus)}>{smartStatusLabel(popupSmartStatus)}</Chip>
+                    : "—";
+                })()}
+              />
               <ReadOnlyField label={t.amount} value={fmtMoney(Number(form.amount || 0), { currency:portfolioCurrency(db, form.portfolioId) })} />
               <ReadOnlyField label={t.portfolio} value={portfolios.find((p)=>p.id===form.portfolioId)?.name} />
               <ReadOnlyField label="Due Date" value={formatDateDisplay(form.dueDate || editItem?.due_date) || "Pending"} />
