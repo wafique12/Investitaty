@@ -179,6 +179,7 @@ const TRANSLATIONS = {
     smartStatusSearchPlaceholder: "Filter by smart status",
     transactionDateRange: "Transaction Date Range",
     clearDateRange: "Clear",
+    allLabel: "All",
     unarchive: "Unarchive",
     deleteCascadeWarning: "This will also delete all related investments and transactions. This action cannot be undone.",
     quantity: "Quantity",
@@ -419,6 +420,7 @@ const TRANSLATIONS = {
     smartStatusSearchPlaceholder: "تصفية حسب الحالة الذكية",
     transactionDateRange: "نطاق تاريخ المعاملة",
     clearDateRange: "مسح",
+    allLabel: "الكل",
     unarchive: "إلغاء الأرشفة",
     deleteCascadeWarning: "سيؤدي هذا أيضًا إلى حذف جميع الاستثمارات والمعاملات المرتبطة. لا يمكن التراجع عن هذا الإجراء.",
     quantity: "الكمية",
@@ -3364,7 +3366,6 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const filtered = allTx.filter((tx) => {
     const portfolioMatch = !filterPortfolio || tx.portfolioId===filterPortfolio;
     const statusMatch = (() => {
-      if (filterStatus === ARCHIVED_FILTER) return Boolean(tx.is_hidden);
       if (tx.is_hidden) return false;
       if (!filterStatus) return true;
       if (filterStatus === "scheduled") return isScheduledTransaction(tx);
@@ -3441,11 +3442,10 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
 
   const typeOpts = [{value:"income",label:t.income},{value:"expense",label:t.expense}];
   const statusFilterOptions = [
-    { value:"", label:t.transactionStatusLabel },
-    { value:"scheduled", label:t.scheduled },
-    { value:"deposited", label:t.deposited },
     { value:"collected", label:t.collected },
-    { value:ARCHIVED_FILTER, label:t.archivedFilter },
+    { value:"deposited", label:t.deposited },
+    { value:"scheduled", label:t.scheduled },
+    { value:"", label:t.allLabel },
   ];
   const statusOpts = ((db?.settings?.transactionStatuses&&db.settings.transactionStatuses.length)?db.settings.transactionStatuses:["recorded","scheduled","cancelled"]).map(v=>({ value:v, label:v }));
 
