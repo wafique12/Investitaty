@@ -3005,22 +3005,6 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
 
 
       <div style={filterBarCss}>
-        <div style={{ display:"flex", flexDirection:"column", gap:"6px", minWidth:"330px" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:"14px", minHeight:"20px" }}>
-            <label style={{ display:"inline-flex", alignItems:"center", gap:"6px", fontSize:"0.78rem", color:T.textSecondary }}>
-              <input type="radio" name="investments-date-field" value="start" checked={filterDateField === "start"} onChange={()=>setFilterDateField("start")} />
-              {t.startDate}
-            </label>
-            <label style={{ display:"inline-flex", alignItems:"center", gap:"6px", fontSize:"0.78rem", color:T.textSecondary }}>
-              <input type="radio" name="investments-date-field" value="end" checked={filterDateField === "end"} onChange={()=>setFilterDateField("end")} />
-              {t.endDate}
-            </label>
-          </div>
-          <div style={{ display:"flex", gap:"8px", alignItems:"center" }}>
-            <input type="date" value={filterStartDate} onChange={(e)=>setFilterStartDate(e.target.value)} style={{ ...filterInputCss(isRTL), minWidth:"160px" }} />
-            <input type="date" value={filterEndDate} onChange={(e)=>setFilterEndDate(e.target.value)} style={{ ...filterInputCss(isRTL), minWidth:"160px" }} />
-          </div>
-        </div>
         <Select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} options={[{ value:"", label:t.investmentStatuses }, ...statusOpts, { value:ARCHIVED_FILTER, label:t.archivedFilter }]} isRTL={isRTL} style={{ ...filterInputCss(isRTL), flex:"0 0 auto", width:"fit-content", minWidth:"150px", maxWidth:"190px" }} />
         <SearchableSingleSelect
           options={portfolios.map((p)=>({ value:p.id, label:p.name }))}
@@ -3033,6 +3017,22 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
           variant="lightFilter"
           isRTL={isRTL}
         />
+        <div style={{ display:"flex", flexDirection:"column", gap:"8px", minWidth:"350px", marginLeft:"auto", padding:"10px", border:"1px solid rgba(148,163,184,0.35)", borderRadius:"10px", background:"#ffffff" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:"14px", minHeight:"20px" }}>
+            <label style={{ display:"inline-flex", alignItems:"center", gap:"6px", fontSize:"0.78rem", color:T.textSecondary }}>
+              <input type="radio" name="investments-date-field" value="start" checked={filterDateField === "start"} onChange={()=>setFilterDateField("start")} />
+              {t.startDate}
+            </label>
+            <label style={{ display:"inline-flex", alignItems:"center", gap:"6px", fontSize:"0.78rem", color:T.textSecondary }}>
+              <input type="radio" name="investments-date-field" value="end" checked={filterDateField === "end"} onChange={()=>setFilterDateField("end")} />
+              {t.endDate}
+            </label>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"8px", alignItems:"center" }}>
+            <input type="date" value={filterStartDate} onChange={(e)=>setFilterStartDate(e.target.value)} style={{ ...filterInputCss(isRTL), minWidth:"140px", margin:0 }} />
+            <input type="date" value={filterEndDate} onChange={(e)=>setFilterEndDate(e.target.value)} style={{ ...filterInputCss(isRTL), minWidth:"140px", margin:0 }} />
+          </div>
+        </div>
       </div>
 
       {/* Grouped by portfolio */}
