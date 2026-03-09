@@ -1699,7 +1699,7 @@ const filterInputCss = (isRTL) => ({
   colorScheme:"light",
 });
 
-function DateRangeFilter({ startDate, endDate, onChange, onClear, isRTL, label, clearLabel }) {
+function DateRangeFilter({ startDate, endDate, onChange, onClear, isRTL, label, clearLabel, panelTop }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   useEffect(() => {
@@ -1729,10 +1729,13 @@ function DateRangeFilter({ startDate, endDate, onChange, onClear, isRTL, label, 
         <CalendarClock size={14} color={T.textMuted} />
       </button>
       {open && (
-        <div style={{ position:"absolute", top:"calc(100% + 6px)", zIndex:1000, background:T.bgCard, border:`1px solid ${T.border}`, borderRadius:"10px", boxShadow:"0 12px 28px rgba(15,23,42,0.14)", padding:"10px", minWidth:"250px" }}>
+        <div style={{ position:"absolute", top:"calc(100% + 6px)", zIndex:1000, background:T.bgCard, border:`1px solid ${T.border}`, borderRadius:"10px", boxShadow:"0 12px 28px rgba(15,23,42,0.14)", padding:"10px", minWidth:"280px" }}>
           <div style={{ display:"grid", gap:"8px" }}>
-            <input type="date" value={startDate} onChange={(e)=>onChange(e.target.value, endDate)} style={{ ...filterInputCss(isRTL), minHeight:"34px" }} />
-            <input type="date" value={endDate} onChange={(e)=>onChange(startDate, e.target.value)} style={{ ...filterInputCss(isRTL), minHeight:"34px" }} />
+            {panelTop}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"8px" }}>
+              <input type="date" value={startDate} onChange={(e)=>onChange(e.target.value, endDate)} style={{ ...filterInputCss(isRTL), minHeight:"34px" }} />
+              <input type="date" value={endDate} onChange={(e)=>onChange(startDate, e.target.value)} style={{ ...filterInputCss(isRTL), minHeight:"34px" }} />
+            </div>
             <button type="button" onClick={()=>{ onClear(); setOpen(false); }} style={{ background:"none", border:`1px solid ${T.border}`, borderRadius:"8px", padding:"6px 10px", cursor:"pointer", fontSize:"0.78rem", color:T.textSecondary }}>{clearLabel}</button>
           </div>
         </div>
@@ -3017,21 +3020,28 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
           variant="lightFilter"
           isRTL={isRTL}
         />
-        <div style={{ display:"flex", flexDirection:"column", gap:"8px", minWidth:"350px", marginLeft:"auto", padding:"10px", border:"1px solid rgba(148,163,184,0.35)", borderRadius:"10px", background:"#ffffff" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:"14px", minHeight:"20px" }}>
-            <label style={{ display:"inline-flex", alignItems:"center", gap:"6px", fontSize:"0.78rem", color:T.textSecondary }}>
-              <input type="radio" name="investments-date-field" value="start" checked={filterDateField === "start"} onChange={()=>setFilterDateField("start")} />
-              {t.startDate}
-            </label>
-            <label style={{ display:"inline-flex", alignItems:"center", gap:"6px", fontSize:"0.78rem", color:T.textSecondary }}>
-              <input type="radio" name="investments-date-field" value="end" checked={filterDateField === "end"} onChange={()=>setFilterDateField("end")} />
-              {t.endDate}
-            </label>
-          </div>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"8px", alignItems:"center" }}>
-            <input type="date" value={filterStartDate} onChange={(e)=>setFilterStartDate(e.target.value)} style={{ ...filterInputCss(isRTL), minWidth:"140px", margin:0 }} />
-            <input type="date" value={filterEndDate} onChange={(e)=>setFilterEndDate(e.target.value)} style={{ ...filterInputCss(isRTL), minWidth:"140px", margin:0 }} />
-          </div>
+        <div style={{ marginLeft:"auto" }}>
+          <DateRangeFilter
+            startDate={filterStartDate}
+            endDate={filterEndDate}
+            onChange={(start, end) => { setFilterStartDate(start); setFilterEndDate(end); }}
+            onClear={() => { setFilterStartDate(""); setFilterEndDate(""); }}
+            isRTL={isRTL}
+            label={t.transactionDateRange}
+            clearLabel={t.clearDateRange}
+            panelTop={(
+              <div style={{ display:"flex", alignItems:"center", gap:"14px", minHeight:"20px" }}>
+                <label style={{ display:"inline-flex", alignItems:"center", gap:"6px", fontSize:"0.78rem", color:T.textSecondary }}>
+                  <input type="radio" name="investments-date-field" value="start" checked={filterDateField === "start"} onChange={()=>setFilterDateField("start")} />
+                  {t.startDate}
+                </label>
+                <label style={{ display:"inline-flex", alignItems:"center", gap:"6px", fontSize:"0.78rem", color:T.textSecondary }}>
+                  <input type="radio" name="investments-date-field" value="end" checked={filterDateField === "end"} onChange={()=>setFilterDateField("end")} />
+                  {t.endDate}
+                </label>
+              </div>
+            )}
+          />
         </div>
       </div>
 
