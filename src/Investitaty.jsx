@@ -2851,6 +2851,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   const methodOpts = (db?.settings?.investmentMethods || []).map((v)=>({ value:v, label:v }));
   const [filterStartDate, setFilterStartDate] = useState("");
   const [filterEndDate, setFilterEndDate] = useState("");
+  const [filterDateField, setFilterDateField] = useState("start");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterPortfolio, setFilterPortfolio] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -2866,6 +2867,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     setModalMode("create");
     setFilterStartDate("");
     setFilterEndDate("");
+    setFilterDateField("start");
     setFilterStatus("");
     setFilterPortfolio("");
     setSearchOpen(false);
@@ -2892,6 +2894,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     if (!saved) return;
     setFilterStartDate(saved.filterStartDate || "");
     setFilterEndDate(saved.filterEndDate || "");
+    setFilterDateField(saved.filterDateField || "start");
     setFilterStatus(saved.filterStatus || "");
     setFilterPortfolio(saved.filterPortfolio || "");
     setSearchTerm(saved.searchTerm || "");
@@ -2899,8 +2902,8 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("investments_filters_v1", JSON.stringify({ filterStartDate, filterEndDate, filterStatus, filterPortfolio, searchTerm }));
-  }, [filterStartDate, filterEndDate, filterStatus, filterPortfolio, searchTerm]);
+    localStorage.setItem("investments_filters_v1", JSON.stringify({ filterStartDate, filterEndDate, filterDateField, filterStatus, filterPortfolio, searchTerm }));
+  }, [filterStartDate, filterEndDate, filterDateField, filterStatus, filterPortfolio, searchTerm]);
 
 
   useEffect(() => {
@@ -2935,12 +2938,16 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     const startRaw = inv.startDate || inv.purchaseDate || "";
     const endRaw = inv.endDate || "";
     const normalizedTitle = (inv.name || "").toLowerCase();
-    const startMatch = !filterStartDate || startRaw === filterStartDate;
-    const endMatch = !filterEndDate || endRaw === filterEndDate;
+    const targetRaw = filterDateField === "end" ? endRaw : startRaw;
+    const targetDate = toDateOnly(targetRaw);
+    const fromDate = toDateOnly(filterStartDate);
+    const toDate = toDateOnly(filterEndDate);
+    const fromMatch = !fromDate || (targetDate && targetDate >= fromDate);
+    const toMatch = !toDate || (targetDate && targetDate < toDate);
     const statusMatch = !filterStatus || (filterStatus === ARCHIVED_FILTER ? Boolean(inv.is_hidden) : (!inv.is_hidden && inv.status === filterStatus));
     const portfolioMatch = !filterPortfolio || inv.portfolioId === filterPortfolio;
     const searchMatch = !searchTerm.trim() || normalizedTitle.includes(searchTerm.toLowerCase().trim());
-    return startMatch && endMatch && statusMatch && portfolioMatch && searchMatch && (filterStatus===ARCHIVED_FILTER ? true : !inv.is_hidden);
+    return fromMatch && toMatch && statusMatch && portfolioMatch && searchMatch && (filterStatus===ARCHIVED_FILTER ? true : !inv.is_hidden);
   });
 
   return (
@@ -2998,16 +3005,23 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
 
 
       <div style={filterBarCss}>
-        <DateRangeFilter
-          startDate={filterStartDate}
-          endDate={filterEndDate}
-          onChange={(start, end) => { setFilterStartDate(start); setFilterEndDate(end); }}
-          onClear={() => { setFilterStartDate(""); setFilterEndDate(""); }}
-          isRTL={isRTL}
-          label={t.transactionDateRange}
-          clearLabel={t.clearDateRange}
-        />
-        <Select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} options={[{ value:"", label:t.investmentStatuses }, ...statusOpts, { value:ARCHIVED_FILTER, label:t.archivedFilter }]} isRTL={isRTL} style={filterInputCss(isRTL)} />
+        <div style={{ display:"flex", flexDirection:"column", gap:"6px", minWidth:"330px" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:"14px", minHeight:"20px" }}>
+            <label style={{ display:"inline-flex", alignItems:"center", gap:"6px", fontSize:"0.78rem", color:T.textSecondary }}>
+              <input type="radio" name="investments-date-field" value="start" checked={filterDateField === "start"} onChange={()=>setFilterDateField("start")} />
+              {t.startDate}
+            </label>
+            <label style={{ display:"inline-flex", alignItems:"center", gap:"6px", fontSize:"0.78rem", color:T.textSecondary }}>
+              <input type="radio" name="investments-date-field" value="end" checked={filterDateField === "end"} onChange={()=>setFilterDateField("end")} />
+              {t.endDate}
+            </label>
+          </div>
+          <div style={{ display:"flex", gap:"8px", alignItems:"center" }}>
+            <input type="date" value={filterStartDate} onChange={(e)=>setFilterStartDate(e.target.value)} style={{ ...filterInputCss(isRTL), minWidth:"160px" }} />
+            <input type="date" value={filterEndDate} onChange={(e)=>setFilterEndDate(e.target.value)} style={{ ...filterInputCss(isRTL), minWidth:"160px" }} />
+          </div>
+        </div>
+        <Select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} options={[{ value:"", label:t.investmentStatuses }, ...statusOpts, { value:ARCHIVED_FILTER, label:t.archivedFilter }]} isRTL={isRTL} style={{ ...filterInputCss(isRTL), flex:"0 0 auto", width:"fit-content", minWidth:"150px", maxWidth:"190px" }} />
         <SearchableSingleSelect
           options={portfolios.map((p)=>({ value:p.id, label:p.name }))}
           value={filterPortfolio}
@@ -3325,6 +3339,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const [filterSmartStatus, setFilterSmartStatus] = useState("");
   const [filterStartDate, setFilterStartDate] = useState("");
   const [filterEndDate, setFilterEndDate] = useState("");
+  const [filterDateField, setFilterDateField] = useState("start");
   const [openMenu, setOpenMenu] = useState(null);
   const [formError, setFormError] = useState("");
 
@@ -3347,6 +3362,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
     setFilterSmartStatus("");
     setFilterStartDate("");
     setFilterEndDate("");
+    setFilterDateField("start");
     setOpenMenu(null);
     setForm(EMPTY);
     setFormError("");
