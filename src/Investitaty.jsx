@@ -6,7 +6,7 @@ import {
   TrendingUp, Wallet, DollarSign, BarChart2, Globe, LogOut,
   Cloud, Shield, Layers, Tag, FolderOpen, ArrowUpRight, PieChart as PieChartIcon,
   ArrowDownRight, Eye, EyeOff, AlertCircle, CheckCircle2,
-  Menu, Search, Landmark, ListTree, CircleDollarSign, Lock, Unlock, Undo2, RotateCcw,
+  Menu, Search, Landmark, ListTree, CircleDollarSign, Lock, Unlock, Undo2, RotateCcw, CalendarClock,
 } from "lucide-react";
 import { supabase, hasSupabaseConfig, hasSupabaseClient } from "./lib/supabaseClient";
 import BackupService from "./services/BackupService";
@@ -91,6 +91,7 @@ const TRANSLATIONS = {
     totalPortfolioValue: "Total Portfolio Value",
     totalActivePrincipal: "Total Active Principal",
     totalAnnualIncomeYear: "Total Annual Income {year}",
+    expectedAnnualIncomeYear: "Expected Annual Income {year}",
     totalIncome: "Total Income",
     incomeYearLabel: "Income {year}",
     collectedTransactions: "collected transactions",
@@ -320,6 +321,7 @@ const TRANSLATIONS = {
     totalPortfolioValue: "إجمالي قيمة المحفظة",
     totalActivePrincipal: "إجمالي أصل المبلغ النشط",
     totalAnnualIncomeYear: "إجمالي دخل السنة {year}",
+    expectedAnnualIncomeYear: "إجمالي الدخل المتوقع {year}",
     totalIncome: "إجمالي الدخل",
     incomeYearLabel: "دخل عام {year}",
     collectedTransactions: "معاملات محصّلة",
@@ -2060,7 +2062,21 @@ const costBasis = (inv) => (parseFloat(inv.quantity)||0)*(parseFloat(inv.purchas
 const roi = (inv) => { const c=costBasis(inv); return c>0?((curVal(inv)-c)/c)*100:0; };
 const isCollectedTransaction = (tx) => {
   const status = String(tx?.status || "").toLowerCase();
-  return status.includes("collect") || Boolean(tx?.collectedAt || tx?.collected_at);
+  return status.includes("collect") || status.includes("record") || Boolean(tx?.collectedAt || tx?.collected_at);
+};
+const isDepositedTransaction = (tx) => {
+  const status = String(tx?.status || "").toLowerCase();
+  return status.includes("deposit") || status.includes("مودع") || Boolean(tx?.depositedAt || tx?.deposited_at);
+};
+const isScheduledTransaction = (tx) => {
+  const status = String(tx?.status || "").toLowerCase();
+  return status.includes("schedule") || status.includes("مجدول");
+};
+const txStatusDate = (tx) => {
+  if (isCollectedTransaction(tx)) return tx?.collectedAt || tx?.collected_at || tx?.depositedAt || tx?.deposited_at || tx?.dueDate || tx?.date || tx?.created_at;
+  if (isDepositedTransaction(tx)) return tx?.depositedAt || tx?.deposited_at || tx?.date || tx?.created_at;
+  if (isScheduledTransaction(tx)) return tx?.dueDate || tx?.date || tx?.created_at;
+  return tx?.date || tx?.created_at;
 };
 const txIncome = (txs) => txs.filter(t=>t.type==="income").reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
 const txExpense = (txs) => txs.filter(t=>t.type==="expense").reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
@@ -2143,6 +2159,17 @@ function Dashboard() {
       return new Date(dt).getFullYear() === currentYear;
     })
     .reduce((sum, tx)=>sum + toBaseAmount(db, parseFloat(tx.amount)||0, portfolioCurrency(db, tx.portfolioId)), 0);
+
+  const expectedAnnualIncome = transactions
+    .filter((tx) => {
+      if (tx.type !== "income") return false;
+      const expectedStatus = isCollectedTransaction(tx) || isDepositedTransaction(tx) || isScheduledTransaction(tx);
+      if (!expectedStatus) return false;
+      const dt = txStatusDate(tx);
+      if (!dt) return false;
+      return new Date(dt).getFullYear() === currentYear;
+    })
+    .reduce((sum, tx) => sum + toBaseAmount(db, parseFloat(tx.amount) || 0, portfolioCurrency(db, tx.portfolioId)), 0);
 
   const totalCollectedCount = transactions.filter((tx) => tx.type === "income" && isCollectedTransaction(tx)).length;
 
@@ -2231,6 +2258,13 @@ function Dashboard() {
           sub={`${totalCollectedCount} ${t.collectedTransactions}`}
           accent={T.positive}
           icon={ArrowUpRight}
+        />
+        <KPICard
+          label={t.expectedAnnualIncomeYear.replace("{year}", isRTL ? currentYear.toLocaleString("ar-EG") : String(currentYear))}
+          value={expectedAnnualIncome}
+          currency={baseCurrency}
+          accent={T.warning}
+          icon={CalendarClock}
         />
         <KPICard label={t.totalIncome} value={transactions.filter(t=>t.type==="income").reduce((sum, tx)=>sum + toBaseAmount(db, parseFloat(tx.amount)||0, portfolioCurrency(db, tx.portfolioId)), 0)} currency={baseCurrency} sub={`${transactions.filter(tx=>tx.type==="income").length} ${t.payments}`} accent={T.info} icon={Landmark} />
       </div>
