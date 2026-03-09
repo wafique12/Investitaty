@@ -6,7 +6,7 @@ import {
   TrendingUp, Wallet, DollarSign, BarChart2, Globe, LogOut,
   Cloud, Shield, Layers, Tag, FolderOpen, ArrowUpRight, PieChart as PieChartIcon,
   ArrowDownRight, Eye, EyeOff, AlertCircle, CheckCircle2,
-  Menu, Search, Landmark, ListTree, CircleDollarSign, Lock, Unlock, Undo2, RotateCcw, CalendarClock,
+  Menu, Search, Landmark, ListTree, CircleDollarSign, Lock, Unlock, Undo2, RotateCcw, CalendarClock, Info,
 } from "lucide-react";
 import { supabase, hasSupabaseConfig, hasSupabaseClient } from "./lib/supabaseClient";
 import BackupService from "./services/BackupService";
@@ -171,6 +171,12 @@ const TRANSLATIONS = {
     editInModal: "Edit",
     deleteItem: "Delete",
     archivedFilter: "Archived",
+    smartStatusLabel: "Smart Status",
+    smartStatusUpcoming: "Upcoming",
+    smartStatusLate: "Late",
+    smartStatusDefaulted: "Defaulted",
+    smartStatusEarly: "Early Payment",
+    smartStatusSearchPlaceholder: "Filter by smart status",
     unarchive: "Unarchive",
     deleteCascadeWarning: "This will also delete all related investments and transactions. This action cannot be undone.",
     quantity: "Quantity",
@@ -401,6 +407,12 @@ const TRANSLATIONS = {
     editInModal: "تعديل",
     deleteItem: "حذف",
     archivedFilter: "المؤرشفة",
+    smartStatusLabel: "الحالة الذكية",
+    smartStatusUpcoming: "قادمة",
+    smartStatusLate: "متأخرة",
+    smartStatusDefaulted: "متعثرة",
+    smartStatusEarly: "سداد مبكر",
+    smartStatusSearchPlaceholder: "تصفية حسب الحالة الذكية",
     unarchive: "إلغاء الأرشفة",
     deleteCascadeWarning: "سيؤدي هذا أيضًا إلى حذف جميع الاستثمارات والمعاملات المرتبطة. لا يمكن التراجع عن هذا الإجراء.",
     quantity: "الكمية",
@@ -1749,7 +1761,7 @@ function Modal({ title, children, onClose, maxWidth = "520px", badge }) {
 }
 
 // ─── KPI number card ──────────────────────────────────────────────────────────
-function KPICard({ label, value, sub, trend, accent = T.emerald, icon: Icon_, currency = "USD", badge }) {
+function KPICard({ label, value, sub, trend, accent = T.emerald, icon: Icon_, currency = "USD", badge, valueDecimals = 3 }) {
   const isPos = trend === undefined || trend >= 0;
   return (
     <Card style={{ padding:"20px",flex:1,minWidth:"160px" }}>
@@ -1761,14 +1773,14 @@ function KPICard({ label, value, sub, trend, accent = T.emerald, icon: Icon_, cu
           </div>
         )}
       </div>
-      <div style={{ fontSize:"1.6rem",fontWeight:700,color:T.textPrimary,lineHeight:1,marginBottom:"8px" }}>{fmtMoney(value, { currency })}</div>
+      <div style={{ fontSize:"1.6rem",fontWeight:700,color:T.textPrimary,lineHeight:1,marginBottom:"8px" }}>{fmtMoney(value, { currency, decimals:valueDecimals })}</div>
       <div style={{ display:"flex",alignItems:"center",gap:"6px" }}>
         {trend !== undefined && (
           <span style={{ display:"inline-flex",alignItems:"center",gap:"3px",fontSize:"0.72rem",fontWeight:500,
             color:isPos?T.positive:T.negative,background:isPos?`${T.positive}12`:`${T.negative}12`,
             border:`1px solid ${isPos?T.positive:T.negative}25`,borderRadius:"4px",padding:"1px 6px" }}>
             {isPos ? <ArrowUpRight size={11}/> : <ArrowDownRight size={11}/>}
-            {fmtMoney(Math.abs(trend), { currency })}
+            {fmtMoney(Math.abs(trend), { currency, decimals:valueDecimals })}
           </span>
         )}
         {sub && <span style={{ fontSize:"0.72rem",color:T.textMuted }}>{sub}</span>}
@@ -2097,10 +2109,37 @@ const convertCurrency = (db, amount, sourceCurrency="USD", targetCurrency="USD")
 };
 const toBaseAmount = (db, amount, sourceCurrency="USD") => convertCurrency(db, amount, sourceCurrency, baseCurrencyCode(db));
 const currencySymbol = (currency="USD") => ({ USD:"$", EUR:"€", GBP:"£", SAR:"﷼", AED:"د.إ" }[currency] || currency);
-const fmtMoney = (v, { compact=false, currency="USD" } = {}) => {
+const fmtMoney = (v, { compact=false, currency="USD", decimals=3 } = {}) => {
   const n = Number(v||0);
   const symbol = currencySymbol(currency);
-  return symbol + n.toLocaleString("en-US",{minimumFractionDigits:3,maximumFractionDigits:3});
+  return symbol + n.toLocaleString("en-US",{minimumFractionDigits:decimals,maximumFractionDigits:decimals});
+};
+const toDateOnly = (value) => {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  parsed.setHours(0, 0, 0, 0);
+  return parsed;
+};
+const getSmartTxStatus = (tx) => {
+  const due = toDateOnly(tx?.dueDate || tx?.due_date);
+  const collected = toDateOnly(tx?.collectedAt || tx?.collected_at);
+  if (!due) return null;
+  if (collected && collected < due) return "early";
+  if (isCollectedTransaction(tx)) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (due > today) return "upcoming";
+  const diffDays = Math.floor((today - due) / 86400000);
+  if (diffDays > 90) return "defaulted";
+  return "late";
+};
+const smartStatusColor = (status) => {
+  if (status === "early") return T.positive;
+  if (status === "upcoming") return T.info;
+  if (status === "late") return T.warning;
+  if (status === "defaulted") return T.negative;
+  return T.textMuted;
 };
 const portfolioCurrency = (db, portfolioId) => (visible(db?.portfolios||[]).find(p=>p.id===portfolioId)?.currency || "USD");
 const isActiveInvestment = (inv) => String(inv?.status || "Active").toLowerCase() === "active";
@@ -2160,14 +2199,26 @@ function Dashboard() {
     })
     .reduce((sum, tx)=>sum + toBaseAmount(db, parseFloat(tx.amount)||0, portfolioCurrency(db, tx.portfolioId)), 0);
 
-  const expectedAnnualIncome = transactions
+  const currentYearIncomeTransactions = transactions.filter((tx) => {
+    if (tx.type !== "income") return false;
+    const expectedStatus = isCollectedTransaction(tx) || isDepositedTransaction(tx) || isScheduledTransaction(tx);
+    if (!expectedStatus) return false;
+    const dt = txStatusDate(tx);
+    if (!dt) return false;
+    return new Date(dt).getFullYear() === currentYear;
+  });
+
+  const expectedAnnualIncome = currentYearIncomeTransactions
     .filter((tx) => {
-      if (tx.type !== "income") return false;
-      const expectedStatus = isCollectedTransaction(tx) || isDepositedTransaction(tx) || isScheduledTransaction(tx);
-      if (!expectedStatus) return false;
-      const dt = txStatusDate(tx);
-      if (!dt) return false;
-      return new Date(dt).getFullYear() === currentYear;
+      const category = String(tx.category || "").toLowerCase();
+      return category.includes("dividend") || category.includes("yield") || category.includes("توزيع") || category.includes("عائد");
+    })
+    .reduce((sum, tx) => sum + toBaseAmount(db, parseFloat(tx.amount) || 0, portfolioCurrency(db, tx.portfolioId)), 0);
+
+  const expectedCapitalGains = currentYearIncomeTransactions
+    .filter((tx) => {
+      const category = String(tx.category || "").toLowerCase();
+      return category.includes("capital gain") || category.includes("رأس") || category.includes("رأسمالي");
     })
     .reduce((sum, tx) => sum + toBaseAmount(db, parseFloat(tx.amount) || 0, portfolioCurrency(db, tx.portfolioId)), 0);
 
@@ -2238,14 +2289,15 @@ function Dashboard() {
       {/* KPI Row */}
       <SectionHeader title={t.portfolioOverview} />
       <div style={{ display:"flex",gap:"14px",flexWrap:"wrap",marginBottom:"28px" }}>
-        <KPICard label={t.totalActivePrincipal} value={activePrincipal} currency={baseCurrency} sub={`${activeInvestments.length} ${t.activePositions}`} accent={T.info} icon={Wallet} />
+        <KPICard label={t.totalActivePrincipal} value={activePrincipal} valueDecimals={2} currency={baseCurrency} sub={`${activeInvestments.length} ${t.activePositions}`} accent={T.info} icon={Wallet} />
         <KPICard
           label={t.totalPortfolioValue}
           value={totalPortfolioValue}
+          valueDecimals={2}
           currency={baseCurrency}
-          sub={t.performanceVsPrincipal}
+          sub={<span title={`${t.totalPortfolioValue}: ${fmtMoney(totalPortfolioValue, { currency:baseCurrency, decimals:2 })} | ${t.totalActivePrincipal}: ${fmtMoney(activePrincipal, { currency:baseCurrency, decimals:2 })}`}>{isRTL ? "ⓘ" : <Info size={12} style={{ verticalAlign:"middle" }} />}</span>}
           badge={{
-            text:`${portfolioDeltaPct>=0?"+":""}${portfolioDeltaPct.toFixed(3)}% (${portfolioDeltaValue>=0?"+":""}${fmtMoney(portfolioDeltaValue,{currency:baseCurrency})})`,
+            text:`${portfolioDeltaPct>=0?"+":""}${portfolioDeltaPct.toFixed(2)}% (${portfolioDeltaValue>=0?"+":""}${fmtMoney(portfolioDeltaValue,{currency:baseCurrency, decimals:2})})`,
             color:portfolioDeltaValue>=0?T.positive:T.negative,
           }}
           accent={portfolioDeltaValue>=0?T.positive:T.negative}
@@ -2254,6 +2306,7 @@ function Dashboard() {
         <KPICard
           label={t.totalAnnualIncomeYear.replace("{year}", isRTL ? currentYear.toLocaleString("ar-EG") : String(currentYear))}
           value={totalAnnualIncome}
+          valueDecimals={2}
           currency={baseCurrency}
           sub={`${totalCollectedCount} ${t.collectedTransactions}`}
           accent={T.positive}
@@ -2262,11 +2315,13 @@ function Dashboard() {
         <KPICard
           label={t.expectedAnnualIncomeYear.replace("{year}", isRTL ? currentYear.toLocaleString("ar-EG") : String(currentYear))}
           value={expectedAnnualIncome}
+          valueDecimals={2}
           currency={baseCurrency}
+          sub={`${t.capitalGains}: ${fmtMoney(expectedCapitalGains, { currency:baseCurrency, decimals:2 })}`}
           accent={T.warning}
           icon={CalendarClock}
         />
-        <KPICard label={t.totalIncome} value={transactions.filter(t=>t.type==="income").reduce((sum, tx)=>sum + toBaseAmount(db, parseFloat(tx.amount)||0, portfolioCurrency(db, tx.portfolioId)), 0)} currency={baseCurrency} sub={`${transactions.filter(tx=>tx.type==="income").length} ${t.payments}`} accent={T.info} icon={Landmark} />
+        <KPICard label={t.totalIncome} value={transactions.filter(t=>t.type==="income").reduce((sum, tx)=>sum + toBaseAmount(db, parseFloat(tx.amount)||0, portfolioCurrency(db, tx.portfolioId)), 0)} valueDecimals={2} currency={baseCurrency} sub={`${transactions.filter(tx=>tx.type==="income").length} ${t.payments}`} accent={T.info} icon={Landmark} />
       </div>
 
       {/* Charts row */}
@@ -3220,6 +3275,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const [filterPortfolio, setFilterPortfolio] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterInvestment, setFilterInvestment] = useState("");
+  const [filterSmartStatus, setFilterSmartStatus] = useState("");
   const [filterStartDate, setFilterStartDate] = useState("");
   const [filterEndDate, setFilterEndDate] = useState("");
   const [openMenu, setOpenMenu] = useState(null);
@@ -3236,6 +3292,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
     setFilterPortfolio("");
     setFilterStatus("");
     setFilterInvestment("");
+    setFilterSmartStatus("");
     setFilterStartDate("");
     setFilterEndDate("");
     setOpenMenu(null);
@@ -3245,6 +3302,13 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
 
   const portfolios = visible(db?.portfolios||[]);
   const allInvestments = visible(db?.investments||[]);
+  const smartStatusOptions = [
+    { value:"upcoming", label:t.smartStatusUpcoming },
+    { value:"late", label:t.smartStatusLate },
+    { value:"defaulted", label:t.smartStatusDefaulted },
+    { value:"early", label:t.smartStatusEarly },
+  ];
+  const smartStatusLabel = (status) => smartStatusOptions.find((item) => item.value === status)?.label || "—";
   const allTx = db?.transactions||[];
   const filtered = allTx.filter((tx) => {
     const txDate = tx.date || "";
@@ -3252,9 +3316,11 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
     const portfolioMatch = !filterPortfolio || tx.portfolioId===filterPortfolio;
     const statusMatch = !filterStatus || (filterStatus === ARCHIVED_FILTER ? Boolean(tx.is_hidden) : (!tx.is_hidden && tx.status===filterStatus));
     const investmentMatch = !filterInvestment || tx.investmentId===filterInvestment;
+    const smartStatus = getSmartTxStatus(tx);
+    const smartStatusMatch = !filterSmartStatus || smartStatus === filterSmartStatus;
     const startMatch = !filterStartDate || txDate === filterStartDate;
     const endMatch = !filterEndDate || due === filterEndDate;
-    return portfolioMatch && statusMatch && investmentMatch && startMatch && endMatch && (filterStatus===ARCHIVED_FILTER ? true : !tx.is_hidden);
+    return portfolioMatch && statusMatch && investmentMatch && smartStatusMatch && startMatch && endMatch && (filterStatus===ARCHIVED_FILTER ? true : !tx.is_hidden);
   });
   const sorted = [...filtered].sort((a,b)=>new Date(b.date||b.created_at||0)-new Date(a.date||a.created_at||0));
 
@@ -3382,6 +3448,17 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
           variant="lightFilter"
           isRTL={isRTL}
         />
+        <SearchableSingleSelect
+          options={smartStatusOptions}
+          value={filterSmartStatus}
+          onChange={setFilterSmartStatus}
+          placeholder={t.smartStatusLabel}
+          searchPlaceholder={t.smartStatusSearchPlaceholder}
+          font={font}
+          minWidth="220px"
+          variant="lightFilter"
+          isRTL={isRTL}
+        />
         <FilterDateInput value={filterStartDate} onChange={(e)=>setFilterStartDate(e.target.value)} isRTL={isRTL} />
         <FilterDateInput value={filterEndDate} onChange={(e)=>setFilterEndDate(e.target.value)} isRTL={isRTL} />
         <Select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} options={[{ value:"", label:t.transactionStatusLabel }, ...statusOpts, { value:ARCHIVED_FILTER, label:t.archivedFilter }]} isRTL={isRTL} style={filterInputCss(isRTL)} />
@@ -3395,7 +3472,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
             <table style={{ width:"100%",minWidth:"920px",borderCollapse:"collapse",fontSize:"0.85rem" }}>
               <thead>
                 <tr style={{ background:T.bgApp }}>
-                  {[t.date,t.category,t.portfolio,t.investment,t.amount,t.transactionType,t.status,""].map((h,i)=>(
+                  {[t.date,t.category,t.portfolio,t.investment,t.amount,t.transactionType,t.status,t.smartStatusLabel,""].map((h,i)=>(
                     <th key={i} style={{ padding:"10px 14px",textAlign:isRTL?"right":"left",fontSize:"0.7rem",fontWeight:600,color:T.textMuted,borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap" }}>{h}</th>
                   ))}
                 </tr>
@@ -3405,6 +3482,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
                   const txRowId = tx?.id ?? `tx-row-${i}`;
                   const ptf = portfolios.find(p=>p.id===tx.portfolioId);
                   const inv = visible(db?.investments||[]).find(inv=>inv.id===tx.investmentId);
+                  const txSmartStatus = getSmartTxStatus(tx);
                   return (
                     <tr key={txRowId} style={{ borderBottom:i<sorted.length-1?`1px solid ${T.border}`:"none",transition:"background 0.12s" }}
                       onMouseEnter={e=>e.currentTarget.style.background=T.bgApp}
@@ -3419,6 +3497,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
                       </td>
                       <td style={{ padding:"11px 14px",textAlign:isRTL?"right":"left" }}><Chip color={tx.type==="income"?T.positive:T.negative}>{tx.type==="income"?t.income:t.expense}</Chip></td>
                       <td style={{ padding:"11px 14px",textAlign:isRTL?"right":"left" }}><Chip color={statusColor(tx.status)}>{tx.status}</Chip></td>
+                      <td style={{ padding:"11px 14px",textAlign:isRTL?"right":"left" }}>{txSmartStatus ? <Chip color={smartStatusColor(txSmartStatus)}>{smartStatusLabel(txSmartStatus)}</Chip> : "—"}</td>
                       <td style={{ padding:"11px 10px",position:"relative" }} onClick={e=>e.stopPropagation()}>
                         <div style={{ display:"flex",gap:"3px",justifyContent:"flex-end" }}>
                           <button title={t.viewDetails} onClick={()=>openView(tx)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"5px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.info} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><Eye size={13}/></button>
@@ -3445,6 +3524,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"10px" }}>
               <ReadOnlyField label={t.transactionType} value={form.type} />
               <ReadOnlyField label={t.status} value={form.status} />
+              <ReadOnlyField label={t.smartStatusLabel} value={smartStatusLabel(getSmartTxStatus(editItem || form))} />
               <ReadOnlyField label={t.amount} value={fmtMoney(Number(form.amount || 0), { currency:portfolioCurrency(db, form.portfolioId) })} />
               <ReadOnlyField label={t.portfolio} value={portfolios.find((p)=>p.id===form.portfolioId)?.name} />
               <ReadOnlyField label="Due Date" value={formatDateDisplay(form.dueDate || editItem?.due_date) || "Pending"} />
