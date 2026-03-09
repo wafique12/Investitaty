@@ -3285,6 +3285,11 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const [form, setForm] = useState(EMPTY);
   const f = k => v => setForm(p=>({...p,[k]:v}));
 
+  const onPortfolioFilterChange = (nextPortfolioId) => {
+    setFilterPortfolio(nextPortfolioId);
+    setFilterInvestment("");
+  };
+
   useEffect(() => () => {
     setShowModal(false);
     setEditItem(null);
@@ -3302,6 +3307,9 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
 
   const portfolios = visible(db?.portfolios||[]);
   const allInvestments = visible(db?.investments||[]);
+  const investmentsForFilter = filterPortfolio
+    ? allInvestments.filter((inv) => inv.portfolioId === filterPortfolio)
+    : allInvestments;
   const smartStatusOptions = [
     { value:"upcoming", label:t.smartStatusUpcoming },
     { value:"late", label:t.smartStatusLate },
@@ -3398,9 +3406,15 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
 
   useEffect(() => {
     if (!navigationFilter?.investmentId) return;
-    setFilterInvestment(navigationFilter.investmentId);
     if (navigationFilter.portfolioId) setFilterPortfolio(navigationFilter.portfolioId);
+    setFilterInvestment(navigationFilter.investmentId);
   }, [navigationFilter]);
+
+  useEffect(() => {
+    if (!filterInvestment) return;
+    const stillValid = investmentsForFilter.some((inv) => inv.id === filterInvestment);
+    if (!stillValid) setFilterInvestment("");
+  }, [filterPortfolio, filterInvestment, investmentsForFilter]);
 
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font }}>
@@ -3436,9 +3450,19 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
         </div>
       </div>
       <div style={{ ...filterBarCss, marginBottom:"20px" }}>
-        <Select value={filterPortfolio} onChange={e=>setFilterPortfolio(e.target.value)} options={[{value:"",label:t.allPortfolios},...portfolios.map(p=>({value:p.id,label:p.name}))]} isRTL={isRTL} style={filterInputCss(isRTL)} />
         <SearchableSingleSelect
-          options={allInvestments.map(i=>({ value:i.id, label:i.name }))}
+          options={[{ value:"", label:t.allPortfolios }, ...portfolios.map((p)=>({ value:p.id, label:p.name }))]}
+          value={filterPortfolio}
+          onChange={onPortfolioFilterChange}
+          placeholder={t.allPortfolios}
+          searchPlaceholder={t.allPortfolios}
+          font={font}
+          minWidth="220px"
+          variant="lightFilter"
+          isRTL={isRTL}
+        />
+        <SearchableSingleSelect
+          options={investmentsForFilter.map(i=>({ value:i.id, label:i.name }))}
           value={filterInvestment}
           onChange={setFilterInvestment}
           placeholder={t.filterByInvestment}
