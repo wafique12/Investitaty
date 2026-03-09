@@ -206,6 +206,8 @@ const TRANSLATIONS = {
     expense: "Expense",
     scheduled: "Scheduled",
     recorded: "Recorded",
+    deposited: "Deposited",
+    collected: "Collected",
     cancelled: "Cancelled",
     active: "Active",
     paused: "Paused",
@@ -444,6 +446,8 @@ const TRANSLATIONS = {
     expense: "مصروف",
     scheduled: "مجدول",
     recorded: "مسجل",
+    deposited: "مودع",
+    collected: "محصل",
     cancelled: "ملغى",
     active: "نشط",
     paused: "موقوف",
@@ -1721,11 +1725,11 @@ function DateRangeFilter({ startDate, endDate, onChange, onClear, isRTL, label, 
         <CalendarClock size={14} color={T.textMuted} />
       </button>
       {open && (
-        <div style={{ position:"absolute", top:"calc(100% + 6px)", zIndex:1000, background:"#fff", border:"1px solid rgba(148,163,184,0.32)", borderRadius:"10px", boxShadow:"0 12px 28px rgba(15,23,42,0.14)", padding:"10px", minWidth:"250px" }}>
+        <div style={{ position:"absolute", top:"calc(100% + 6px)", zIndex:1000, background:T.bgCard, border:`1px solid ${T.border}`, borderRadius:"10px", boxShadow:"0 12px 28px rgba(15,23,42,0.14)", padding:"10px", minWidth:"250px" }}>
           <div style={{ display:"grid", gap:"8px" }}>
             <input type="date" value={startDate} onChange={(e)=>onChange(e.target.value, endDate)} style={{ ...filterInputCss(isRTL), minHeight:"34px" }} />
             <input type="date" value={endDate} onChange={(e)=>onChange(startDate, e.target.value)} style={{ ...filterInputCss(isRTL), minHeight:"34px" }} />
-            <button type="button" onClick={()=>{ onClear(); setOpen(false); }} style={{ background:"none", border:"1px solid rgba(148,163,184,0.4)", borderRadius:"8px", padding:"6px 10px", cursor:"pointer", fontSize:"0.78rem", color:T.textSecondary }}>{clearLabel}</button>
+            <button type="button" onClick={()=>{ onClear(); setOpen(false); }} style={{ background:"none", border:`1px solid ${T.border}`, borderRadius:"8px", padding:"6px 10px", cursor:"pointer", fontSize:"0.78rem", color:T.textSecondary }}>{clearLabel}</button>
           </div>
         </div>
       )}
@@ -3358,18 +3362,30 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const smartStatusLabel = (status) => smartStatusOptions.find((item) => item.value === status)?.label || "—";
   const allTx = db?.transactions||[];
   const filtered = allTx.filter((tx) => {
-    const txDate = tx.date || "";
     const portfolioMatch = !filterPortfolio || tx.portfolioId===filterPortfolio;
-    const statusMatch = !filterStatus || (filterStatus === ARCHIVED_FILTER ? Boolean(tx.is_hidden) : (!tx.is_hidden && tx.status===filterStatus));
+    const statusMatch = (() => {
+      if (filterStatus === ARCHIVED_FILTER) return Boolean(tx.is_hidden);
+      if (tx.is_hidden) return false;
+      if (!filterStatus) return true;
+      if (filterStatus === "scheduled") return isScheduledTransaction(tx);
+      if (filterStatus === "deposited") return isDepositedTransaction(tx) && !isCollectedTransaction(tx);
+      if (filterStatus === "collected") return isCollectedTransaction(tx);
+      return tx.status === filterStatus;
+    })();
     const investmentMatch = !filterInvestment || tx.investmentId===filterInvestment;
     const smartStatus = getSmartTxStatus(tx);
     const smartStatusMatch = !filterSmartStatus || smartStatus === filterSmartStatus;
-    const parsedTxDate = toDateOnly(txDate);
+    const contextDateValue = filterStatus === "collected"
+      ? (tx.collectedAt || tx.collected_at)
+      : filterStatus === "deposited"
+        ? (tx.depositedAt || tx.deposited_at)
+        : (tx.date || tx.created_at);
+    const parsedTxDate = toDateOnly(contextDateValue);
     const parsedStartDate = toDateOnly(filterStartDate);
     const parsedEndDate = toDateOnly(filterEndDate);
     const startMatch = !parsedStartDate || (parsedTxDate && parsedTxDate >= parsedStartDate);
-    const endMatch = !parsedEndDate || (parsedTxDate && parsedTxDate <= parsedEndDate);
-    return portfolioMatch && statusMatch && investmentMatch && smartStatusMatch && startMatch && endMatch && (filterStatus===ARCHIVED_FILTER ? true : !tx.is_hidden);
+    const endMatch = !parsedEndDate || (parsedTxDate && parsedTxDate < parsedEndDate);
+    return portfolioMatch && statusMatch && investmentMatch && smartStatusMatch && startMatch && endMatch;
   });
   const sorted = [...filtered].sort((a,b)=>new Date(b.date||b.created_at||0)-new Date(a.date||a.created_at||0));
 
@@ -3424,6 +3440,13 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const totalExp = txExpense(filtered);
 
   const typeOpts = [{value:"income",label:t.income},{value:"expense",label:t.expense}];
+  const statusFilterOptions = [
+    { value:"", label:t.transactionStatusLabel },
+    { value:"scheduled", label:t.scheduled },
+    { value:"deposited", label:t.deposited },
+    { value:"collected", label:t.collected },
+    { value:ARCHIVED_FILTER, label:t.archivedFilter },
+  ];
   const statusOpts = ((db?.settings?.transactionStatuses&&db.settings.transactionStatuses.length)?db.settings.transactionStatuses:["recorded","scheduled","cancelled"]).map(v=>({ value:v, label:v }));
 
   const normalizedStatus = String(form.status || "").toLowerCase();
@@ -3492,6 +3515,17 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
       </div>
       <div style={{ ...filterBarCss, marginBottom:"20px" }}>
         <SearchableSingleSelect
+          options={statusFilterOptions}
+          value={filterStatus}
+          onChange={setFilterStatus}
+          placeholder={t.transactionStatusLabel}
+          searchPlaceholder={t.transactionStatusLabel}
+          font={font}
+          minWidth="220px"
+          variant="lightFilter"
+          isRTL={isRTL}
+        />
+        <SearchableSingleSelect
           options={[{ value:"", label:t.allPortfolios }, ...portfolios.map((p)=>({ value:p.id, label:p.name }))]}
           value={filterPortfolio}
           onChange={onPortfolioFilterChange}
@@ -3533,7 +3567,6 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
           label={t.transactionDateRange}
           clearLabel={t.clearDateRange}
         />
-        <Select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} options={[{ value:"", label:t.transactionStatusLabel }, ...statusOpts, { value:ARCHIVED_FILTER, label:t.archivedFilter }]} isRTL={isRTL} style={filterInputCss(isRTL)} />
       </div>
 
       <Card style={{ overflow:"visible" }}>
