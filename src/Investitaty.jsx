@@ -180,6 +180,7 @@ const TRANSLATIONS = {
     transactionDateRange: "Transaction Date Range",
     clearDateRange: "Clear",
     allLabel: "All",
+    allStatuses: "All statuses",
     unarchive: "Unarchive",
     deleteCascadeWarning: "This will also delete all related investments and transactions. This action cannot be undone.",
     quantity: "Quantity",
@@ -421,6 +422,7 @@ const TRANSLATIONS = {
     transactionDateRange: "نطاق تاريخ المعاملة",
     clearDateRange: "مسح",
     allLabel: "الكل",
+    allStatuses: "كل الحالات",
     unarchive: "إلغاء الأرشفة",
     deleteCascadeWarning: "سيؤدي هذا أيضًا إلى حذف جميع الاستثمارات والمعاملات المرتبطة. لا يمكن التراجع عن هذا الإجراء.",
     quantity: "الكمية",
@@ -3445,7 +3447,6 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
     { value:"collected", label:t.collected },
     { value:"deposited", label:t.deposited },
     { value:"scheduled", label:t.scheduled },
-    { value:"", label:t.allLabel },
   ];
   const statusOpts = ((db?.settings?.transactionStatuses&&db.settings.transactionStatuses.length)?db.settings.transactionStatuses:["recorded","scheduled","cancelled"]).map(v=>({ value:v, label:v }));
 
@@ -3515,18 +3516,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
       </div>
       <div style={{ ...filterBarCss, marginBottom:"20px" }}>
         <SearchableSingleSelect
-          options={statusFilterOptions}
-          value={filterStatus}
-          onChange={setFilterStatus}
-          placeholder={t.transactionStatusLabel}
-          searchPlaceholder={t.transactionStatusLabel}
-          font={font}
-          minWidth="220px"
-          variant="lightFilter"
-          isRTL={isRTL}
-        />
-        <SearchableSingleSelect
-          options={[{ value:"", label:t.allPortfolios }, ...portfolios.map((p)=>({ value:p.id, label:p.name }))]}
+          options={portfolios.map((p)=>({ value:p.id, label:p.name }))}
           value={filterPortfolio}
           onChange={onPortfolioFilterChange}
           placeholder={t.allPortfolios}
@@ -3553,6 +3543,17 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
           onChange={setFilterSmartStatus}
           placeholder={t.smartStatusLabel}
           searchPlaceholder={t.smartStatusSearchPlaceholder}
+          font={font}
+          minWidth="220px"
+          variant="lightFilter"
+          isRTL={isRTL}
+        />
+        <SearchableSingleSelect
+          options={statusFilterOptions}
+          value={filterStatus}
+          onChange={setFilterStatus}
+          placeholder={t.allStatuses}
+          searchPlaceholder={t.transactionStatusLabel}
           font={font}
           minWidth="220px"
           variant="lightFilter"
