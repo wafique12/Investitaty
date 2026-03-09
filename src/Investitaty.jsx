@@ -3353,7 +3353,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
         <Select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} options={[{ value:"", label:t.transactionStatusLabel }, ...statusOpts, { value:ARCHIVED_FILTER, label:t.archivedFilter }]} isRTL={isRTL} style={filterInputCss(isRTL)} />
       </div>
 
-      <Card style={{ overflow:"hidden" }}>
+      <Card style={{ overflow:"visible" }}>
         {sorted.length===0
           ? <div style={{ padding:"32px" }}><EmptyState text={t.noRecords}/></div>
           : (
@@ -3368,10 +3368,11 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
               </thead>
               <tbody>
                 {sorted.map((tx,i)=>{
+                  const txRowId = tx?.id ?? `tx-row-${i}`;
                   const ptf = portfolios.find(p=>p.id===tx.portfolioId);
                   const inv = visible(db?.investments||[]).find(inv=>inv.id===tx.investmentId);
                   return (
-                    <tr key={tx.id||i} style={{ borderBottom:i<sorted.length-1?`1px solid ${T.border}`:"none",transition:"background 0.12s" }}
+                    <tr key={txRowId} style={{ borderBottom:i<sorted.length-1?`1px solid ${T.border}`:"none",transition:"background 0.12s" }}
                       onMouseEnter={e=>e.currentTarget.style.background=T.bgApp}
                       onMouseLeave={e=>e.currentTarget.style.background="transparent"}
                     >
@@ -3387,11 +3388,11 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
                       <td style={{ padding:"11px 10px",position:"relative" }} onClick={e=>e.stopPropagation()}>
                         <div style={{ display:"flex",gap:"3px",justifyContent:"flex-end" }}>
                           <button title={t.viewDetails} onClick={()=>openView(tx)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"5px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.info} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><Eye size={13}/></button>
-                          <button title={t.settings} onClick={()=>setOpenMenu(openMenu===tx.id?null:tx.id)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"5px",display:"flex",position:"relative" }}
+                          <button title={t.settings} onClick={()=>setOpenMenu(openMenu===txRowId?null:txRowId)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"5px",display:"flex",position:"relative" }}
                             onMouseEnter={e=>{e.currentTarget.style.background=T.bgApp; e.currentTarget.style.color=T.warning;}} onMouseLeave={e=>{e.currentTarget.style.background="none"; e.currentTarget.style.color=T.textMuted;}}>
                             <MoreVertical size={13}/>
                           </button>
-                          {openMenu===tx.id && <TxActionMenu tx={tx} onClose={()=>setOpenMenu(null)}/>}
+                          {openMenu===txRowId && <TxActionMenu tx={tx} onClose={()=>setOpenMenu(null)}/>}
                         </div>
                       </td>
                     </tr>
@@ -3487,8 +3488,9 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
 }
 
 function TxActionMenu({ tx, onClose }) {
-  const { patchItem, archiveItem, unarchiveItem, hardDeleteItem, t, db } = useApp();
+  const { patchItem, archiveItem, unarchiveItem, hardDeleteItem, t, db, isRTL } = useApp();
   const ref = useRef(null);
+  const txId = tx?.id;
   useEffect(() => {
     const h = e => { if(ref.current&&!ref.current.contains(e.target)) onClose(); };
     document.addEventListener("mousedown",h); return ()=>document.removeEventListener("mousedown",h);
@@ -3497,13 +3499,13 @@ function TxActionMenu({ tx, onClose }) {
   const doneStatus = statuses.find(s=>String(s).toLowerCase().includes("record")) || statuses[0];
   const queuedStatus = statuses.find(s=>String(s).toLowerCase().includes("schedule")) || statuses[1] || statuses[0];
   const actions = [
-    { label:t.markCollected, icon:<Check size={13}/>, color:T.positive, show:tx.status!==doneStatus, action:()=>{ patchItem("transactions",tx.id,{status:doneStatus,collected_at:new Date().toISOString(),collectedAt:new Date().toISOString()}); onClose(); } },
-    { label:t.markScheduled, icon:<RefreshCw size={13}/>, color:T.warning, show:tx.status===doneStatus, action:()=>{ patchItem("transactions",tx.id,{status:queuedStatus}); onClose(); } },
-    { label:tx.is_hidden ? t.unarchive : t.archive, icon:tx.is_hidden ? <Eye size={13}/> : <EyeOff size={13}/>, color:T.warning, show:true, action:()=>{ tx.is_hidden ? unarchiveItem("transactions",tx.id) : archiveItem("transactions",tx.id); onClose(); } },
-    { label:t.deleteItem, icon:<Trash2 size={13}/>, color:T.negative, show:true, action:()=>{ if(window.confirm(t.deleteCascadeWarning)) hardDeleteItem("transactions",tx.id); onClose(); } },
+    { label:t.markCollected, icon:<Check size={13}/>, color:T.positive, show:tx.status!==doneStatus, action:()=>{ if (!txId) return onClose(); patchItem("transactions",txId,{status:doneStatus,collected_at:new Date().toISOString(),collectedAt:new Date().toISOString()}); onClose(); } },
+    { label:t.markScheduled, icon:<RefreshCw size={13}/>, color:T.warning, show:tx.status===doneStatus, action:()=>{ if (!txId) return onClose(); patchItem("transactions",txId,{status:queuedStatus}); onClose(); } },
+    { label:tx.is_hidden ? t.unarchive : t.archive, icon:tx.is_hidden ? <Eye size={13}/> : <EyeOff size={13}/>, color:T.warning, show:true, action:()=>{ if (!txId) return onClose(); tx.is_hidden ? unarchiveItem("transactions",txId) : archiveItem("transactions",txId); onClose(); } },
+    { label:t.deleteItem, icon:<Trash2 size={13}/>, color:T.negative, show:true, action:()=>{ if (!txId) return onClose(); if(window.confirm(t.deleteCascadeWarning)) hardDeleteItem("transactions",txId); onClose(); } },
   ].filter(a=>a.show);
   return (
-    <div ref={ref} style={{ position:"absolute",right:0,top:"calc(100% + 4px)",zIndex:500,background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:"10px",minWidth:"170px",boxShadow:"0 8px 28px rgba(0,0,0,0.15)",overflow:"hidden" }}>
+    <div ref={ref} style={{ position:"absolute",right:0,top:"calc(100% + 4px)",zIndex:5000,background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:"10px",minWidth:"170px",boxShadow:"0 8px 28px rgba(0,0,0,0.15)",overflow:"hidden" }}>
       {actions.map(a=>(
         <button key={a.label} onClick={a.action} style={{ display:"flex",alignItems:"center",gap:"8px",width:"100%",padding:"9px 14px",background:"none",border:"none",color:a.color,fontSize:"0.78rem",fontWeight:500,cursor:"pointer",textAlign:isRTL?"right":"left" }}
           onMouseEnter={e=>e.currentTarget.style.background=T.bgApp}
