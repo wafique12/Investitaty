@@ -4315,20 +4315,26 @@ function StatisticsTab() {
   const lossByYearRisk = {};
   const incomeByYearStatus = {};
   const statuses = db?.settings?.transactionStatuses?.length ? db.settings.transactionStatuses : ["recorded", "scheduled", "cancelled"];
+  const statusAttributionDate = (tx) => {
+    if (isCollectedTransaction(tx)) return tx.collectedAt || tx.collected_at || tx.date || tx.created_at;
+    if (isDepositedTransaction(tx)) return tx.depositedAt || tx.deposited_at || tx.date || tx.created_at;
+    return tx.date || tx.created_at;
+  };
 
   filteredTransactions.forEach((tx) => {
     const year = new Date(tx.date || tx.created_at || Date.now()).getFullYear();
-    if (!Number.isFinite(year)) return;
+    const statusYear = new Date(statusAttributionDate(tx) || Date.now()).getFullYear();
+    if (!Number.isFinite(year) || !Number.isFinite(statusYear)) return;
     const inv = invById.get(tx.investmentId);
     const risk = toRiskBucket(inv?.risk);
     incomeByYearRisk[year] = incomeByYearRisk[year] || { low:0, medium:0, high:0 };
     lossByYearRisk[year] = lossByYearRisk[year] || { low:0, medium:0, high:0 };
-    incomeByYearStatus[year] = incomeByYearStatus[year] || Object.fromEntries(statuses.map((s)=>[s,0]));
+    incomeByYearStatus[statusYear] = incomeByYearStatus[statusYear] || Object.fromEntries(statuses.map((s)=>[s,0]));
 
     if (tx.type === "income" && tx.status !== "cancelled") {
       if (risk) incomeByYearRisk[year][risk] += toBaseAmount(db, parseFloat(tx.amount) || 0, portfolioCurrency(db, tx.portfolioId));
-      if (incomeByYearStatus[year][tx.status] === undefined) incomeByYearStatus[year][tx.status] = 0;
-      incomeByYearStatus[year][tx.status] += toBaseAmount(db, parseFloat(tx.amount) || 0, portfolioCurrency(db, tx.portfolioId));
+      if (incomeByYearStatus[statusYear][tx.status] === undefined) incomeByYearStatus[statusYear][tx.status] = 0;
+      incomeByYearStatus[statusYear][tx.status] += toBaseAmount(db, parseFloat(tx.amount) || 0, portfolioCurrency(db, tx.portfolioId));
     }
 
     if (tx.type === "expense" && tx.status !== "cancelled" && risk) {
@@ -4350,7 +4356,10 @@ function StatisticsTab() {
   }, [0, 0, 0]);
   riskProfitRows.push({ key:"risk-profit-total", isTotal:true, values:[t.totalLabel, riskProfitTotals[0], riskProfitTotals[1], riskProfitTotals[2], riskProfitTotals[0]+riskProfitTotals[1]+riskProfitTotals[2]] });
 
-  const statusRows = visibleYears.map((year) => {
+  const statusVisibleYears = selectedYears.length
+    ? Object.keys(incomeByYearStatus).map(Number).filter((y) => selectedYears.includes(String(y))).sort((a, b) => b - a)
+    : Object.keys(incomeByYearStatus).map(Number).sort((a, b) => b - a);
+  const statusRows = statusVisibleYears.map((year) => {
     const byStatus = incomeByYearStatus[year] || {};
     const values = statuses.map((s) => byStatus[s] || 0);
     return { key:`status-${year}`, values:[String(year), ...values, values.reduce((sum, n) => sum + n, 0)] };
