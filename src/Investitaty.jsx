@@ -3349,7 +3349,6 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const [filterSmartStatus, setFilterSmartStatus] = useState("");
   const [filterStartDate, setFilterStartDate] = useState("");
   const [filterEndDate, setFilterEndDate] = useState("");
-  const [filterDateField, setFilterDateField] = useState("start");
   const [openMenu, setOpenMenu] = useState(null);
   const [formError, setFormError] = useState("");
 
@@ -3372,7 +3371,6 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
     setFilterSmartStatus("");
     setFilterStartDate("");
     setFilterEndDate("");
-    setFilterDateField("start");
     setOpenMenu(null);
     setForm(EMPTY);
     setFormError("");
@@ -3593,18 +3591,6 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
           isRTL={isRTL}
           label={t.transactionDateRange}
           clearLabel={t.clearDateRange}
-          panelTop={(
-            <div style={{ display:"flex", alignItems:"center", gap:"14px", minHeight:"20px", justifyContent:isRTL?"flex-end":"flex-start" }}>
-              <label style={{ display:"inline-flex", alignItems:"center", gap:"6px", fontSize:"0.78rem", color:T.textSecondary }}>
-                <input type="radio" name="transactions-date-field" value="start" checked={filterDateField === "start"} onChange={()=>setFilterDateField("start")} />
-                {t.startDate}
-              </label>
-              <label style={{ display:"inline-flex", alignItems:"center", gap:"6px", fontSize:"0.78rem", color:T.textSecondary }}>
-                <input type="radio" name="transactions-date-field" value="end" checked={filterDateField === "end"} onChange={()=>setFilterDateField("end")} />
-                {t.endDate}
-              </label>
-            </div>
-          )}
         />
       </div>
 
