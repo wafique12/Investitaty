@@ -6,7 +6,7 @@ import {
   TrendingUp, Wallet, DollarSign, BarChart2, Globe, LogOut,
   Cloud, Shield, Layers, Tag, FolderOpen, ArrowUpRight, PieChart as PieChartIcon,
   ArrowDownRight, Eye, EyeOff, AlertCircle, CheckCircle2,
-  Menu, Search, Landmark, ListTree, CircleDollarSign, Lock, Unlock, Undo2, RotateCcw, CalendarClock, Info,
+  Menu, Search, Landmark, ListTree, CircleDollarSign, Lock, Unlock, Undo2, RotateCcw, CalendarClock, Info, Download,
 } from "lucide-react";
 import { supabase, hasSupabaseConfig, hasSupabaseClient } from "./lib/supabaseClient";
 import BackupService from "./services/BackupService";
@@ -248,6 +248,10 @@ const TRANSLATIONS = {
     ofLabel: "of",
     previous: "Previous",
     next: "Next",
+    goToPage: "Go to Page",
+    pageSize: "Page Size",
+    allRecords: "All",
+    exportToExcel: "Export to Excel",
     expandAll: "Expand all",
     collapseAll: "Collapse all",
     pageLabel: "Page",
@@ -490,6 +494,10 @@ const TRANSLATIONS = {
     ofLabel: "من",
     previous: "السابق",
     next: "التالي",
+    goToPage: "اذهب إلى الصفحة",
+    pageSize: "حجم الصفحة",
+    allRecords: "الكل",
+    exportToExcel: "تصدير إلى Excel",
     expandAll: "فتح الكل",
     collapseAll: "طي الكل",
     pageLabel: "الصفحة",
@@ -2096,9 +2104,19 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileO
 
   return (
     <aside dir="ltr" style={{
-      width:showLabels?"220px":"72px",minHeight:"100vh",background:T.bgSidebar,
-      borderRight:"none",display:"flex",flexDirection:"column",flexShrink:0,
-      fontFamily:font,transition:"width 0.2s ease",
+      position:"fixed",
+      left:0,
+      top:0,
+      width:showLabels?"220px":"72px",
+      height:"100vh",
+      background:T.bgSidebar,
+      borderRight:"none",
+      display:"flex",
+      flexDirection:"column",
+      flexShrink:0,
+      zIndex:120,
+      fontFamily:font,
+      transition:"width 0.2s ease",
     }}>
       {sidebarContent}
     </aside>
@@ -3351,6 +3369,10 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const [filterEndDate, setFilterEndDate] = useState("");
   const [openMenu, setOpenMenu] = useState(null);
   const [formError, setFormError] = useState("");
+  const PAGE_SIZE_ALL = "all";
+  const [pageSize, setPageSize] = useState(50);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [goToPageInput, setGoToPageInput] = useState("1");
 
   const EMPTY = { portfolioId:"",investmentId:"",category:"",amount:"",date:"",dueDate:"",depositedAt:"",collectedAt:"",type:"income",status:"recorded",notes:"" };
   const [form, setForm] = useState(EMPTY);
@@ -3415,8 +3437,49 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
     return portfolioMatch && statusMatch && investmentMatch && smartStatusMatch && startMatch && endMatch;
   });
   const sorted = [...filtered].sort((a,b)=>new Date(b.date||b.created_at||0)-new Date(a.date||a.created_at||0));
+  const totalRecords = sorted.length;
+  const resolvedPageSize = pageSize === PAGE_SIZE_ALL ? Math.max(totalRecords, 1) : Number(pageSize) || 50;
+  const totalPages = Math.max(1, Math.ceil(totalRecords / resolvedPageSize));
+  const safePage = Math.min(Math.max(currentPage, 1), totalPages);
+  const paginatedTransactions = pageSize === PAGE_SIZE_ALL
+    ? sorted
+    : sorted.slice((safePage - 1) * resolvedPageSize, safePage * resolvedPageSize);
 
   const investmentsForPortfolio = form.portfolioId ? visible(db?.investments||[]).filter(i=>i.portfolioId===form.portfolioId) : [];
+
+  const handleExportToExcel = () => {
+    if (!sorted.length) return;
+    const rows = sorted.map((tx) => {
+      const portfolioName = portfolios.find((p) => p.id === tx.portfolioId)?.name || "";
+      const investmentName = allInvestments.find((inv) => inv.id === tx.investmentId)?.name || "";
+      return {
+        Date: tx.date || "",
+        Category: tx.category || "",
+        Portfolio: portfolioName,
+        Investment: investmentName,
+        Amount: tx.amount || 0,
+        Type: tx.type || "",
+        Status: tx.status || "",
+        SmartStatus: getSmartTxStatus(tx) || "",
+        DueDate: tx.dueDate || tx.due_date || "",
+        DepositedAt: tx.depositedAt || tx.deposited_at || "",
+        CollectedAt: tx.collectedAt || tx.collected_at || "",
+        Notes: tx.notes || "",
+      };
+    });
+    const headers = Object.keys(rows[0]);
+    const escapeCSV = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+    const csv = [headers.join(","), ...rows.map((row) => headers.map((header) => escapeCSV(row[header])).join(","))].join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `transactions_export_${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   const handleSave = () => {
     setFormError("");
@@ -3505,15 +3568,25 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
     if (!stillValid) setFilterInvestment("");
   }, [filterPortfolio, filterInvestment, investmentsForFilter]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterPortfolio, filterStatus, filterInvestment, filterSmartStatus, filterStartDate, filterEndDate, pageSize]);
+
+  useEffect(() => {
+    setGoToPageInput(String(safePage));
+  }, [safePage]);
+
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font }}>
       <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"16px",gap:"10px" }}>
         <div style={{ display:"flex",alignItems:"center",gap:"8px" }}>
           <div>
           <h2 style={{ margin:0,fontSize:"1.4rem",fontWeight:700,color:T.textPrimary }}>{t.transactions}</h2>
-          <div style={{ fontSize:"0.8rem",color:T.textMuted,marginTop:"2px" }}>{sorted.length} records</div>
+          <div style={{ fontSize:"0.8rem",color:T.textMuted,marginTop:"2px" }}>{totalRecords} records</div>
           </div>
         </div>
+        <div style={{ display:"flex", gap:"8px", flexWrap:"wrap" }}>
+        <Btn icon={<Download size={15}/>} onClick={handleExportToExcel}>{t.exportToExcel}</Btn>
         <Btn icon={<Plus size={15}/>} onClick={()=>{
           const selectedInvestment = allInvestments.find((inv) => inv.id === filterInvestment);
           const nextForm = selectedInvestment
@@ -3525,6 +3598,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
           setFormError("");
           setShowModal(true);
         }}>{t.addTransaction}</Btn>
+        </div>
       </div>
 
       {/* Summary + filter */}
@@ -3608,13 +3682,13 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
                 </tr>
               </thead>
               <tbody>
-                {sorted.map((tx,i)=>{
+                {paginatedTransactions.map((tx,i)=>{
                   const txRowId = tx?.id ?? `tx-row-${i}`;
                   const ptf = portfolios.find(p=>p.id===tx.portfolioId);
                   const inv = visible(db?.investments||[]).find(inv=>inv.id===tx.investmentId);
                   const txSmartStatus = getSmartTxStatus(tx);
                   return (
-                    <tr key={txRowId} style={{ borderBottom:i<sorted.length-1?`1px solid ${T.border}`:"none",transition:"background 0.12s" }}
+                    <tr key={txRowId} style={{ borderBottom:i<paginatedTransactions.length-1?`1px solid ${T.border}`:"none",transition:"background 0.12s" }}
                       onMouseEnter={e=>e.currentTarget.style.background=T.bgApp}
                       onMouseLeave={e=>e.currentTarget.style.background="transparent"}
                     >
@@ -3646,6 +3720,51 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
             </div>
           )
         }
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",gap:"12px",flexWrap:"wrap",padding:"14px 16px",borderTop:`1px solid ${T.border}` }}>
+          <div style={{ display:"flex",alignItems:"center",gap:"10px",flexWrap:"wrap" }}>
+            <label style={{ fontSize:"0.8rem",color:T.textMuted }}>{t.pageSize}</label>
+            <select
+              value={pageSize}
+              onChange={(e)=>setPageSize(e.target.value===PAGE_SIZE_ALL?PAGE_SIZE_ALL:Number(e.target.value))}
+              style={{ border:`1px solid ${T.border}`,borderRadius:"8px",padding:"6px 8px",fontSize:"0.8rem",background:T.bgCard,color:T.textPrimary }}
+            >
+              {[20,50,100].map((size)=><option key={size} value={size}>{size}</option>)}
+              <option value={PAGE_SIZE_ALL}>{t.allRecords}</option>
+            </select>
+            <span style={{ fontSize:"0.8rem",color:T.textMuted }}>{t.pageLabel} {safePage} / {totalPages}</span>
+          </div>
+          <div style={{ display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap" }}>
+            <button
+              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+              disabled={safePage <= 1 || pageSize === PAGE_SIZE_ALL}
+              style={{ border:`1px solid ${T.border}`,borderRadius:"8px",padding:"6px 10px",fontSize:"0.8rem",background:T.bgCard,color:T.textPrimary,cursor:(safePage <= 1 || pageSize === PAGE_SIZE_ALL)?"not-allowed":"pointer",opacity:(safePage <= 1 || pageSize === PAGE_SIZE_ALL)?0.5:1 }}
+            >
+              {t.previous}
+            </button>
+            <button
+              onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+              disabled={safePage >= totalPages || pageSize === PAGE_SIZE_ALL}
+              style={{ border:`1px solid ${T.border}`,borderRadius:"8px",padding:"6px 10px",fontSize:"0.8rem",background:T.bgCard,color:T.textPrimary,cursor:(safePage >= totalPages || pageSize === PAGE_SIZE_ALL)?"not-allowed":"pointer",opacity:(safePage >= totalPages || pageSize === PAGE_SIZE_ALL)?0.5:1 }}
+            >
+              {t.next}
+            </button>
+            <label style={{ fontSize:"0.8rem",color:T.textMuted }}>{t.goToPage}</label>
+            <input
+              type="number"
+              min={1}
+              max={totalPages}
+              value={goToPageInput}
+              onChange={(e)=>setGoToPageInput(e.target.value)}
+              onKeyDown={(e)=>{
+                if (e.key !== "Enter") return;
+                const nextPage = Number(goToPageInput);
+                if (Number.isFinite(nextPage)) setCurrentPage(Math.min(totalPages, Math.max(1, nextPage)));
+              }}
+              style={{ width:"84px",border:`1px solid ${T.border}`,borderRadius:"8px",padding:"6px 8px",fontSize:"0.8rem",background:T.bgCard,color:T.textPrimary }}
+              disabled={pageSize === PAGE_SIZE_ALL}
+            />
+          </div>
+        </div>
       </Card>
 
       {showModal && (
@@ -4986,8 +5105,10 @@ function MainApp() {
     settings:     <SettingsTab />,
   };
 
+  const desktopSidebarWidth = sidebarOpen ? 220 : 72;
+
   return (
-    <div style={{ display:"flex",minHeight:"100vh",background:T.bgApp,fontFamily:font }} dir={isRTL?"rtl":"ltr"}>
+    <div style={{ display:"flex",height:"100vh",background:T.bgApp,fontFamily:font,overflow:"hidden" }} dir={isRTL?"rtl":"ltr"}>
       <FontLoader/>
       <style>{`
         @keyframes modalIn { from{opacity:0;transform:scale(0.96)} to{opacity:1;transform:scale(1)} }
@@ -4996,7 +5117,8 @@ function MainApp() {
         ::-webkit-scrollbar { width: 5px; height: 5px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        body { margin: 0; }
+        html, body, #root { height: 100%; }
+        body { margin: 0; overflow: hidden; }
         @media (max-width: 1100px) {
           .invest-exp-grid { grid-template-columns: repeat(2,minmax(0,1fr)) !important; }
         }
@@ -5007,7 +5129,16 @@ function MainApp() {
 
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} isOpen={sidebarOpen} setIsOpen={setSidebarOpen} isMobile={isMobile} mobileOpen={mobileSidebarOpen} setMobileOpen={setMobileSidebarOpen} />
 
-      <main ref={mainRef} style={{ flex:1,overflowY:"auto",padding:isMobile?"16px":"32px 36px",maxWidth:"100%",display:"flex",flexDirection:"column" }}>
+      <main ref={mainRef} style={{
+        flex:1,
+        overflowY:"auto",
+        height:"100vh",
+        marginLeft:isMobile?0:`${desktopSidebarWidth}px`,
+        padding:isMobile?"16px":"32px 36px",
+        maxWidth:"100%",
+        display:"flex",
+        flexDirection:"column"
+      }}>
         {isMobile && (
           <button onClick={()=>setMobileSidebarOpen(true)} className="mb-4 inline-flex w-fit items-center gap-2 rounded-md border border-slate-700 bg-white px-3 py-2 text-sm" style={{ color:"#000" }}>
             <Menu size={15}/> Menu
