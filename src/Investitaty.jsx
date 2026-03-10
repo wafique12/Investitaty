@@ -1699,7 +1699,7 @@ const filterInputCss = (isRTL) => ({
   colorScheme:"light",
 });
 
-function DateRangeFilter({ startDate, endDate, onChange, onClear, isRTL, label, clearLabel, panelTop, stacked = false }) {
+function DateRangeFilter({ startDate, endDate, onChange, onClear, isRTL, label, clearLabel, panelTop }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   useEffect(() => {
@@ -1719,30 +1719,23 @@ function DateRangeFilter({ startDate, endDate, onChange, onClear, isRTL, label, 
         : label;
 
   return (
-    <div ref={wrapRef} style={{ position:"relative", minWidth:"240px" }}>
+    <div ref={wrapRef} style={{ position:"relative", width:"240px", maxWidth:"100%" }}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        style={{ ...filterInputCss(isRTL), display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", textAlign:isRTL?"right":"left" }}
+        style={{ ...filterInputCss(isRTL), width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", textAlign:isRTL?"right":"left" }}
       >
         <span style={{ color:(startDate || endDate) ? T.textPrimary : T.textMuted, fontSize:"0.82rem" }}>{displayValue}</span>
         <CalendarClock size={14} color={T.textMuted} />
       </button>
       {open && (
-        <div style={{ position:"absolute", top:"calc(100% + 6px)", zIndex:1000, background:T.bgCard, border:`1px solid ${T.border}`, borderRadius:"10px", boxShadow:"0 12px 28px rgba(15,23,42,0.14)", padding:"10px", minWidth:"280px" }}>
+        <div style={{ position:"absolute", top:"calc(100% + 6px)", zIndex:1000, width:"100%", maxWidth:"240px", background:T.bgCard, border:`1px solid ${T.border}`, borderRadius:"10px", boxShadow:"0 12px 28px rgba(15,23,42,0.14)", padding:"10px" }}>
           <div style={{ display:"grid", gap:"8px" }}>
             {panelTop}
-            {stacked ? (
-              <>
-                <input type="date" value={startDate} onChange={(e)=>onChange(e.target.value, endDate)} style={{ ...filterInputCss(isRTL), minHeight:"34px" }} />
-                <input type="date" value={endDate} onChange={(e)=>onChange(startDate, e.target.value)} style={{ ...filterInputCss(isRTL), minHeight:"34px" }} />
-              </>
-            ) : (
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"8px" }}>
-                <input type="date" value={startDate} onChange={(e)=>onChange(e.target.value, endDate)} style={{ ...filterInputCss(isRTL), minHeight:"34px" }} />
-                <input type="date" value={endDate} onChange={(e)=>onChange(startDate, e.target.value)} style={{ ...filterInputCss(isRTL), minHeight:"34px" }} />
-              </div>
-            )}
+            <>
+              <input type="date" value={startDate} onChange={(e)=>onChange(e.target.value, endDate)} style={{ ...filterInputCss(isRTL), minHeight:"34px" }} />
+              <input type="date" value={endDate} onChange={(e)=>onChange(startDate, e.target.value)} style={{ ...filterInputCss(isRTL), minHeight:"34px" }} />
+            </>
             <button type="button" onClick={()=>{ onClear(); setOpen(false); }} style={{ background:"none", border:`1px solid ${T.border}`, borderRadius:"8px", padding:"6px 10px", cursor:"pointer", fontSize:"0.78rem", color:T.textSecondary }}>{clearLabel}</button>
           </div>
         </div>
@@ -3048,7 +3041,6 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                 </label>
               </div>
             )}
-            stacked
           />
         </div>
       </div>
@@ -3601,6 +3593,18 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
           isRTL={isRTL}
           label={t.transactionDateRange}
           clearLabel={t.clearDateRange}
+          panelTop={(
+            <div style={{ display:"flex", alignItems:"center", gap:"14px", minHeight:"20px", justifyContent:isRTL?"flex-end":"flex-start" }}>
+              <label style={{ display:"inline-flex", alignItems:"center", gap:"6px", fontSize:"0.78rem", color:T.textSecondary }}>
+                <input type="radio" name="transactions-date-field" value="start" checked={filterDateField === "start"} onChange={()=>setFilterDateField("start")} />
+                {t.startDate}
+              </label>
+              <label style={{ display:"inline-flex", alignItems:"center", gap:"6px", fontSize:"0.78rem", color:T.textSecondary }}>
+                <input type="radio" name="transactions-date-field" value="end" checked={filterDateField === "end"} onChange={()=>setFilterDateField("end")} />
+                {t.endDate}
+              </label>
+            </div>
+          )}
         />
       </div>
 
