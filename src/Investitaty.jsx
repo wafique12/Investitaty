@@ -193,7 +193,7 @@ const TRANSLATIONS = {
     transactionDateOutOfRange: "Transaction date must be within the investment start and end dates.",
     dueDateOutOfRange: "Due date must be within the investment start and end dates.",
     investmentRequiredForTransaction: "Please select an investment before saving the transaction.",
-    requiredFieldsError: "Please fill in all required fields.",
+    : "Please fill in all required fields.",
     purchaseDate: "Purchase Date",
     startDate: "Start Date",
     endDate: "End Date",
@@ -441,7 +441,7 @@ const TRANSLATIONS = {
     transactionDateOutOfRange: "يجب أن يكون تاريخ المعاملة ضمن تاريخ بداية ونهاية الاستثمار.",
     dueDateOutOfRange: "يجب أن يكون تاريخ الاستحقاق ضمن تاريخ بداية ونهاية الاستثمار.",
     investmentRequiredForTransaction: "يرجى اختيار استثمار قبل حفظ المعاملة.",
-    requiredFieldsError: "يرجى تعبئة جميع الحقول المطلوبة.",
+    : "يرجى تعبئة جميع الحقول المطلوبة.",
     purchaseDate: "تاريخ الشراء",
     startDate: "تاريخ البداية",
     endDate: "تاريخ النهاية",
@@ -3277,8 +3277,8 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                 <FormField label={t.status} required><Select value={form.status} onChange={e=>{f("status")(e.target.value);setInvalidFields(prev=>({...prev,status:false}));}} invalid={invalidFields.status} options={statusOpts} isRTL={isRTL}/></FormField>
                 <FormField label={t.investmentMethod} required><Select value={form.investmentMethod} onChange={e=>{f("investmentMethod")(e.target.value);setInvalidFields(prev=>({...prev,investmentMethod:false}));}} invalid={invalidFields.investmentMethod} options={methodOpts} placeholder={t.selectMethod} isRTL={isRTL}/></FormField>
               </div>
-              {formError && formError !== t.splitFundingMismatchError && <div style={{ color:T.negative, fontSize:"0.78rem", marginTop:"-6px", marginBottom:"10px" }}>{formError}</div>}
-              <FormField label={t.notes}><Input value={form.notes} onChange={e=>f("notes")(e.target.value)} isRTL={isRTL} placeholder={`(${t.optional})`}/></FormField>
+             <FormField label={t.notes}><Input value={form.notes} onChange={e=>f("notes")(e.target.value)} isRTL={isRTL} placeholder={`(${t.optional})`}/></FormField>
+            {formError && formError !== t.splitFundingMismatchError && <div style={{ color:T.negative, fontSize:"0.78rem", marginTop:"-6px", marginBottom:"10px" }}>{formError}</div>}
             </div>
           )}
           <div style={{ display:"flex",justifyContent:"flex-end",gap:"10px",marginTop:"8px" }}>
