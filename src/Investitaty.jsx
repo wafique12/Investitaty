@@ -762,14 +762,24 @@ function migrateSchema(data) {
 }
 
 let onUnauthorized = null;
+let suppressUnauthorizedInterceptor = false;
+
+function isAuthRoutePath() {
+  const path = String(window?.location?.pathname || "").toLowerCase();
+  return path === "/login" || path === "/auth-callback";
+}
 
 function setUnauthorizedInterceptor(handler) {
   onUnauthorized = typeof handler === "function" ? handler : null;
 }
 
+function setUnauthorizedInterceptorSuppressed(value) {
+  suppressUnauthorizedInterceptor = Boolean(value);
+}
+
 async function apiFetch(input, init) {
   const res = await fetch(input, init);
-  if (res.status === 401) {
+  if (res.status === 401 && !suppressUnauthorizedInterceptor && !isAuthRoutePath()) {
     onUnauthorized?.();
   }
   return res;
@@ -849,6 +859,7 @@ function useGoogleAuth(lang = "en") {
     }
   });
   const [authLoading, setAuthLoading] = useState(false);
+  const [authInitialized, setAuthInitialized] = useState(false);
   const [authError, setAuthError] = useState(null);
   const [gapiReady, setGapiReady] = useState(false);
   const [storageReady, setStorageReady] = useState(() => isLocalStorageAvailable());
@@ -880,6 +891,10 @@ function useGoogleAuth(lang = "en") {
       accountChooserMode: "select_account + popup",
     });
   }, [authLog, lang]);
+
+  useEffect(() => {
+    setAuthInitialized(true);
+  }, []);
 
   useEffect(() => {
     try {
@@ -960,6 +975,7 @@ function useGoogleAuth(lang = "en") {
 
     setAuthLoading(true);
     setAuthError(null);
+    setUnauthorizedInterceptorSuppressed(true);
     const attemptId = Date.now();
     activeAttemptRef.current = attemptId;
 
@@ -968,6 +984,7 @@ function useGoogleAuth(lang = "en") {
       if (activeAttemptRef.current !== attemptId) return;
       authLog("Sign-in timed out waiting for callback", { attemptId });
       setAuthLoading(false);
+      setUnauthorizedInterceptorSuppressed(false);
       setAuthError("Sign-in timed out. Popup may be blocked or redirect origin is not allowed.");
     }, 30000);
 
@@ -993,6 +1010,7 @@ function useGoogleAuth(lang = "en") {
               return;
             }
             setAuthLoading(false);
+            setUnauthorizedInterceptorSuppressed(false);
             setAuthError(`Auth error: ${response.error}`);
             return;
           }
@@ -1000,6 +1018,7 @@ function useGoogleAuth(lang = "en") {
           if (!response?.access_token) {
             authLog("No access token in callback payload", response);
             setAuthLoading(false);
+            setUnauthorizedInterceptorSuppressed(false);
             setAuthError("Google returned no session token. Please retry (popup/redirect may be blocked).");
             return;
           }
@@ -1014,6 +1033,7 @@ function useGoogleAuth(lang = "en") {
             localStorage.removeItem(AUTH_STORAGE_KEY);
             localStorage.removeItem(AUTH_CONSENT_STORAGE_KEY);
             setHasGrantedConsent(false);
+            setUnauthorizedInterceptorSuppressed(false);
             return;
           }
 
@@ -1028,7 +1048,7 @@ function useGoogleAuth(lang = "en") {
             authLog("Fetching user profile via OAuth userinfo endpoint");
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 15000);
-            const userRes = await apiFetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+            const userRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
               headers: { Authorization: `Bearer ${accessToken}` },
               signal: controller.signal,
             });
@@ -1037,9 +1057,10 @@ function useGoogleAuth(lang = "en") {
             const userInfo = await userRes.json();
             const normalizedUser = { ...userInfo, id: userInfo?.id || userInfo?.sub || null };
             authLog("User profile loaded", { id: normalizedUser?.id, email: normalizedUser?.email });
+            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ user: normalizedUser, token: accessToken, tokenExpiresAt: expiresAt }));
+            localStorage.setItem(AUTH_LOGIN_DAY_KEY, new Date().toISOString().slice(0, 10));
             setUser(normalizedUser);
             setToken(accessToken);
-            localStorage.setItem(AUTH_LOGIN_DAY_KEY, new Date().toISOString().slice(0, 10));
           } catch (err) {
             authLog("User profile fetch failed; trying token payload fallback", err);
             const payload = decodeJwtPayload(response.id_token);
@@ -1050,9 +1071,10 @@ function useGoogleAuth(lang = "en") {
                 name: payload.name || payload.given_name || "User",
                 picture: payload.picture || null,
               };
+              localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ user: fallbackUser, token: accessToken, tokenExpiresAt: expiresAt }));
+              localStorage.setItem(AUTH_LOGIN_DAY_KEY, new Date().toISOString().slice(0, 10));
               setUser(fallbackUser);
               setToken(accessToken);
-              localStorage.setItem(AUTH_LOGIN_DAY_KEY, new Date().toISOString().slice(0, 10));
               authLog("Fallback profile created from id_token", fallbackUser);
             } else {
               setAuthError("Signed in but could not fetch profile. Check API key / redirect origin / popup policies.");
@@ -1060,6 +1082,7 @@ function useGoogleAuth(lang = "en") {
             }
           } finally {
             authLog("Sign-in callback completed");
+            setUnauthorizedInterceptorSuppressed(false);
             setAuthLoading(false);
           }
         },
@@ -1083,6 +1106,7 @@ function useGoogleAuth(lang = "en") {
     localStorage.removeItem(AUTH_CONSENT_STORAGE_KEY);
     localStorage.removeItem(AUTH_LOGIN_DAY_KEY);
     setHasGrantedConsent(false);
+    setUnauthorizedInterceptorSuppressed(false);
     setUser(null); setToken(null); setTokenExpiresAt(null); setAuthError(null); tokenClientRef.current = null;
   }, [authLog, token]);
 
@@ -1109,7 +1133,7 @@ function useGoogleAuth(lang = "en") {
     localStorage.removeItem(AUTH_LOGIN_DAY_KEY);
   }, [user, token, tokenExpiresAt]);
 
-  return { user, token, tokenExpiresAt, authLoading, authError, gapiReady, signIn, signOut };
+  return { user, token, tokenExpiresAt, authInitialized, authLoading, authError, gapiReady, signIn, signOut };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1147,18 +1171,31 @@ function AppProvider({ children }) {
     if (shouldSignOut) auth.signOut();
   }, [auth]);
 
-  const forceAutoLogout = useCallback(() => {
+  const forceAutoLogout = useCallback((reason = "Unauthorized") => {
+    if (!auth.authInitialized || auth.authLoading || isAuthRoutePath()) {
+      console.log(`${AUTH_DEBUG_PREFIX} Skip auto-logout`, { reason, authInitialized: auth.authInitialized, authLoading: auth.authLoading, path: window.location.pathname });
+      return;
+    }
     localStorage.setItem(SESSION_EXPIRED_NOTICE_KEY, "1");
     clearLocalSessionState(true);
-  }, [clearLocalSessionState]);
+  }, [auth.authInitialized, auth.authLoading, clearLocalSessionState]);
 
   const ensureValidSession = useCallback(() => {
-    if (!auth.user?.id || !auth.token || isTokenClearlyExpired(auth.tokenExpiresAt)) {
-      forceAutoLogout();
+    if (!auth.authInitialized || auth.authLoading) {
+      return false;
+    }
+    if (!auth.user?.id || !auth.token) {
+      console.log(`${AUTH_DEBUG_PREFIX} Redirecting because token is null`, { hasUser: Boolean(auth.user?.id), hasToken: Boolean(auth.token) });
+      forceAutoLogout("Missing token/user");
+      return false;
+    }
+    if (isTokenClearlyExpired(auth.tokenExpiresAt)) {
+      console.log(`${AUTH_DEBUG_PREFIX} Redirecting because token is expired`, { tokenExpiresAt: auth.tokenExpiresAt });
+      forceAutoLogout("Expired token");
       return false;
     }
     return true;
-  }, [auth.user?.id, auth.token, auth.tokenExpiresAt, forceAutoLogout]);
+  }, [auth.authInitialized, auth.authLoading, auth.user?.id, auth.token, auth.tokenExpiresAt, forceAutoLogout]);
 
   const fetchBackups = useCallback(async () => {
     if (!ensureValidSession() || !auth.token) return [];
@@ -5306,7 +5343,8 @@ export default function App() {
 }
 
 function AppContent() {
-  const { user, token, dbLoading, db, t, usersConfigReady, userSyncDone } = useApp();
+  const { user, token, authInitialized, authLoading, dbLoading, db, t, usersConfigReady, userSyncDone } = useApp();
+  if (!authInitialized || authLoading) return <LoadingScreen message={t?.loading||"LOADING..."}/>;
   if (!user?.id || !token) return <LoginPage/>;
   if (!usersConfigReady || !userSyncDone) return <LoadingScreen message={t?.loading||"LOADING..."}/>;
   if (dbLoading || !db) return <LoadingScreen message={t?.loading||"LOADING..."}/>;
