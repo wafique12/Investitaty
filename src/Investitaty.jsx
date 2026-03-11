@@ -27,6 +27,7 @@ const AUTH_CONSENT_STORAGE_KEY = "investitaty_auth_consent_v1";
 const AUTH_LOGIN_DAY_KEY = "investitaty_auth_login_day_v1";
 const TAB_STORAGE_KEY = "investitaty_active_tab_v1";
 const SESSION_EXPIRED_NOTICE_KEY = "investitaty_session_expired_notice_v1";
+const POST_LOGIN_REDIRECT_TAB_KEY = "investitaty_post_login_redirect_tab_v1";
 const PORTFOLIOS_COLLAPSE_STORAGE_KEY = "investitaty_portfolios_collapsed_v1";
 const PORTFOLIOS_UI_STORAGE_KEY = "investitaty_portfolios_ui_v1";
 const INVESTMENTS_COLLAPSE_STORAGE_KEY = "investitaty_investments_collapsed_v1";
@@ -631,14 +632,14 @@ const useApp = () => useContext(AppContext);
 // GOOGLE DRIVE SERVICE (unchanged from Sprint 3)
 // ═══════════════════════════════════════════════════════════════════════════════
 async function findOrCreateDB(token) {
-  const searchRes = await fetch(
+  const searchRes = await apiFetch(
     `https://www.googleapis.com/drive/v3/files?q=name='${DB_FILENAME}'+and+trashed=false&fields=files(id,name)`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
   const searchData = await searchRes.json();
   if (searchData.files && searchData.files.length > 0) {
     const fileId = searchData.files[0].id;
-    const fileRes = await fetch(
+    const fileRes = await apiFetch(
       `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
@@ -654,7 +655,7 @@ async function findOrCreateDB(token) {
     `--${boundary}`, "Content-Type: application/json; charset=UTF-8", "", metadata,
     `--${boundary}`, "Content-Type: application/json", "", body_content, `--${boundary}--`,
   ].join("\r\n");
-  const createRes = await fetch(
+  const createRes = await apiFetch(
     "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id",
     { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": `multipart/related; boundary=${boundary}` }, body: multipart }
   );
@@ -760,12 +761,27 @@ function migrateSchema(data) {
   return out;
 }
 
+let onUnauthorized = null;
+
+function setUnauthorizedInterceptor(handler) {
+  onUnauthorized = typeof handler === "function" ? handler : null;
+}
+
+async function apiFetch(input, init) {
+  const res = await fetch(input, init);
+  if (res.status === 401) {
+    onUnauthorized?.();
+  }
+  return res;
+}
+
 async function saveDB(token, fileId, data) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  await fetch(
+  const res = await apiFetch(
     `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
     { method: "PATCH", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: blob }
   );
+  if (!res.ok) throw new Error(`saveDB ${res.status}`);
 }
 
 function isLocalStorageAvailable() {
@@ -790,6 +806,13 @@ function decodeJwtPayload(token) {
   }
 }
 
+function isTokenClearlyExpired(expiresAt) {
+  if (!expiresAt) return false;
+  const expiryMs = Number(expiresAt);
+  if (!Number.isFinite(expiryMs)) return false;
+  return expiryMs <= Date.now();
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // AUTH HOOK (robust login tracing)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -811,6 +834,16 @@ function useGoogleAuth(lang = "en") {
       if (!raw) return null;
       const parsed = JSON.parse(raw);
       return parsed?.token || null;
+    } catch (_) {
+      return null;
+    }
+  });
+  const [tokenExpiresAt, setTokenExpiresAt] = useState(() => {
+    try {
+      const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return Number(parsed?.tokenExpiresAt || 0) || null;
     } catch (_) {
       return null;
     }
@@ -861,6 +894,7 @@ function useGoogleAuth(lang = "en") {
         localStorage.setItem(SESSION_EXPIRED_NOTICE_KEY, "1");
         setUser(null);
         setToken(null);
+        setTokenExpiresAt(null);
       }
     } catch (error) {
       authLog("Daily re-auth check failed", error);
@@ -986,12 +1020,15 @@ function useGoogleAuth(lang = "en") {
           localStorage.setItem(AUTH_CONSENT_STORAGE_KEY, "true");
           setHasGrantedConsent(true);
           const accessToken = response.access_token;
+          const expiresInSec = Number(response.expires_in || 3600);
+          const expiresAt = Date.now() + Math.max(0, expiresInSec - 30) * 1000;
+          setTokenExpiresAt(expiresAt);
 
           try {
             authLog("Fetching user profile via OAuth userinfo endpoint");
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 15000);
-            const userRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+            const userRes = await apiFetch("https://www.googleapis.com/oauth2/v3/userinfo", {
               headers: { Authorization: `Bearer ${accessToken}` },
               signal: controller.signal,
             });
@@ -1046,22 +1083,33 @@ function useGoogleAuth(lang = "en") {
     localStorage.removeItem(AUTH_CONSENT_STORAGE_KEY);
     localStorage.removeItem(AUTH_LOGIN_DAY_KEY);
     setHasGrantedConsent(false);
-    setUser(null); setToken(null); setAuthError(null); tokenClientRef.current = null;
+    setUser(null); setToken(null); setTokenExpiresAt(null); setAuthError(null); tokenClientRef.current = null;
   }, [authLog, token]);
 
   useEffect(() => {
     if (user && token) {
       try {
-        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ user, token }));
-        authLog("Auth session persisted", { userId: user?.id, email: user?.email });
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ user, token, tokenExpiresAt }));
+        authLog("Auth session persisted", { userId: user?.id, email: user?.email, tokenExpiresAt });
       } catch (error) {
         authLog("Auth session persistence failed", error);
         setAuthError("Unable to save session locally. Check browser storage/cookie permissions.");
       }
     }
-  }, [user, token, authLog]);
+  }, [user, token, tokenExpiresAt, authLog]);
 
-  return { user, token, authLoading, authError, gapiReady, signIn, signOut };
+  useEffect(() => {
+    if (!user || !token) return;
+    if (!isTokenClearlyExpired(tokenExpiresAt)) return;
+    localStorage.setItem(SESSION_EXPIRED_NOTICE_KEY, "1");
+    setUser(null);
+    setToken(null);
+    setTokenExpiresAt(null);
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+    localStorage.removeItem(AUTH_LOGIN_DAY_KEY);
+  }, [user, token, tokenExpiresAt]);
+
+  return { user, token, tokenExpiresAt, authLoading, authError, gapiReady, signIn, signOut };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1099,8 +1147,21 @@ function AppProvider({ children }) {
     if (shouldSignOut) auth.signOut();
   }, [auth]);
 
+  const forceAutoLogout = useCallback(() => {
+    localStorage.setItem(SESSION_EXPIRED_NOTICE_KEY, "1");
+    clearLocalSessionState(true);
+  }, [clearLocalSessionState]);
+
+  const ensureValidSession = useCallback(() => {
+    if (!auth.user?.id || !auth.token || isTokenClearlyExpired(auth.tokenExpiresAt)) {
+      forceAutoLogout();
+      return false;
+    }
+    return true;
+  }, [auth.user?.id, auth.token, auth.tokenExpiresAt, forceAutoLogout]);
+
   const fetchBackups = useCallback(async () => {
-    if (!auth.token) return [];
+    if (!ensureValidSession() || !auth.token) return [];
     const folderId = await BackupService.findOrCreateBackupFolder(auth.token);
     const files = await BackupService.listBackups(auth.token, folderId);
     setBackupFiles(files.slice(0, BackupService.MAX_BACKUPS));
@@ -1108,10 +1169,10 @@ function AppProvider({ children }) {
     const driveLatest = files[0]?.createdTime || null;
     setLastBackupAt(localMetaDate || driveLatest);
     return files;
-  }, [auth.token]);
+  }, [auth.token, ensureValidSession]);
 
   const triggerBackup = useCallback(async ({ isAuto = false } = {}) => {
-    if (!auth.token || !db || backupBusy) return null;
+    if (!ensureValidSession() || !auth.token || !db || backupBusy) return null;
     setBackupBusy(true);
     try {
       const result = await BackupService.createBackup(auth.token, db);
@@ -1125,10 +1186,10 @@ function AppProvider({ children }) {
     } finally {
       setBackupBusy(false);
     }
-  }, [auth.token, db, backupBusy]);
+  }, [auth.token, db, backupBusy, ensureValidSession]);
 
   const restoreBackup = useCallback(async (backup) => {
-    if (!auth.token || !fileId || !backup?.id) return false;
+    if (!ensureValidSession() || !auth.token || !fileId || !backup?.id) return false;
     try {
       const snapshot = await BackupService.downloadBackup(auth.token, backup.id);
       const migrated = migrateSchema(snapshot);
@@ -1139,11 +1200,20 @@ function AppProvider({ children }) {
       setSyncError(`Restore failed: ${error?.message || "Unknown error"}`);
       return false;
     }
-  }, [auth.token, fileId]);
+  }, [auth.token, fileId, ensureValidSession]);
 
   const t = TRANSLATIONS[lang];
   const isRTL = lang === "ar";
   const font = isRTL ? T.fontAr : T.fontSans;
+
+  useEffect(() => {
+    setUnauthorizedInterceptor(forceAutoLogout);
+    BackupService.setUnauthorizedHandler(forceAutoLogout);
+    return () => {
+      setUnauthorizedInterceptor(null);
+      BackupService.setUnauthorizedHandler(null);
+    };
+  }, [forceAutoLogout]);
 
   const buildUsersConfig = useCallback((rows = []) => {
     const normalizedRows = rows.map((row) => {
@@ -1215,7 +1285,7 @@ function AppProvider({ children }) {
   }, [usersConfig, currentRole]);
 
   const manualSync = useCallback(async () => {
-    if (!auth.token || isBlocked || !userSyncDone) return false;
+    if (!ensureValidSession() || !auth.token || isBlocked || !userSyncDone) return false;
     setSyncError(null);
     setSyncing(true);
     try {
@@ -1230,7 +1300,7 @@ function AppProvider({ children }) {
     } finally {
       setSyncing(false);
     }
-  }, [auth.token, isBlocked, userSyncDone, fetchBackups]);
+  }, [auth.token, isBlocked, userSyncDone, fetchBackups, ensureValidSession]);
 
 
   useEffect(() => {
@@ -1338,11 +1408,12 @@ function AppProvider({ children }) {
 
   useEffect(() => {
     if (!auth.token || isBlocked || !userSyncDone) return;
+    if (!ensureValidSession()) return;
     setDbLoading(true);
     findOrCreateDB(auth.token)
       .then(({ fileId: fid, data }) => { setFileId(fid); setDb(data); setDbLoading(false); })
       .catch(() => { setSyncError("Failed to access Google Drive."); setDbLoading(false); });
-  }, [auth.token, isBlocked, userSyncDone]);
+  }, [auth.token, isBlocked, userSyncDone, ensureValidSession]);
 
   useEffect(() => {
     if (!auth.token || !db || isBlocked || !userSyncDone) return;
@@ -1428,7 +1499,7 @@ function AppProvider({ children }) {
       const next = typeof updater === "function" ? updater(prev) : updater;
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(async () => {
-        if (!auth.token || !fileId) return;
+        if (!ensureValidSession() || !auth.token || !fileId) return;
         setSyncing(true);
         try { await saveDB(auth.token, fileId, next); }
         catch { setSyncError("Sync failed."); }
@@ -1436,7 +1507,7 @@ function AppProvider({ children }) {
       }, 800);
       return next;
     });
-  }, [auth.token, fileId]);
+  }, [auth.token, fileId, ensureValidSession]);
 
   const archiveItem = useCallback((collection, id) => {
     updateDb(prev => {
@@ -5067,7 +5138,7 @@ function UserManagementTab() {
 function MainApp() {
   const { syncError, t, isRTL, font, hasPermission, currentRole } = useApp();
   const [sessionNotice, setSessionNotice] = useState(false);
-  const [activeTab, setActiveTab] = useState(() => localStorage.getItem(TAB_STORAGE_KEY) || "dashboard");
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem(POST_LOGIN_REDIRECT_TAB_KEY) || localStorage.getItem(TAB_STORAGE_KEY) || "dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [investmentPrefill, setInvestmentPrefill] = useState(null);
@@ -5081,6 +5152,7 @@ function MainApp() {
 
   useEffect(() => {
     localStorage.setItem(TAB_STORAGE_KEY, activeTab);
+    localStorage.setItem(POST_LOGIN_REDIRECT_TAB_KEY, activeTab);
   }, [activeTab]);
 
   useEffect(() => {
