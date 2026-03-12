@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { supabase, hasSupabaseConfig, hasSupabaseClient } from "./lib/supabaseClient";
 import BackupService from "./services/BackupService";
+import { DB_FOLDER_NAME, DRIVE_ROOT_FOLDER, ensureDriveOk, getDriveAppFolders } from "./services/DrivePaths";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONFIG
@@ -22,6 +23,7 @@ const REQUIRED_SCOPES = [
   "https://www.googleapis.com/auth/userinfo.email",
 ];
 const DB_FILENAME = "investitaty_db.json";
+const DB_RELATIVE_PATH = `${DRIVE_ROOT_FOLDER}/${DB_FOLDER_NAME}/${DB_FILENAME}`;
 const AUTH_STORAGE_KEY = "investitaty_auth_v1";
 const AUTH_CONSENT_STORAGE_KEY = "investitaty_auth_consent_v1";
 const AUTH_LOGIN_DAY_KEY = "investitaty_auth_login_day_v1";
@@ -635,24 +637,33 @@ const useApp = () => useContext(AppContext);
 // GOOGLE DRIVE SERVICE (unchanged from Sprint 3)
 // ═══════════════════════════════════════════════════════════════════════════════
 async function findOrCreateDB(token) {
+  const { dbFolder } = await getDriveAppFolders(token);
+  const q = encodeURIComponent(`name='${DB_FILENAME}' and trashed=false and '${dbFolder.id}' in parents`);
   const searchRes = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=name='${DB_FILENAME}'+and+trashed=false&fields=files(id,name)`,
+    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&pageSize=1`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
+  await ensureDriveOk(searchRes, "Unable to locate database file");
   const searchData = await searchRes.json();
-  if (searchData.files && searchData.files.length > 0) {
+
+  if (searchData?.files?.length > 0) {
     const fileId = searchData.files[0].id;
     const fileRes = await fetch(
       `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
+    await ensureDriveOk(fileRes, "Unable to read database file");
     const data = await fileRes.json();
-    // Migrate old schema if needed
     const migrated = migrateSchema(data);
     return { fileId, data: migrated };
   }
+
   const boundary = "investitaty_boundary";
-  const metadata = JSON.stringify({ name: DB_FILENAME, mimeType: "application/json" });
+  const metadata = JSON.stringify({
+    name: DB_FILENAME,
+    parents: [dbFolder.id],
+    mimeType: "application/json",
+  });
   const body_content = JSON.stringify(INITIAL_SCHEMA);
   const multipart = [
     `--${boundary}`, "Content-Type: application/json; charset=UTF-8", "", metadata,
@@ -662,6 +673,7 @@ async function findOrCreateDB(token) {
     "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id",
     { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": `multipart/related; boundary=${boundary}` }, body: multipart }
   );
+  await ensureDriveOk(createRes, "Unable to initialize database file");
   const created = await createRes.json();
   return { fileId: created.id, data: INITIAL_SCHEMA };
 }
@@ -766,10 +778,11 @@ function migrateSchema(data) {
 
 async function saveDB(token, fileId, data) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  await fetch(
+  const res = await fetch(
     `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
     { method: "PATCH", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: blob }
   );
+  await ensureDriveOk(res, "Unable to save database file");
 }
 
 function isLocalStorageAvailable() {
@@ -4255,7 +4268,7 @@ function SettingsTab() {
         <div style={{ display:"flex",alignItems:"center",gap:"10px" }}>
           <CheckCircle2 size={16} color={T.positive}/>
           <span style={{ fontSize:"0.82rem",color:T.textSecondary }}>
-            {t.dataStorage}: <strong style={{ color:T.textPrimary }}>{DB_FILENAME}</strong> on your Google Drive
+            {t.dataStorage}: <strong style={{ color:T.textPrimary }}>{DB_RELATIVE_PATH}</strong> on your Google Drive
           </span>
         </div>
       </Card>
