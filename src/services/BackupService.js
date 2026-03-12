@@ -1,4 +1,5 @@
-const BACKUP_FOLDER_NAME = "Investaty_Backups";
+import { BACKUP_FOLDER_NAME, ensureDriveOk, getDriveAppFolders } from "./DrivePaths";
+
 const BACKUP_META_KEY = "investitaty_backup_meta_v1";
 const MAX_BACKUPS = 5;
 const BACKUP_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -13,39 +14,9 @@ function parseBackupDate(name = "") {
   return match[1];
 }
 
-async function parseJsonSafe(res) {
-  const txt = await res.text();
-  try {
-    return txt ? JSON.parse(txt) : {};
-  } catch (_) {
-    return { message: txt };
-  }
-}
-
-async function ensureOk(res, fallback) {
-  if (res.ok) return;
-  const payload = await parseJsonSafe(res);
-  const reason = payload?.error?.message || payload?.message || fallback;
-  throw new Error(reason);
-}
-
 async function findOrCreateBackupFolder(token) {
-  const q = encodeURIComponent(`name='${BACKUP_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
-  const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,createdTime)`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  await ensureOk(searchRes, "Unable to search backup folder");
-  const searchData = await searchRes.json();
-  if (searchData?.files?.length) return searchData.files[0].id;
-
-  const createRes = await fetch("https://www.googleapis.com/drive/v3/files", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ name: BACKUP_FOLDER_NAME, mimeType: "application/vnd.google-apps.folder" }),
-  });
-  await ensureOk(createRes, "Unable to create backup folder");
-  const created = await createRes.json();
-  return created.id;
+  const { backupFolder } = await getDriveAppFolders(token);
+  return backupFolder.id;
 }
 
 async function listBackups(token, folderId) {
@@ -53,7 +24,7 @@ async function listBackups(token, folderId) {
   const listRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,createdTime,modifiedTime)&orderBy=createdTime desc&pageSize=20`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  await ensureOk(listRes, "Unable to list backup files");
+  await ensureDriveOk(listRes, "Unable to list backup files");
   const listData = await listRes.json();
   return (listData?.files || [])
     .filter((file) => /backup_\d{4}-\d{2}-\d{2}_investaty\.json$/.test(file.name || ""))
@@ -100,7 +71,7 @@ async function createBackup(token, db) {
     headers: { Authorization: `Bearer ${token}`, "Content-Type": `multipart/related; boundary=${boundary}` },
     body: multipart,
   });
-  await ensureOk(createRes, "Unable to create backup");
+  await ensureDriveOk(createRes, "Unable to create backup");
   const created = await createRes.json();
 
   const backups = await listBackups(token, folderId);
@@ -110,7 +81,7 @@ async function createBackup(token, db) {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });
-    await ensureOk(delRes, `Unable to delete old backup ${item.name}`);
+    await ensureDriveOk(delRes, `Unable to delete old backup ${item.name}`);
   }));
 
   const now = new Date().toISOString();
@@ -123,7 +94,7 @@ async function downloadBackup(token, fileId) {
   const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  await ensureOk(res, "Unable to download backup file");
+  await ensureDriveOk(res, "Unable to download backup file");
   return res.json();
 }
 
