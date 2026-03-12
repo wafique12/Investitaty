@@ -2245,12 +2245,11 @@ function Dashboard() {
   const [sourceModal, setSourceModal] = useState(null);
   const [dashboardFundingLegendExpanded, setDashboardFundingLegendExpanded] = useState(false);
   const [hiddenDashboardFundingSources, setHiddenDashboardFundingSources] = useState(() => new Set());
-  if (!db) return null;
 
-  const portfolios = visible(db.portfolios);
-  const investments = visible(db.investments);
-  const transactions = visible(db.transactions);
-  const baseCurrency = baseCurrencyCode(db);
+  const portfolios = visible(db?.portfolios || []);
+  const investments = visible(db?.investments || []);
+  const transactions = visible(db?.transactions || []);
+  const baseCurrency = baseCurrencyCode(db || INITIAL_SCHEMA);
 
   const activeInvestments = investments.filter(isActiveInvestment);
   const activePrincipal = activeInvestments
@@ -2437,7 +2436,7 @@ function Dashboard() {
                   {pieData.map((d,i)=>(
                     <div key={d.name} style={{ display:"flex",alignItems:"center",gap:"7px" }}>
                       <div style={{ width:"8px",height:"8px",borderRadius:"2px",background:T.chart[i%T.chart.length],flexShrink:0 }}/>
-                      <span style={{ fontSize:"0.7rem",color:T.textSecondary,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{d.name}</span>
+                      <span data-app-tooltip={d.name} style={{ fontSize:"0.7rem",color:T.textSecondary,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{d.name}</span>
                       <span style={{ fontSize:"0.68rem",color:T.textMuted }}>{d.pct.toFixed(3)}%</span>
                     </div>
                   ))}
@@ -4473,7 +4472,7 @@ function FundingLegendGrid({ rows, currency = "USD", textColor = "#dbeafe", valu
               }}
             >
               <span style={{ width:"10px", height:"10px", borderRadius:"999px", background:row.color }} />
-              <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{row.name}</span>
+              <span data-app-tooltip={row.name} style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{row.name}</span>
               <span style={{ color:valueColor, fontWeight:600, whiteSpace:"nowrap" }}>{fmtMoney(row.value, { currency })} ({row.pct.toFixed(3)}%)</span>
             </button>
           );
@@ -5304,6 +5303,7 @@ function MainApp() {
   return (
     <div style={{ display:"flex",height:"100vh",background:T.bgApp,fontFamily:font,overflow:"hidden" }} dir={isRTL?"rtl":"ltr"}>
       <FontLoader/>
+      <GlobalTooltipHost/>
       <style>{`
         @keyframes modalIn { from{opacity:0;transform:scale(0.96)} to{opacity:1;transform:scale(1)} }
         @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
@@ -5356,6 +5356,89 @@ function MainApp() {
         <div style={{ flex:1 }}>{tabs[activeTab]}</div>
         <BrandingFooter text={t.footerBranding} />
       </main>
+    </div>
+  );
+}
+
+function GlobalTooltipHost() {
+  const [tooltip, setTooltip] = useState({ visible:false, text:"", x:0, y:0 });
+
+  useEffect(() => {
+    const offsetX = 12;
+    const offsetY = 18;
+
+    const resolveTooltipText = (el) => {
+      if (!el) return "";
+      const explicit = el.getAttribute("data-app-tooltip") || "";
+      if (explicit) return explicit;
+      const nativeTitle = el.getAttribute("title") || el.getAttribute("data-native-title") || "";
+      if (nativeTitle) return nativeTitle;
+      const aria = el.getAttribute("aria-label") || "";
+      if (aria) return aria;
+      const text = String(el.textContent || "").trim().replace(/\s+/g, " ");
+      return text.length <= 90 ? text : `${text.slice(0, 90)}…`;
+    };
+
+    const findTarget = (node) => node?.closest?.("[data-app-tooltip], [title], button, [role='button'], svg");
+
+    const show = (event) => {
+      const target = findTarget(event.target);
+      if (!target) { setTooltip((prev) => ({ ...prev, visible:false })); return; }
+      const title = target.getAttribute("title");
+      if (title) {
+        target.setAttribute("data-native-title", title);
+        target.removeAttribute("title");
+        if (!target.getAttribute("aria-label")) target.setAttribute("aria-label", title);
+      }
+      const text = resolveTooltipText(target);
+      if (!text) { setTooltip((prev) => ({ ...prev, visible:false })); return; }
+      setTooltip({ visible:true, text, x:event.clientX + offsetX, y:event.clientY + offsetY });
+    };
+
+    const move = (event) => {
+      const target = findTarget(event.target);
+      if (!target) {
+        setTooltip((prev) => ({ ...prev, visible:false }));
+        return;
+      }
+      setTooltip((prev) => (prev.visible ? { ...prev, x:event.clientX + offsetX, y:event.clientY + offsetY } : prev));
+    };
+
+    const hide = () => setTooltip((prev) => ({ ...prev, visible:false }));
+
+    window.addEventListener("mouseover", show, true);
+    window.addEventListener("mousemove", move, true);
+    window.addEventListener("scroll", hide, true);
+
+    return () => {
+      window.removeEventListener("mouseover", show, true);
+      window.removeEventListener("mousemove", move, true);
+      window.removeEventListener("scroll", hide, true);
+    };
+  }, []);
+
+  if (!tooltip.visible || !tooltip.text) return null;
+
+  return (
+    <div style={{
+      position:"fixed",
+      left:`${tooltip.x}px`,
+      top:`${tooltip.y}px`,
+      zIndex:99999,
+      maxWidth:"320px",
+      background:"rgba(15,23,42,0.96)",
+      color:"#f8fafc",
+      border:"1px solid rgba(148,163,184,0.35)",
+      borderRadius:"8px",
+      padding:"6px 8px",
+      fontSize:"0.72rem",
+      lineHeight:1.25,
+      boxShadow:"0 8px 28px rgba(2,6,23,0.38)",
+      pointerEvents:"none",
+      whiteSpace:"normal",
+      wordBreak:"break-word",
+    }}>
+      {tooltip.text}
     </div>
   );
 }
