@@ -2035,7 +2035,7 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileO
       <div style={{ padding:showLabels?"24px 20px 18px":"16px 10px",borderBottom:`1px solid ${T.borderDark}` }}>
         <div style={{ display:"flex",alignItems:"center",gap:"10px",justifyContent:showLabels?"flex-start":"center" }}>
           {!isMobile && (
-            <button onClick={handleHamburger} title={t.collapseSidebar} style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", width:"28px", height:"28px", borderRadius:"6px", border:`1px solid ${T.borderDark}`, background:"transparent", color:T.textSidebar, cursor:"pointer", flexShrink:0 }}>
+            <button onClick={handleHamburger} style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", width:"28px", height:"28px", borderRadius:"6px", border:`1px solid ${T.borderDark}`, background:"transparent", color:T.textSidebar, cursor:"pointer", flexShrink:0 }}>
               <Menu size={14} />
             </button>
           )}
@@ -2385,7 +2385,7 @@ function Dashboard() {
           value={totalPortfolioValue}
           valueDecimals={2}
           currency={baseCurrency}
-          sub={<span title={`${t.totalPortfolioValue}: ${fmtMoney(totalPortfolioValue, { currency:baseCurrency, decimals:2 })} | ${t.totalActivePrincipal}: ${fmtMoney(activePrincipal, { currency:baseCurrency, decimals:2 })}`}>{isRTL ? "ⓘ" : <Info size={12} style={{ verticalAlign:"middle" }} />}</span>}
+          sub={<span data-icon-tooltip={`${t.totalPortfolioValue}: ${fmtMoney(totalPortfolioValue, { currency:baseCurrency, decimals:2 })} | ${t.totalActivePrincipal}: ${fmtMoney(activePrincipal, { currency:baseCurrency, decimals:2 })}`}>{isRTL ? "ⓘ" : <Info size={12} style={{ verticalAlign:"middle" }} />}</span>}
           badge={{
             text:`${portfolioDeltaPct>=0?"+":""}${portfolioDeltaPct.toFixed(2)}% (${portfolioDeltaValue>=0?"+":""}${fmtMoney(portfolioDeltaValue,{currency:baseCurrency, decimals:2})})`,
             color:portfolioDeltaValue>=0?T.positive:T.negative,
@@ -2696,7 +2696,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
           <Btn size="sm" variant="secondary" onClick={()=>setCollapsedPortfolios(Object.fromEntries(portfolios.map((p)=>[p.id,false])))}>{t.expandAll}</Btn>
           <Btn size="sm" variant="secondary" onClick={()=>setCollapsedPortfolios(Object.fromEntries(portfolios.map((p)=>[p.id,true])))}>{t.collapseAll}</Btn>
           <div style={{ display:"flex",alignItems:"center",gap:"6px" }}>
-            <button title={t.searchUsersPlaceholder} onClick={()=>setSearchOpen((v)=>!v)} style={{ width:"34px",height:"34px",borderRadius:"8px",border:`1px solid ${T.border}`,background:T.bgCard,color:T.textSecondary,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center" }}>
+            <button onClick={()=>setSearchOpen((v)=>!v)} style={{ width:"34px",height:"34px",borderRadius:"8px",border:`1px solid ${T.border}`,background:T.bgCard,color:T.textSecondary,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center" }}>
               <Search size={15} />
             </button>
             {searchOpen && (
@@ -2743,22 +2743,21 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
                 <div style={{ marginBottom:isCollapsed?"0":"12px" }}>
                   <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",gap:"10px",marginBottom:"8px" }}>
                     <button
-                      title={isCollapsed ? t.expandAll : t.collapseAll}
-                      onClick={()=>setCollapsedPortfolios((prev)=>({ ...prev, [p.id]: !Boolean(prev[p.id]) }))}
+                                            onClick={()=>setCollapsedPortfolios((prev)=>({ ...prev, [p.id]: !Boolean(prev[p.id]) }))}
                       style={{ display:"flex",alignItems:"center",gap:"7px",minWidth:0,background:"none",border:"none",padding:0,cursor:"pointer" }}
                     >
                       <FolderOpen size={14} color={T.textMuted}/>
                       <div style={{ fontSize:"1rem",fontWeight:600,color:T.textPrimary,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{p.name}</div>
                     </button>
                     <div style={{ display:"flex",gap:"4px",flexShrink:0 }}>
-                      <button title={t.viewDetails} onClick={()=>openView(p)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}
+                      <button data-icon-tooltip={t.viewDetails} onClick={()=>openView(p)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}
                         onMouseEnter={e=>{e.currentTarget.style.background=T.bgApp; e.currentTarget.style.color=T.warning;}} onMouseLeave={e=>{e.currentTarget.style.background="none"; e.currentTarget.style.color=T.textMuted;}}>
                         <Eye size={14}/>
                       </button>
-                      <button onClick={()=>onQuickAddInvestment?.(p.id)} title={t.addInvestmentAction} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.emerald} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><Plus size={14}/></button>
-                      <button onClick={()=>onViewInvestments?.(p)} title={t.investments} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.info} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><ListTree size={14}/></button>
-                      <button onClick={()=>p.is_hidden?unarchiveItem("portfolios",p.id):archiveItem("portfolios",p.id)} title={p.is_hidden ? t.unarchive : t.archivePortfolio} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.warning} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>{p.is_hidden?<Eye size={14}/>:<EyeOff size={14}/>}</button>
-                      <button title={t.deleteItem} onClick={()=>{ if(window.confirm(t.deleteCascadeWarning)) hardDeleteItem("portfolios",p.id); }} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}
+                      <button onClick={()=>onQuickAddInvestment?.(p.id)} data-icon-tooltip={t.addInvestmentAction} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.emerald} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><Plus size={14}/></button>
+                      <button onClick={()=>onViewInvestments?.(p)} data-icon-tooltip={t.investments} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.info} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><ListTree size={14}/></button>
+                      <button onClick={()=>p.is_hidden?unarchiveItem("portfolios",p.id):archiveItem("portfolios",p.id)} data-icon-tooltip={p.is_hidden ? t.unarchive : t.archivePortfolio} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.warning} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>{p.is_hidden?<Eye size={14}/>:<EyeOff size={14}/>}</button>
+                      <button data-icon-tooltip={t.deleteItem} onClick={()=>{ if(window.confirm(t.deleteCascadeWarning)) hardDeleteItem("portfolios",p.id); }} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}
                         onMouseEnter={e=>e.currentTarget.style.color=T.negative} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
                         <Trash2 size={14}/>
                       </button>
@@ -3210,7 +3209,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                                 : (
                                   <div style={{ display:"flex",alignItems:"center",gap:"6px" }}>
                                     <span style={{ color:T.textSecondary }}>{fmtMoney(inv.currentPrice||0,{currency:portfolioCurrency(db, inv.portfolioId)})}</span>
-                                    <button onClick={()=>setEditingPrice(inv.id)} style={{ background:"none",border:"none",cursor:"pointer",color:T.emerald,padding:"2px",borderRadius:"4px",display:"flex" }} title={t.quickUpdatePrice}>
+                                    <button onClick={()=>setEditingPrice(inv.id)} style={{ background:"none",border:"none",cursor:"pointer",color:T.emerald,padding:"2px",borderRadius:"4px",display:"flex" }} data-icon-tooltip={t.quickUpdatePrice}>
                                       <Zap size={12}/>
                                     </button>
                                   </div>
@@ -3225,14 +3224,14 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                             </td>
                             <td style={{ padding:"12px 10px",textAlign:"right" }} onClick={e=>e.stopPropagation()}>
                               <div style={{ display:"flex",gap:"4px",justifyContent:"flex-end" }}>
-                                <button title={t.viewDetails} onClick={()=>openView(inv)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}
+                                <button data-icon-tooltip={t.viewDetails} onClick={()=>openView(inv)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}
                                   onMouseEnter={e=>{e.currentTarget.style.background=T.bgApp; e.currentTarget.style.color=T.info;}} onMouseLeave={e=>{e.currentTarget.style.background="none"; e.currentTarget.style.color=T.textMuted;}}>
                                   <Eye size={13}/>
                                 </button>
-                                <button title={t.addTransactionAction} onClick={()=>onQuickAddTransaction?.(inv)} style={{ background:"none",border:"none",cursor:"pointer",color:T.emerald,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color="#059669"} onMouseLeave={e=>e.currentTarget.style.color=T.emerald}><Plus size={13}/></button>
-                                <button title={t.viewTransactions} onClick={()=>onViewTransactions?.(inv)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.warning} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><ListTree size={13}/></button>
-                                <button title={inv.is_hidden ? t.unarchive : t.archiveInvestment} onClick={()=>inv.is_hidden?unarchiveItem("investments",inv.id):archiveItem("investments",inv.id)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.warning} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>{inv.is_hidden?<Eye size={13}/>:<EyeOff size={13}/>}</button>
-                                <button title={t.deleteItem} onClick={()=>{ if(window.confirm(t.deleteCascadeWarning)) hardDeleteItem("investments",inv.id); }} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}
+                                <button data-icon-tooltip={t.addTransactionAction} onClick={()=>onQuickAddTransaction?.(inv)} style={{ background:"none",border:"none",cursor:"pointer",color:T.emerald,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color="#059669"} onMouseLeave={e=>e.currentTarget.style.color=T.emerald}><Plus size={13}/></button>
+                                <button data-icon-tooltip={t.viewTransactions} onClick={()=>onViewTransactions?.(inv)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.warning} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><ListTree size={13}/></button>
+                                <button data-icon-tooltip={inv.is_hidden ? t.unarchive : t.archiveInvestment} onClick={()=>inv.is_hidden?unarchiveItem("investments",inv.id):archiveItem("investments",inv.id)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.warning} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>{inv.is_hidden?<Eye size={13}/>:<EyeOff size={13}/>}</button>
+                                <button data-icon-tooltip={t.deleteItem} onClick={()=>{ if(window.confirm(t.deleteCascadeWarning)) hardDeleteItem("investments",inv.id); }} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}
                                   onMouseEnter={e=>e.currentTarget.style.color=T.negative} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
                                   <Trash2 size={13}/>
                                 </button>
@@ -3805,8 +3804,8 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
                       <td style={{ padding:"11px 14px",textAlign:isRTL?"right":"left" }}>{txSmartStatus ? <Chip color={smartStatusColor(txSmartStatus)}>{smartStatusLabel(txSmartStatus)}</Chip> : "—"}</td>
                       <td style={{ padding:"11px 10px",position:"relative" }} onClick={e=>e.stopPropagation()}>
                         <div style={{ display:"flex",gap:"3px",justifyContent:"flex-end" }}>
-                          <button title={t.viewDetails} onClick={()=>openView(tx)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"5px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.info} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><Eye size={13}/></button>
-                          <button title={t.settings} onClick={()=>setOpenMenu(openMenu===txRowId?null:txRowId)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"5px",display:"flex",position:"relative" }}
+                          <button data-icon-tooltip={t.viewDetails} onClick={()=>openView(tx)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"5px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.info} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><Eye size={13}/></button>
+                          <button data-icon-tooltip={t.settings} onClick={()=>setOpenMenu(openMenu===txRowId?null:txRowId)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"5px",display:"flex",position:"relative" }}
                             onMouseEnter={e=>{e.currentTarget.style.background=T.bgApp; e.currentTarget.style.color=T.warning;}} onMouseLeave={e=>{e.currentTarget.style.background="none"; e.currentTarget.style.color=T.textMuted;}}>
                             <MoreVertical size={13}/>
                           </button>
@@ -4243,7 +4242,7 @@ function SettingsTab() {
                 <span style={{ fontSize:"0.78rem",color:T.textPrimary,fontWeight:500 }}>{backup.name}</span>
                 <span style={{ fontSize:"0.72rem",color:T.textMuted }}>{new Date(backup.createdTime).toLocaleString()}</span>
               </div>
-              <button title="Restore" onClick={() => setRestoreCandidate(backup)} style={{ border:"none",background:"none",cursor:"pointer",color:T.emerald,display:"flex",padding:"3px" }}>
+              <button data-icon-tooltip="Restore" onClick={() => setRestoreCandidate(backup)} style={{ border:"none",background:"none",cursor:"pointer",color:T.emerald,display:"flex",padding:"3px" }}>
                 <RotateCcw size={14} />
               </button>
             </div>
@@ -5340,7 +5339,7 @@ function MainApp() {
         )}
         {activeTab === "transactions" && smartBackVisible && (
           <div style={{ marginBottom:"12px" }}>
-            <button title={t.smartBackToInvestments} onClick={handleSmartBack} style={{ background:"none",border:`1px solid ${T.border}`,borderRadius:"8px",cursor:"pointer",padding:"6px",display:"inline-flex",alignItems:"center",gap:"4px",color:T.textSecondary }}><Undo2 size={15}/><span style={{ fontSize:"0.78rem",fontWeight:600 }}>{t.returnLabel}</span></button>
+            <button onClick={handleSmartBack} style={{ background:"none",border:`1px solid ${T.border}`,borderRadius:"8px",cursor:"pointer",padding:"6px",display:"inline-flex",alignItems:"center",gap:"4px",color:T.textSecondary }}><Undo2 size={15}/><span style={{ fontSize:"0.78rem",fontWeight:600 }}>{t.returnLabel}</span></button>
           </div>
         )}
         {sessionNotice && (
@@ -5371,25 +5370,17 @@ function GlobalTooltipHost() {
       if (!el) return "";
       const explicit = el.getAttribute("data-app-tooltip") || "";
       if (explicit) return explicit;
-      const nativeTitle = el.getAttribute("title") || el.getAttribute("data-native-title") || "";
-      if (nativeTitle) return nativeTitle;
-      const aria = el.getAttribute("aria-label") || "";
-      if (aria) return aria;
+      const iconText = el.getAttribute("data-icon-tooltip") || "";
+      if (iconText) return iconText;
       const text = String(el.textContent || "").trim().replace(/\s+/g, " ");
       return text.length <= 90 ? text : `${text.slice(0, 90)}…`;
     };
 
-    const findTarget = (node) => node?.closest?.("[data-app-tooltip], [title], button, [role='button'], svg");
+    const findTarget = (node) => node?.closest?.("[data-app-tooltip], [data-icon-tooltip]");
 
     const show = (event) => {
       const target = findTarget(event.target);
       if (!target) { setTooltip((prev) => ({ ...prev, visible:false })); return; }
-      const title = target.getAttribute("title");
-      if (title) {
-        target.setAttribute("data-native-title", title);
-        target.removeAttribute("title");
-        if (!target.getAttribute("aria-label")) target.setAttribute("aria-label", title);
-      }
       const text = resolveTooltipText(target);
       if (!text) { setTooltip((prev) => ({ ...prev, visible:false })); return; }
       setTooltip({ visible:true, text, x:event.clientX + offsetX, y:event.clientY + offsetY });
