@@ -138,6 +138,8 @@ const TRANSLATIONS = {
     unassignedInvestment: "Unassigned Investment",
     noScheduled: "No scheduled transactions.",
     noFunding: "No funding records yet.",
+    showAll: "Show all",
+    showLess: "Show less",
     noAllocation: "No allocation data yet.",
     addPortfolio: "Add Portfolio",
     addInvestment: "Add Investment",
@@ -386,6 +388,8 @@ const TRANSLATIONS = {
     unassignedInvestment: "استثمار غير محدد",
     noScheduled: "لا توجد معاملات مجدولة.",
     noFunding: "لا توجد سجلات تمويل بعد.",
+    showAll: "عرض الكل",
+    showLess: "عرض أقل",
     noAllocation: "لا توجد بيانات توزيع بعد.",
     addPortfolio: "إضافة محفظة",
     addInvestment: "إضافة استثمار",
@@ -2624,6 +2628,9 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
     const nextInvalid = {
       name: !form.name.trim(),
       type: !form.type,
+      risk: !form.risk,
+      status: !form.status,
+      currency: !form.currency,
     };
     setInvalidFields(nextInvalid);
     if (Object.values(nextInvalid).some(Boolean)) {
@@ -2788,12 +2795,14 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
             <>
               <FormField label={t.name} required><Input value={form.name} onChange={e=>{f("name")(e.target.value);setInvalidFields(prev=>({...prev,name:false}));}} invalid={invalidFields.name} isRTL={isRTL} placeholder={t.name}/></FormField>
               <FormField label={t.type} required><Select value={form.type} onChange={e=>{f("type")(e.target.value);setInvalidFields(prev=>({...prev,type:false}));}} invalid={invalidFields.type} options={db?.settings?.portfolioTypes||[]} placeholder={t.selectType} isRTL={isRTL}/></FormField>
-              <FormField label={t.risk}><Select value={form.risk} onChange={e=>f("risk")(e.target.value)} options={db?.settings?.riskLevels||[]} placeholder={t.selectRisk} isRTL={isRTL}/></FormField>
               <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
-                <FormField label={t.currency}><Select value={form.currency} onChange={e=>f("currency")(e.target.value)} options={db?.settings?.currencies||[]} placeholder={t.selectCurrency} isRTL={isRTL}/></FormField>
-                <FormField label={t.status}><Select value={form.status} onChange={e=>f("status")(e.target.value)} options={statusOpts} isRTL={isRTL}/></FormField>
+                <FormField label={t.risk} required><Select value={form.risk} onChange={e=>{f("risk")(e.target.value);setInvalidFields(prev=>({...prev,risk:false}));}} invalid={invalidFields.risk} options={db?.settings?.riskLevels||[]} placeholder={t.selectRisk} isRTL={isRTL}/></FormField>
+                <FormField label={t.status} required><Select value={form.status} onChange={e=>{f("status")(e.target.value);setInvalidFields(prev=>({...prev,status:false}));}} invalid={invalidFields.status} options={statusOpts} isRTL={isRTL}/></FormField>
               </div>
-              <FormField label="Color"><Input type="color" value={form.color} onChange={e=>f("color")(e.target.value)} isRTL={isRTL}/></FormField>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
+                <FormField label={t.currency} required><Select value={form.currency} onChange={e=>{f("currency")(e.target.value);setInvalidFields(prev=>({...prev,currency:false}));}} invalid={invalidFields.currency} options={db?.settings?.currencies||[]} placeholder={t.selectCurrency} isRTL={isRTL}/></FormField>
+                <FormField label="Color"><Input type="color" value={form.color} onChange={e=>f("color")(e.target.value)} isRTL={isRTL}/></FormField>
+              </div>
               <FormField label={t.notes}><Input value={form.notes} onChange={e=>f("notes")(e.target.value)} isRTL={isRTL} placeholder={`(${t.optional})`}/></FormField>
               {formError && <div style={{ color:T.negative, fontSize:"0.78rem", marginBottom:"10px" }}>{formError}</div>}
             </>
@@ -4390,6 +4399,60 @@ function LegendList({ rows, currency = "USD", textColor = "#cbd5e1", valueColor 
   );
 }
 
+
+function FundingLegendGrid({ rows, currency = "USD", textColor = "#dbeafe", valueColor = "#bfdbfe", hiddenNames = new Set(), onToggle = () => {}, isExpanded = false, onToggleExpand = () => {}, showAllLabel = "Show all", showLessLabel = "Show less" }) {
+  const initialVisibleCount = 6;
+  const visibleRows = isExpanded ? rows : rows.slice(0, initialVisibleCount);
+  const hasMore = rows.length > initialVisibleCount;
+
+  return (
+    <div style={{ width:"100%", minWidth:0 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(220px, 1fr))", gap:"8px 12px", alignItems:"start" }}>
+        {visibleRows.map((row) => {
+          const isHidden = hiddenNames.has(row.name);
+          return (
+            <button
+              key={row.name}
+              type="button"
+              onClick={() => onToggle(row.name)}
+              style={{
+                display:"grid",
+                gridTemplateColumns:"14px 1fr auto",
+                gap:"8px",
+                alignItems:"center",
+                width:"100%",
+                border:"none",
+                background:"transparent",
+                padding:"4px 6px",
+                borderRadius:"8px",
+                cursor:"pointer",
+                fontSize:"0.76rem",
+                color:textColor,
+                opacity:isHidden ? 0.45 : 1,
+                textDecoration:isHidden ? "line-through" : "none",
+                textAlign:"left",
+              }}
+            >
+              <span style={{ width:"10px", height:"10px", borderRadius:"999px", background:row.color }} />
+              <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{row.name}</span>
+              <span style={{ color:valueColor, fontWeight:600, whiteSpace:"nowrap" }}>{fmtMoney(row.value, { currency })} ({row.pct.toFixed(3)}%)</span>
+            </button>
+          );
+        })}
+      </div>
+      {hasMore && (
+        <button
+          type="button"
+          onClick={onToggleExpand}
+          style={{ marginTop:"8px", border:"none", background:"transparent", color:"#93c5fd", cursor:"pointer", fontSize:"0.78rem", padding:0, textDecoration:"underline" }}
+        >
+          {isExpanded ? showLessLabel : `+ ${showAllLabel}`}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function StatisticsMatrixTable({ title, headers, rows, currency = "USD" }) {
   const { isRTL } = useApp();
   return (
@@ -4471,6 +4534,8 @@ function StatisticsTab() {
   const [selectedPortfolioId, setSelectedPortfolioId] = useState("");
   const [selectedInvestmentId, setSelectedInvestmentId] = useState("");
   const [fundingInvestmentsModal, setFundingInvestmentsModal] = useState(null);
+  const [fundingLegendExpanded, setFundingLegendExpanded] = useState(false);
+  const [hiddenFundingSources, setHiddenFundingSources] = useState(() => new Set());
 
   const investments = visible(db?.investments || []);
   const transactions = visible(db?.transactions || []);
@@ -4612,6 +4677,25 @@ function StatisticsTab() {
 
   const fundingChartTotal = fundingRows.reduce((sum, row) => sum + row.total, 0);
   const fundingChartData = fundingRows.filter((row) => row.total > 0).map((row, idx) => ({ ...row, pct:fundingChartTotal ? (row.total / fundingChartTotal) * 100 : 0, color:T.chart[idx % T.chart.length], name:row.source, value:row.total }));
+  const activeFundingChartData = fundingChartData.filter((row) => !hiddenFundingSources.has(row.name));
+  const toggleFundingLegendItem = (name) => {
+    setHiddenFundingSources((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    setHiddenFundingSources((prev) => {
+      const valid = new Set(fundingChartData.map((row) => row.name));
+      const next = new Set([...prev].filter((name) => valid.has(name)));
+      if (next.size === prev.size) return prev;
+      return next;
+    });
+    setFundingLegendExpanded(false);
+  }, [fundingChartData]);
 
   const riskCapitalData = [
     { name:t.lowLabel, value:capitalByRisk.low, color:T.positive },
@@ -4758,20 +4842,37 @@ function StatisticsTab() {
 
         <Card style={{ padding:"14px", background:"#111c33", border:"1px solid rgba(148,163,184,0.24)" }}>
           <h3 style={{ margin:"0 0 10px", color:"#f8fafc", fontSize:"0.88rem" }}>{t.fundingSourcesDistribution}</h3>
-          <div style={{ display:"flex", gap:"10px", alignItems:"center", flexWrap:"wrap" }}>
-            <div style={{ flex:"1 1 180px", height:"220px" }}>
-              {fundingChartData.length ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={fundingChartData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={78}>
-                      {fundingChartData.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
-                    </Pie>
-                    <Tooltip formatter={(value) => fmtMoney(value, { currency:primaryCurrency })} />
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : <div style={{ display:"grid", placeItems:"center", height:"100%", color:"#64748b" }}>{t.noFunding}</div>}
+          <div style={{ display:"grid", gap:"10px", gridTemplateColumns:"minmax(210px, 1fr)", alignItems:"start" }}>
+            <div style={{ display:"flex", gap:"10px", alignItems:"stretch", flexWrap:"wrap" }}>
+              <div style={{ flex:"0 1 320px", minWidth:"210px", height:"220px" }}>
+                {fundingChartData.length ? (
+                  activeFundingChartData.length ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={activeFundingChartData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={78}>
+                          {activeFundingChartData.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
+                        </Pie>
+                        <Tooltip formatter={(value) => fmtMoney(value, { currency:primaryCurrency })} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : <div style={{ display:"grid", placeItems:"center", height:"100%", color:"#64748b" }}>{t.noFunding}</div>
+                ) : <div style={{ display:"grid", placeItems:"center", height:"100%", color:"#64748b" }}>{t.noFunding}</div>}
+              </div>
+              <div style={{ flex:"1 1 320px", minWidth:"250px" }}>
+                <FundingLegendGrid
+                  rows={fundingChartData}
+                  currency={primaryCurrency}
+                  textColor="#dbeafe"
+                  valueColor="#bfdbfe"
+                  hiddenNames={hiddenFundingSources}
+                  onToggle={toggleFundingLegendItem}
+                  isExpanded={fundingLegendExpanded}
+                  onToggleExpand={() => setFundingLegendExpanded((prev) => !prev)}
+                  showAllLabel={t.showAll}
+                  showLessLabel={t.showLess}
+                />
+              </div>
             </div>
-            <LegendList rows={fundingChartData} currency={primaryCurrency} textColor="#dbeafe" valueColor="#bfdbfe" />
           </div>
         </Card>
       </div>
