@@ -2243,6 +2243,8 @@ function useIsMobile(breakpoint = 1024) {
 function Dashboard() {
   const { db, t, isRTL, font } = useApp();
   const [sourceModal, setSourceModal] = useState(null);
+  const [dashboardFundingLegendExpanded, setDashboardFundingLegendExpanded] = useState(false);
+  const [hiddenDashboardFundingSources, setHiddenDashboardFundingSources] = useState(() => new Set());
   if (!db) return null;
 
   const portfolios = visible(db.portfolios);
@@ -2346,6 +2348,26 @@ function Dashboard() {
   fundingDistribution.forEach((row) => {
     row.pct = totalFunding ? (row.value / totalFunding) * 100 : 0;
   });
+  const dashboardFundingLegendDataKey = fundingDistribution.map((row) => row.name).join("|");
+  const activeDashboardFundingDistribution = fundingDistribution.filter((row) => !hiddenDashboardFundingSources.has(row.name));
+  const toggleDashboardFundingLegendItem = (name) => {
+    setHiddenDashboardFundingSources((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    setHiddenDashboardFundingSources((prev) => {
+      const valid = new Set(fundingDistribution.map((row) => row.name));
+      const next = new Set([...prev].filter((name) => valid.has(name)));
+      if (next.size === prev.size) return prev;
+      return next;
+    });
+    setDashboardFundingLegendExpanded(false);
+  }, [dashboardFundingLegendDataKey]);
 
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font }}>
@@ -2463,25 +2485,43 @@ function Dashboard() {
           {fundingDistribution.length === 0
             ? <EmptyState text={t.noFunding} />
             : (
-              <div style={{ display:"grid", gridTemplateColumns:"minmax(170px, 45%) minmax(200px, 1fr)", alignItems:"center", gap:"18px" }}>
-                <div style={{ height:"190px", minWidth:0 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={fundingDistribution}
-                        dataKey="value"
-                        nameKey="name"
-                        innerRadius={45}
-                        outerRadius={72}
-                        onClick={(_, idx) => setSourceModal(fundingDistribution[idx] || null)}
-                      >
-                        {fundingDistribution.map((entry) => <Cell key={entry.name} fill={entry.color} style={{ cursor:"pointer" }} />)}
-                      </Pie>
-                      <Tooltip formatter={(value, _name, props) => [`${fmtMoney(value, { currency:baseCurrency })} · ${props?.payload?.pct?.toFixed(3) || 0}%`, props?.payload?.name || ""]} />
-                    </PieChart>
-                  </ResponsiveContainer>
+              <div style={{ display:"grid", gap:"12px", gridTemplateColumns:"minmax(170px, 1fr)", alignItems:"start" }}>
+                <div style={{ display:"flex", gap:"12px", alignItems:"stretch", flexWrap:"wrap" }}>
+                  <div style={{ flex:"0 1 280px", minWidth:0, height:"190px" }}>
+                    {activeDashboardFundingDistribution.length ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={activeDashboardFundingDistribution}
+                            dataKey="value"
+                            nameKey="name"
+                            innerRadius={45}
+                            outerRadius={72}
+                            onClick={(_, idx) => setSourceModal(activeDashboardFundingDistribution[idx] || null)}
+                          >
+                            {activeDashboardFundingDistribution.map((entry) => <Cell key={entry.name} fill={entry.color} style={{ cursor:"pointer" }} />)}
+                          </Pie>
+                          <Tooltip formatter={(value, _name, props) => [`${fmtMoney(value, { currency:baseCurrency })} · ${props?.payload?.pct?.toFixed(3) || 0}%`, props?.payload?.name || ""]} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : <EmptyState text={t.noFunding} />}
+                  </div>
+                  <div style={{ flex:"1 1 320px", minWidth:"250px" }}>
+                    <FundingLegendGrid
+                      rows={fundingDistribution}
+                      currency={baseCurrency}
+                      textColor="#0f172a"
+                      valueColor="#020617"
+                      hiddenNames={hiddenDashboardFundingSources}
+                      onToggle={toggleDashboardFundingLegendItem}
+                      isExpanded={dashboardFundingLegendExpanded}
+                      onToggleExpand={() => setDashboardFundingLegendExpanded((prev) => !prev)}
+                      showAllLabel={t.showAll}
+                      showLessLabel={t.showLess}
+                      maxVisibleCount={7}
+                    />
+                  </div>
                 </div>
-                <div style={{ minWidth:0 }}><LegendList rows={fundingDistribution} currency={baseCurrency} textColor="#0f172a" valueColor="#020617" /></div>
               </div>
             )
           }
@@ -4400,10 +4440,9 @@ function LegendList({ rows, currency = "USD", textColor = "#cbd5e1", valueColor 
 }
 
 
-function FundingLegendGrid({ rows, currency = "USD", textColor = "#dbeafe", valueColor = "#bfdbfe", hiddenNames = new Set(), onToggle = () => {}, isExpanded = false, onToggleExpand = () => {}, showAllLabel = "Show all", showLessLabel = "Show less" }) {
-  const initialVisibleCount = 6;
-  const visibleRows = isExpanded ? rows : rows.slice(0, initialVisibleCount);
-  const hasMore = rows.length > initialVisibleCount;
+function FundingLegendGrid({ rows, currency = "USD", textColor = "#dbeafe", valueColor = "#bfdbfe", hiddenNames = new Set(), onToggle = () => {}, isExpanded = false, onToggleExpand = () => {}, showAllLabel = "Show all", showLessLabel = "Show less", maxVisibleCount = 6 }) {
+  const visibleRows = isExpanded ? rows : rows.slice(0, maxVisibleCount);
+  const hasMore = rows.length > maxVisibleCount;
 
   return (
     <div style={{ width:"100%", minWidth:0 }}>
@@ -4443,7 +4482,7 @@ function FundingLegendGrid({ rows, currency = "USD", textColor = "#dbeafe", valu
       {hasMore && (
         <button
           type="button"
-          onClick={onToggleExpand}
+          onClick={(e) => { e.preventDefault(); onToggleExpand(); }}
           style={{ marginTop:"8px", border:"none", background:"transparent", color:"#93c5fd", cursor:"pointer", fontSize:"0.78rem", padding:0, textDecoration:"underline" }}
         >
           {isExpanded ? showLessLabel : `+ ${showAllLabel}`}
@@ -4677,6 +4716,7 @@ function StatisticsTab() {
 
   const fundingChartTotal = fundingRows.reduce((sum, row) => sum + row.total, 0);
   const fundingChartData = fundingRows.filter((row) => row.total > 0).map((row, idx) => ({ ...row, pct:fundingChartTotal ? (row.total / fundingChartTotal) * 100 : 0, color:T.chart[idx % T.chart.length], name:row.source, value:row.total }));
+  const fundingLegendDataKey = fundingChartData.map((row) => row.name).join("|");
   const activeFundingChartData = fundingChartData.filter((row) => !hiddenFundingSources.has(row.name));
   const toggleFundingLegendItem = (name) => {
     setHiddenFundingSources((prev) => {
@@ -4695,7 +4735,7 @@ function StatisticsTab() {
       return next;
     });
     setFundingLegendExpanded(false);
-  }, [fundingChartData]);
+  }, [fundingLegendDataKey]);
 
   const riskCapitalData = [
     { name:t.lowLabel, value:capitalByRisk.low, color:T.positive },
