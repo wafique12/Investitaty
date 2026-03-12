@@ -2624,7 +2624,6 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
     const nextInvalid = {
       name: !form.name.trim(),
       type: !form.type,
-      initialCapital: form.initialCapital === "" || Number.isNaN(Number(form.initialCapital)),
     };
     setInvalidFields(nextInvalid);
     if (Object.values(nextInvalid).some(Boolean)) {
@@ -2791,7 +2790,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
               <FormField label={t.name} required><Input value={form.name} onChange={e=>{f("name")(e.target.value);setInvalidFields(prev=>({...prev,name:false}));}} invalid={invalidFields.name} isRTL={isRTL} placeholder={t.name}/></FormField>
               <FormField label={t.type} required><Select value={form.type} onChange={e=>{f("type")(e.target.value);setInvalidFields(prev=>({...prev,type:false}));}} invalid={invalidFields.type} options={db?.settings?.portfolioTypes||[]} placeholder={t.selectType} isRTL={isRTL}/></FormField>
               <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
-                <FormField label={t.initialCapital} required><Input type="number" value={form.initialCapital} onChange={e=>{f("initialCapital")(e.target.value);setInvalidFields(prev=>({...prev,initialCapital:false}));}} invalid={invalidFields.initialCapital} isRTL={isRTL} placeholder="0.00"/></FormField>
+                <FormField label={t.initialCapital}><Input type="number" value={form.initialCapital} onChange={e=>f("initialCapital")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
                 <FormField label={t.risk}><Select value={form.risk} onChange={e=>f("risk")(e.target.value)} options={db?.settings?.riskLevels||[]} placeholder={t.selectRisk} isRTL={isRTL}/></FormField>
               </div>
               <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
@@ -3277,8 +3276,8 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                 <FormField label={t.status} required><Select value={form.status} onChange={e=>{f("status")(e.target.value);setInvalidFields(prev=>({...prev,status:false}));}} invalid={invalidFields.status} options={statusOpts} isRTL={isRTL}/></FormField>
                 <FormField label={t.investmentMethod} required><Select value={form.investmentMethod} onChange={e=>{f("investmentMethod")(e.target.value);setInvalidFields(prev=>({...prev,investmentMethod:false}));}} invalid={invalidFields.investmentMethod} options={methodOpts} placeholder={t.selectMethod} isRTL={isRTL}/></FormField>
               </div>
-            {formError && formError !== t.splitFundingMismatchError && <div style={{ color:T.negative, fontSize:"0.78rem", marginTop:"-6px", marginBottom:"10px" }}>{formError}</div>}
              <FormField label={t.notes}><Input value={form.notes} onChange={e=>f("notes")(e.target.value)} isRTL={isRTL} placeholder={`(${t.optional})`}/></FormField>
+            {formError && formError !== t.splitFundingMismatchError && <div style={{ color:T.negative, fontSize:"0.78rem", marginTop:"-6px", marginBottom:"10px" }}>{formError}</div>}
             </div>
           )}
           <div style={{ display:"flex",justifyContent:"flex-end",gap:"10px",marginTop:"8px" }}>
