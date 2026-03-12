@@ -2561,7 +2561,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [collapsedPortfolios, setCollapsedPortfolios] = useState({});
-  const EMPTY = { name:"",type:"",initialCapital:"",risk:"",currency:"USD",status:"Active",color:T.chart[0],notes:"" };
+  const EMPTY = { name:"",type:"",risk:"",currency:"USD",status:"Active",color:T.chart[0],notes:"" };
   const [form, setForm] = useState(EMPTY);
   const [formError, setFormError] = useState("");
   const [invalidFields, setInvalidFields] = useState({});
@@ -2637,7 +2637,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
     setForm(EMPTY); setShowModal(false); setEditItem(null); setModalMode("create");
   };
 
-  const openView = (p) => { setForm({name:p.name,type:p.type,initialCapital:p.initialCapital||"",risk:p.risk,currency:p.currency,status:p.status||"Active",color:p.color||T.chart[0],notes:p.notes||""}); setEditItem(p); setModalMode("view"); setFormError(""); setInvalidFields({}); setShowModal(true); };
+  const openView = (p) => { setForm({name:p.name,type:p.type,risk:p.risk,currency:p.currency,status:p.status||"Active",color:p.color||T.chart[0],notes:p.notes||""}); setEditItem(p); setModalMode("view"); setFormError(""); setInvalidFields({}); setShowModal(true); };
 
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font }}>
@@ -2778,7 +2778,6 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"10px" }}>
               <ReadOnlyField label={t.name} value={form.name} />
               <ReadOnlyField label={t.type} value={form.type} />
-              <ReadOnlyField label={t.initialCapital} value={form.initialCapital} />
               <ReadOnlyField label={t.risk} value={form.risk} />
               <ReadOnlyField label={t.currency} value={form.currency} />
               <ReadOnlyField label={t.status} value={form.status} />
@@ -2789,10 +2788,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
             <>
               <FormField label={t.name} required><Input value={form.name} onChange={e=>{f("name")(e.target.value);setInvalidFields(prev=>({...prev,name:false}));}} invalid={invalidFields.name} isRTL={isRTL} placeholder={t.name}/></FormField>
               <FormField label={t.type} required><Select value={form.type} onChange={e=>{f("type")(e.target.value);setInvalidFields(prev=>({...prev,type:false}));}} invalid={invalidFields.type} options={db?.settings?.portfolioTypes||[]} placeholder={t.selectType} isRTL={isRTL}/></FormField>
-              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
-                <FormField label={t.initialCapital}><Input type="number" value={form.initialCapital} onChange={e=>f("initialCapital")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
-                <FormField label={t.risk}><Select value={form.risk} onChange={e=>f("risk")(e.target.value)} options={db?.settings?.riskLevels||[]} placeholder={t.selectRisk} isRTL={isRTL}/></FormField>
-              </div>
+              <FormField label={t.risk}><Select value={form.risk} onChange={e=>f("risk")(e.target.value)} options={db?.settings?.riskLevels||[]} placeholder={t.selectRisk} isRTL={isRTL}/></FormField>
               <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
                 <FormField label={t.currency}><Select value={form.currency} onChange={e=>f("currency")(e.target.value)} options={db?.settings?.currencies||[]} placeholder={t.selectCurrency} isRTL={isRTL}/></FormField>
                 <FormField label={t.status}><Select value={form.status} onChange={e=>f("status")(e.target.value)} options={statusOpts} isRTL={isRTL}/></FormField>
@@ -2809,7 +2805,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
             </>)}
             {modalMode==="edit" && (<>
               <Btn onClick={handleSave}>{t.save}</Btn>
-              <Btn variant="secondary" onClick={()=>{ setForm({name:editItem.name,type:editItem.type,initialCapital:editItem.initialCapital||"",risk:editItem.risk,currency:editItem.currency,status:editItem.status||"Active",color:editItem.color||T.chart[0],notes:editItem.notes||""}); setFormError(""); setInvalidFields({}); setModalMode("view"); }}>{t.cancel}</Btn>
+              <Btn variant="secondary" onClick={()=>{ setForm({name:editItem.name,type:editItem.type,risk:editItem.risk,currency:editItem.currency,status:editItem.status||"Active",color:editItem.color||T.chart[0],notes:editItem.notes||""}); setFormError(""); setInvalidFields({}); setModalMode("view"); }}>{t.cancel}</Btn>
             </>)}
             {modalMode==="create" && (<>
               <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");setFormError("");setInvalidFields({});}}>{t.cancel}</Btn>
@@ -3456,6 +3452,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const filtered = allTx.filter((tx) => {
     const portfolioMatch = !filterPortfolio || tx.portfolioId===filterPortfolio;
     const statusMatch = (() => {
+      if (filterStatus === ARCHIVED_FILTER) return Boolean(tx.is_hidden);
       if (tx.is_hidden) return false;
       if (!filterStatus) return true;
       if (filterStatus === "scheduled") return isScheduledTransaction(tx);
@@ -3588,6 +3585,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
     { value:"collected", label:t.collected },
     { value:"deposited", label:t.deposited },
     { value:"scheduled", label:t.scheduled },
+    { value:ARCHIVED_FILTER, label:t.archivedFilter },
   ];
   const statusOpts = ((db?.settings?.transactionStatuses&&db.settings.transactionStatuses.length)?db.settings.transactionStatuses:["recorded","scheduled","cancelled"]).map(v=>({ value:v, label:v }));
 
