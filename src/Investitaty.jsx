@@ -180,6 +180,8 @@ const TRANSLATIONS = {
     smartStatusLate: "Late",
     smartStatusDefaulted: "Defaulted",
     smartStatusEarly: "Early Payment",
+    smartStatusOnTime: "On Time",
+    smartStatusOverdue: "Overdue",
     smartStatusSearchPlaceholder: "Filter by smart status",
     transactionDateRange: "Transaction Date Range",
     clearDateRange: "Clear",
@@ -430,6 +432,8 @@ const TRANSLATIONS = {
     smartStatusLate: "متأخرة",
     smartStatusDefaulted: "متعثرة",
     smartStatusEarly: "سداد مبكر",
+    smartStatusOnTime: "في الموعد",
+    smartStatusOverdue: "متأخرة",
     smartStatusSearchPlaceholder: "تصفية حسب الحالة الذكية",
     transactionDateRange: "نطاق تاريخ المعاملة",
     clearDateRange: "مسح",
@@ -2218,8 +2222,10 @@ const getSmartTxStatus = (tx) => {
 };
 const smartStatusColor = (status) => {
   if (status === "early") return T.positive;
+  if (status === "onTime") return T.info;
   if (status === "upcoming") return T.info;
   if (status === "late") return T.warning;
+  if (status === "overdue") return T.negative;
   if (status === "defaulted") return T.negative;
   return T.textMuted;
 };
@@ -2913,6 +2919,8 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     const nextInvalid = {
       portfolioId: !form.portfolioId,
       name: !form.name.trim(),
+      quantity: !String(form.quantity ?? "").trim(),
+      purchasePrice: !String(form.purchasePrice ?? "").trim(),
       purchaseDate: !form.purchaseDate,
       startDate: !form.startDate,
       risk: !form.risk,
@@ -3301,8 +3309,8 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                 </FormField>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-                <FormField label={t.quantity}><Input type="number" value={form.quantity} onChange={e=>f("quantity")(e.target.value)} isRTL={isRTL} placeholder="0"/></FormField>
-                <FormField label={t.purchasePrice}><Input type="number" value={form.purchasePrice} onChange={e=>f("purchasePrice")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
+                <FormField label={t.quantity} required><Input type="number" value={form.quantity} onChange={e=>{f("quantity")(e.target.value);setInvalidFields(prev=>({...prev,quantity:false}));}} invalid={invalidFields.quantity} isRTL={isRTL} placeholder="0"/></FormField>
+                <FormField label={t.purchasePrice} required><Input type="number" value={form.purchasePrice} onChange={e=>{f("purchasePrice")(e.target.value);setInvalidFields(prev=>({...prev,purchasePrice:false}));}} invalid={invalidFields.purchasePrice} isRTL={isRTL} placeholder="0.00"/></FormField>
                 <FormField label={t.totalInvestmentValue}><Input value={totalInvestmentValue.toFixed(3)} isRTL={isRTL} readOnly style={{ background:"#e2e8f0", color:T.textSecondary }}/></FormField>
                 <FormField label={t.currentPrice}><Input type="number" value={form.currentPrice} onChange={e=>f("currentPrice")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
               </div>
@@ -3503,11 +3511,57 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
     : allInvestments;
   const smartStatusOptions = [
     { value:"upcoming", label:t.smartStatusUpcoming },
+    { value:"overdue", label:t.smartStatusOverdue },
     { value:"late", label:t.smartStatusLate },
-    { value:"defaulted", label:t.smartStatusDefaulted },
     { value:"early", label:t.smartStatusEarly },
+    { value:"onTime", label:t.smartStatusOnTime },
   ];
   const smartStatusLabel = (status) => smartStatusOptions.find((item) => item.value === status)?.label || "—";
+  const getTransactionsSmartStatus = (tx) => {
+    const due = toDateOnly(tx?.dueDate || tx?.due_date);
+    if (!due) return null;
+    const isCompleted = isDepositedTransaction(tx) || isCollectedTransaction(tx);
+    const depositedDate = toDateOnly(tx?.depositedAt || tx?.deposited_at);
+
+    if (isCompleted) {
+      const completionDate = depositedDate || toDateOnly(tx?.collectedAt || tx?.collected_at);
+      if (!completionDate) return null;
+      if (completionDate < due) return "early";
+      if (completionDate > due) return "late";
+      return "onTime";
+    }
+
+    if (!isScheduledTransaction(tx)) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (today <= due) return "upcoming";
+    return "overdue";
+  };
+  const transactionStatusPalette = (tx) => {
+    const status = String(tx?.status || "").toLowerCase().trim();
+
+    if (status.includes("archiv") || status.includes("مؤرشف") || status.includes("مؤرش") || status.includes("archive")) {
+      return { color:"#64748b", bg:"rgba(100,116,139,0.16)", border:"rgba(100,116,139,0.35)" }; // Archived / مؤرشفة
+    }
+    if (status.includes("cancel") || status.includes("fail") || status.includes("ملغ") || status.includes("فشل")) {
+      return { color:"#ef4444", bg:"rgba(239,68,68,0.14)", border:"rgba(239,68,68,0.32)" }; // Cancelled / Failed
+    }
+    if (status.includes("collect") || status.includes("محصل") || status.includes("محصلة")) {
+      return { color:"#10b981", bg:"rgba(16,185,129,0.14)", border:"rgba(16,185,129,0.3)" }; // Collected
+    }
+    if (status.includes("deposit") || status.includes("مودع") || status.includes("مودعة")) {
+      return { color:"#06b6d4", bg:"rgba(6,182,212,0.14)", border:"rgba(6,182,212,0.3)" }; // Deposited
+    }
+    if (status.includes("schedule") || status.includes("مجدول") || status.includes("مجدولة")) {
+      return { color:"#f59e0b", bg:"rgba(245,158,11,0.15)", border:"rgba(245,158,11,0.34)" }; // Scheduled
+    }
+    if (status.includes("record") || status.includes("مسجل") || status.includes("مسجلة")) {
+      return { color:"#4f46e5", bg:"rgba(79,70,229,0.14)", border:"rgba(79,70,229,0.32)" }; // Recorded
+    }
+
+    const fallback = statusColor(tx?.status);
+    return { color:fallback, bg:`${fallback}15`, border:`${fallback}35` };
+  };
   const allTx = db?.transactions||[];
   const filtered = allTx.filter((tx) => {
     const portfolioMatch = !filterPortfolio || tx.portfolioId===filterPortfolio;
@@ -3521,7 +3575,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
       return tx.status === filterStatus;
     })();
     const investmentMatch = !filterInvestment || tx.investmentId===filterInvestment;
-    const smartStatus = getSmartTxStatus(tx);
+    const smartStatus = getTransactionsSmartStatus(tx);
     const smartStatusMatch = !filterSmartStatus || smartStatus === filterSmartStatus;
     const contextDateValue = filterStatus === "collected"
       ? (tx.collectedAt || tx.collected_at)
@@ -3559,7 +3613,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
         Amount: tx.amount || 0,
         Type: tx.type || "",
         Status: tx.status || "",
-        SmartStatus: getSmartTxStatus(tx) || "",
+        SmartStatus: getTransactionsSmartStatus(tx) || "",
         DueDate: tx.dueDate || tx.due_date || "",
         DepositedAt: tx.depositedAt || tx.deposited_at || "",
         CollectedAt: tx.collectedAt || tx.collected_at || "",
@@ -3799,7 +3853,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
                   const txRowId = tx?.id ?? `tx-row-${i}`;
                   const ptf = portfolios.find(p=>p.id===tx.portfolioId);
                   const inv = visible(db?.investments||[]).find(inv=>inv.id===tx.investmentId);
-                  const txSmartStatus = getSmartTxStatus(tx);
+                  const txSmartStatus = getTransactionsSmartStatus(tx);
                   return (
                     <tr key={txRowId} style={{ borderBottom:i<paginatedTransactions.length-1?`1px solid ${T.border}`:"none",transition:"background 0.12s" }}
                       onMouseEnter={e=>e.currentTarget.style.background=T.bgApp}
@@ -3813,7 +3867,30 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
                         {tx.type==="income"?"+":"-"}{fmtMoney(tx.amount,{currency:portfolioCurrency(db, tx.portfolioId)})}
                       </td>
                       <td style={{ padding:"11px 14px",textAlign:isRTL?"right":"left" }}><Chip color={tx.type==="income"?T.positive:T.negative}>{tx.type==="income"?t.income:t.expense}</Chip></td>
-                      <td style={{ padding:"11px 14px",textAlign:isRTL?"right":"left" }}><Chip color={statusColor(tx.status)}>{tx.status}</Chip></td>
+                      <td style={{ padding:"11px 14px",textAlign:isRTL?"right":"left" }}>
+                        {(() => {
+                          const palette = transactionStatusPalette(tx);
+                          return (
+                            <span style={{
+                              display:"inline-flex",
+                              alignItems:"center",
+                              justifyContent:"center",
+                              textAlign:"center",
+                              minHeight:"24px",
+                              padding:"3px 12px",
+                              borderRadius:"999px",
+                              fontSize:"0.72rem",
+                              fontWeight:600,
+                              whiteSpace:"nowrap",
+                              color:palette.color,
+                              background:palette.bg,
+                              border:`1px solid ${palette.border}`,
+                            }}>
+                              {tx.status}
+                            </span>
+                          );
+                        })()}
+                      </td>
                       <td style={{ padding:"11px 14px",textAlign:isRTL?"right":"left" }}>{txSmartStatus ? <Chip color={smartStatusColor(txSmartStatus)}>{smartStatusLabel(txSmartStatus)}</Chip> : "—"}</td>
                       <td style={{ padding:"11px 10px",position:"relative" }} onClick={e=>e.stopPropagation()}>
                         <div style={{ display:"flex",gap:"3px",justifyContent:"flex-end" }}>
@@ -3889,7 +3966,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
               <ReadOnlyField
                 label={t.smartStatusLabel}
                 value={(() => {
-                  const popupSmartStatus = getSmartTxStatus(editItem || form);
+                  const popupSmartStatus = getTransactionsSmartStatus(editItem || form);
                   return popupSmartStatus
                     ? <Chip color={smartStatusColor(popupSmartStatus)}>{smartStatusLabel(popupSmartStatus)}</Chip>
                     : "—";
