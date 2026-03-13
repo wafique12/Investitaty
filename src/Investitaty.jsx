@@ -180,6 +180,8 @@ const TRANSLATIONS = {
     smartStatusLate: "Late",
     smartStatusDefaulted: "Defaulted",
     smartStatusEarly: "Early Payment",
+    smartStatusOnTime: "On Time",
+    smartStatusOverdue: "Overdue",
     smartStatusSearchPlaceholder: "Filter by smart status",
     transactionDateRange: "Transaction Date Range",
     clearDateRange: "Clear",
@@ -430,6 +432,8 @@ const TRANSLATIONS = {
     smartStatusLate: "متأخرة",
     smartStatusDefaulted: "متعثرة",
     smartStatusEarly: "سداد مبكر",
+    smartStatusOnTime: "في الموعد",
+    smartStatusOverdue: "متأخرة",
     smartStatusSearchPlaceholder: "تصفية حسب الحالة الذكية",
     transactionDateRange: "نطاق تاريخ المعاملة",
     clearDateRange: "مسح",
@@ -2218,8 +2222,10 @@ const getSmartTxStatus = (tx) => {
 };
 const smartStatusColor = (status) => {
   if (status === "early") return T.positive;
+  if (status === "onTime") return T.info;
   if (status === "upcoming") return T.info;
   if (status === "late") return T.warning;
+  if (status === "overdue") return T.negative;
   if (status === "defaulted") return T.negative;
   return T.textMuted;
 };
@@ -3505,26 +3511,31 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
     : allInvestments;
   const smartStatusOptions = [
     { value:"upcoming", label:t.smartStatusUpcoming },
+    { value:"overdue", label:t.smartStatusOverdue },
     { value:"late", label:t.smartStatusLate },
-    { value:"defaulted", label:t.smartStatusDefaulted },
     { value:"early", label:t.smartStatusEarly },
+    { value:"onTime", label:t.smartStatusOnTime },
   ];
   const smartStatusLabel = (status) => smartStatusOptions.find((item) => item.value === status)?.label || "—";
   const getTransactionsSmartStatus = (tx) => {
     const due = toDateOnly(tx?.dueDate || tx?.due_date);
     if (!due) return null;
-    const completedAt = isCollectedTransaction(tx)
-      ? toDateOnly(tx?.collectedAt || tx?.collected_at)
-      : isDepositedTransaction(tx)
-        ? toDateOnly(tx?.depositedAt || tx?.deposited_at)
-        : null;
-    if (completedAt) return completedAt < due ? "early" : null;
+    const isCompleted = isDepositedTransaction(tx) || isCollectedTransaction(tx);
+    const depositedDate = toDateOnly(tx?.depositedAt || tx?.deposited_at);
+
+    if (isCompleted) {
+      const completionDate = depositedDate || toDateOnly(tx?.collectedAt || tx?.collected_at);
+      if (!completionDate) return null;
+      if (completionDate < due) return "early";
+      if (completionDate > due) return "late";
+      return "onTime";
+    }
+
+    if (!isScheduledTransaction(tx)) return null;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    if (due > today) return "upcoming";
-    const diffDays = Math.floor((today - due) / 86400000);
-    if (diffDays > 90) return "defaulted";
-    return "late";
+    if (today <= due) return "upcoming";
+    return "overdue";
   };
   const transactionStatusColor = (tx) => {
     if (isDepositedTransaction(tx) && !isCollectedTransaction(tx)) return "#06b6d4";
