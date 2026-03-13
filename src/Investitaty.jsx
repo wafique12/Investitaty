@@ -3537,10 +3537,30 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
     if (today <= due) return "upcoming";
     return "overdue";
   };
-  const transactionStatusColor = (tx) => {
-    if (isDepositedTransaction(tx) && !isCollectedTransaction(tx)) return "#06b6d4";
-    if (isCollectedTransaction(tx)) return T.positive;
-    return statusColor(tx?.status);
+  const transactionStatusPalette = (tx) => {
+    const status = String(tx?.status || "").toLowerCase();
+
+    if (tx?.is_hidden || status.includes("archiv") || status.includes("مؤرشف") || status.includes("مؤرش")) {
+      return { color:"#64748b", bg:"rgba(100,116,139,0.16)", border:"rgba(100,116,139,0.35)" }; // Archived / مؤرشفة
+    }
+    if (status.includes("cancel") || status.includes("fail") || status.includes("ملغ") || status.includes("فشل")) {
+      return { color:"#ef4444", bg:"rgba(239,68,68,0.14)", border:"rgba(239,68,68,0.32)" }; // Cancelled / Failed
+    }
+    if (isCollectedTransaction(tx) || status.includes("محصل") || status.includes("محصلة")) {
+      return { color:"#10b981", bg:"rgba(16,185,129,0.14)", border:"rgba(16,185,129,0.3)" }; // Collected
+    }
+    if (isDepositedTransaction(tx) || status.includes("مودع") || status.includes("مودعة")) {
+      return { color:"#06b6d4", bg:"rgba(6,182,212,0.14)", border:"rgba(6,182,212,0.3)" }; // Deposited
+    }
+    if (isScheduledTransaction(tx) || status.includes("مجدول") || status.includes("مجدولة")) {
+      return { color:"#f59e0b", bg:"rgba(245,158,11,0.15)", border:"rgba(245,158,11,0.34)" }; // Scheduled
+    }
+    if (status.includes("record") || status.includes("مسجل") || status.includes("مسجلة")) {
+      return { color:"#4f46e5", bg:"rgba(79,70,229,0.14)", border:"rgba(79,70,229,0.32)" }; // Recorded
+    }
+
+    const fallback = statusColor(tx?.status);
+    return { color:fallback, bg:`${fallback}15`, border:`${fallback}35` };
   };
   const allTx = db?.transactions||[];
   const filtered = allTx.filter((tx) => {
@@ -3847,7 +3867,30 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
                         {tx.type==="income"?"+":"-"}{fmtMoney(tx.amount,{currency:portfolioCurrency(db, tx.portfolioId)})}
                       </td>
                       <td style={{ padding:"11px 14px",textAlign:isRTL?"right":"left" }}><Chip color={tx.type==="income"?T.positive:T.negative}>{tx.type==="income"?t.income:t.expense}</Chip></td>
-                      <td style={{ padding:"11px 14px",textAlign:isRTL?"right":"left" }}><Chip color={transactionStatusColor(tx)}>{tx.status}</Chip></td>
+                      <td style={{ padding:"11px 14px",textAlign:isRTL?"right":"left" }}>
+                        {(() => {
+                          const palette = transactionStatusPalette(tx);
+                          return (
+                            <span style={{
+                              display:"inline-flex",
+                              alignItems:"center",
+                              justifyContent:"center",
+                              textAlign:"center",
+                              minHeight:"24px",
+                              padding:"3px 12px",
+                              borderRadius:"999px",
+                              fontSize:"0.72rem",
+                              fontWeight:600,
+                              whiteSpace:"nowrap",
+                              color:palette.color,
+                              background:palette.bg,
+                              border:`1px solid ${palette.border}`,
+                            }}>
+                              {tx.status}
+                            </span>
+                          );
+                        })()}
+                      </td>
                       <td style={{ padding:"11px 14px",textAlign:isRTL?"right":"left" }}>{txSmartStatus ? <Chip color={smartStatusColor(txSmartStatus)}>{smartStatusLabel(txSmartStatus)}</Chip> : "—"}</td>
                       <td style={{ padding:"11px 10px",position:"relative" }} onClick={e=>e.stopPropagation()}>
                         <div style={{ display:"flex",gap:"3px",justifyContent:"flex-end" }}>
