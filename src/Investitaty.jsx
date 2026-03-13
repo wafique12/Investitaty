@@ -3538,21 +3538,21 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
     return "overdue";
   };
   const transactionStatusPalette = (tx) => {
-    const status = String(tx?.status || "").toLowerCase();
+    const status = String(tx?.status || "").toLowerCase().trim();
 
-    if (tx?.is_hidden || status.includes("archiv") || status.includes("مؤرشف") || status.includes("مؤرش")) {
+    if (status.includes("archiv") || status.includes("مؤرشف") || status.includes("مؤرش") || status.includes("archive")) {
       return { color:"#64748b", bg:"rgba(100,116,139,0.16)", border:"rgba(100,116,139,0.35)" }; // Archived / مؤرشفة
     }
     if (status.includes("cancel") || status.includes("fail") || status.includes("ملغ") || status.includes("فشل")) {
       return { color:"#ef4444", bg:"rgba(239,68,68,0.14)", border:"rgba(239,68,68,0.32)" }; // Cancelled / Failed
     }
-    if (isCollectedTransaction(tx) || status.includes("محصل") || status.includes("محصلة")) {
+    if (status.includes("collect") || status.includes("محصل") || status.includes("محصلة")) {
       return { color:"#10b981", bg:"rgba(16,185,129,0.14)", border:"rgba(16,185,129,0.3)" }; // Collected
     }
-    if (isDepositedTransaction(tx) || status.includes("مودع") || status.includes("مودعة")) {
+    if (status.includes("deposit") || status.includes("مودع") || status.includes("مودعة")) {
       return { color:"#06b6d4", bg:"rgba(6,182,212,0.14)", border:"rgba(6,182,212,0.3)" }; // Deposited
     }
-    if (isScheduledTransaction(tx) || status.includes("مجدول") || status.includes("مجدولة")) {
+    if (status.includes("schedule") || status.includes("مجدول") || status.includes("مجدولة")) {
       return { color:"#f59e0b", bg:"rgba(245,158,11,0.15)", border:"rgba(245,158,11,0.34)" }; // Scheduled
     }
     if (status.includes("record") || status.includes("مسجل") || status.includes("مسجلة")) {
