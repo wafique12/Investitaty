@@ -3533,6 +3533,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const [filterSmartStatus, setFilterSmartStatus] = useState("");
   const [filterStartDate, setFilterStartDate] = useState("");
   const [filterEndDate, setFilterEndDate] = useState("");
+  const [filterDateField, setFilterDateField] = useState("");
   const [openMenu, setOpenMenu] = useState(null);
   const [formError, setFormError] = useState("");
   const [invalidFields, setInvalidFields] = useState({});
