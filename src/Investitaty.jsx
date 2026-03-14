@@ -2287,18 +2287,26 @@ function Dashboard({ onNavigateTransactionsByStatus }) {
 
   const currentYear = new Date().getFullYear();
   const currentYearStart = `${currentYear}-01-01`;
-  const totalAnnualIncome = transactions
-    .filter((tx) => {
-      if (tx.type !== "income") return false;
-      const deposited = isDepositedTransaction(tx);
-      const collected = isCollectedTransaction(tx);
-      if (!deposited && !collected) return false;
-      const dt = collected
-        ? (tx.collectedAt || tx.collected_at || tx.depositedAt || tx.deposited_at || tx.date || tx.created_at)
-        : (tx.depositedAt || tx.deposited_at || tx.date || tx.created_at);
-      if (!dt) return false;
-      return new Date(dt).getFullYear() === currentYear;
-    })
+  const getAnnualIncomeDate = (tx) => tx?.dueDate || tx?.due_date || tx?.date || tx?.created_at || null;
+  const getStrictIncomeStatus = (tx) => {
+    const normalized = String(tx?.status || "").trim().toLowerCase();
+    if (normalized === "collected") return "collected";
+    if (normalized === "deposited") return "deposited";
+    return null;
+  };
+  const isCurrentYearAnnualIncomeRecord = (tx) => {
+    if (tx?.type !== "income") return false;
+    const strictStatus = getStrictIncomeStatus(tx);
+    if (!strictStatus) return false;
+    const dt = getAnnualIncomeDate(tx);
+    if (!dt) return false;
+    const parsed = new Date(dt);
+    if (Number.isNaN(parsed.getTime())) return false;
+    return parsed.getFullYear() === currentYear;
+  };
+
+  const annualIncomeTransactions = transactions.filter(isCurrentYearAnnualIncomeRecord);
+  const totalAnnualIncome = annualIncomeTransactions
     .reduce((sum, tx)=>sum + toBaseAmount(db, parseFloat(tx.amount)||0, portfolioCurrency(db, tx.portfolioId)), 0);
 
   const currentYearIncomeTransactions = transactions.filter((tx) => {
@@ -2324,19 +2332,12 @@ function Dashboard({ onNavigateTransactionsByStatus }) {
     })
     .reduce((sum, tx) => sum + toBaseAmount(db, parseFloat(tx.amount) || 0, portfolioCurrency(db, tx.portfolioId)), 0);
 
-  const totalCollectedCount = transactions.filter((tx) => {
-    if (tx.type !== "income" || !isCollectedTransaction(tx)) return false;
-    const dt = tx.collectedAt || tx.collected_at || tx.depositedAt || tx.deposited_at || tx.date || tx.created_at;
-    return dt ? new Date(dt).getFullYear() === currentYear : false;
-  }).length;
-  const totalDepositedCount = transactions.filter((tx) => {
-    if (tx.type !== "income") return false;
-    const deposited = isDepositedTransaction(tx);
-    const collected = isCollectedTransaction(tx);
-    if (!deposited || collected) return false;
-    const dt = tx.depositedAt || tx.deposited_at || tx.date || tx.created_at;
-    return dt ? new Date(dt).getFullYear() === currentYear : false;
-  }).length;
+  const totalCollectedCount = annualIncomeTransactions
+    .filter((tx) => getStrictIncomeStatus(tx) === "collected")
+    .length;
+  const totalDepositedCount = annualIncomeTransactions
+    .filter((tx) => getStrictIncomeStatus(tx) === "deposited")
+    .length;
 
   const goToTransactionsByStatus = (status) => {
     onNavigateTransactionsByStatus?.({
