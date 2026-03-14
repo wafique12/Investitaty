@@ -1084,7 +1084,9 @@ function useGoogleAuth(lang = "en") {
     }
   }, [user, token, authLog]);
 
-  return { user, token, authLoading, authError, gapiReady, signIn, signOut };
+  return useMemo(() => ({ user, token, authLoading, authError, gapiReady, signIn, signOut }), [
+    user, token, authLoading, authError, gapiReady, signIn, signOut,
+  ]);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1118,9 +1120,9 @@ function AppProvider({ children }) {
     setDbLoading(false);
     setGatekeeperError(null);
     setUserSyncDone(false);
-    setBackupFiles([]);
+    setBackupFiles((prev) => (prev.length ? [] : prev));
     if (shouldSignOut) auth.signOut();
-  }, [auth]);
+  }, [auth.signOut]);
 
   const fetchBackups = useCallback(async () => {
     if (!auth.token) return [];
@@ -1599,14 +1601,21 @@ function AppProvider({ children }) {
     }
   }, [fetchUsersConfig]);
 
-  const value = {
+  const value = useMemo(() => ({
     ...auth, db, fileId, syncing, syncError, dbLoading,
     updateDb, softDelete, archiveItem, unarchiveItem, hardDeleteItem, patchItem, addItem,
     lang, setLang, t, isRTL, font,
     usersConfig, usersConfigReady, currentRole, isBlocked, hasPermission,
     updateUserEntry, deleteUserEntry, gatekeeperError, userSyncDone,
     backupFiles, lastBackupAt, backupBusy, triggerBackup, restoreBackup, fetchBackups, manualSync,
-  };
+  }), [
+    auth, db, fileId, syncing, syncError, dbLoading,
+    updateDb, softDelete, archiveItem, unarchiveItem, hardDeleteItem, patchItem, addItem,
+    lang, t, isRTL, font,
+    usersConfig, usersConfigReady, currentRole, isBlocked, hasPermission,
+    updateUserEntry, deleteUserEntry, gatekeeperError, userSyncDone,
+    backupFiles, lastBackupAt, backupBusy, triggerBackup, restoreBackup, fetchBackups, manualSync,
+  ]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
@@ -2272,16 +2281,17 @@ function Dashboard({ onNavigateTransactionsByStatus }) {
   const [dashboardFundingLegendExpanded, setDashboardFundingLegendExpanded] = useState(false);
   const [hiddenDashboardFundingSources, setHiddenDashboardFundingSources] = useState(() => new Set());
 
-  const portfolios = visible(db?.portfolios || []);
-  const investments = visible(db?.investments || []);
-  const transactions = visible(db?.transactions || []);
-  const baseCurrency = baseCurrencyCode(db || INITIAL_SCHEMA);
+  const safeDb = useMemo(() => migrateSchema(db || INITIAL_SCHEMA), [db]);
+  const portfolios = useMemo(() => visible(safeDb?.portfolios || []), [safeDb]);
+  const investments = useMemo(() => visible(safeDb?.investments || []), [safeDb]);
+  const transactions = useMemo(() => visible(safeDb?.transactions || []), [safeDb]);
+  const baseCurrency = baseCurrencyCode(safeDb);
 
-  const activeInvestments = investments.filter(isActiveInvestment);
+  const activeInvestments = useMemo(() => investments.filter(isActiveInvestment), [investments]);
   const activePrincipal = activeInvestments
-    .reduce((s,i)=>s+toBaseAmount(db, costBasis(i), portfolioCurrency(db, i.portfolioId)),0);
+    .reduce((s,i)=>s+toBaseAmount(safeDb, costBasis(i), portfolioCurrency(safeDb, i.portfolioId)),0);
   const totalPortfolioValue = activeInvestments
-    .reduce((s,i)=>s+toBaseAmount(db, investmentValue(i), portfolioCurrency(db, i.portfolioId)),0);
+    .reduce((s,i)=>s+toBaseAmount(safeDb, investmentValue(i), portfolioCurrency(safeDb, i.portfolioId)),0);
   const portfolioDeltaValue = totalPortfolioValue - activePrincipal;
   const portfolioDeltaPct = activePrincipal > 0 ? (portfolioDeltaValue / activePrincipal) * 100 : 0;
 
@@ -2307,7 +2317,7 @@ function Dashboard({ onNavigateTransactionsByStatus }) {
 
   const annualIncomeTransactions = transactions.filter(isCurrentYearAnnualIncomeRecord);
   const totalAnnualIncome = annualIncomeTransactions
-    .reduce((sum, tx)=>sum + toBaseAmount(db, parseFloat(tx.amount)||0, portfolioCurrency(db, tx.portfolioId)), 0);
+    .reduce((sum, tx)=>sum + toBaseAmount(safeDb, parseFloat(tx.amount)||0, portfolioCurrency(safeDb, tx.portfolioId)), 0);
 
   const currentYearIncomeTransactions = transactions.filter((tx) => {
     if (tx.type !== "income") return false;
@@ -2323,14 +2333,14 @@ function Dashboard({ onNavigateTransactionsByStatus }) {
       const category = String(tx.category || "").toLowerCase();
       return category.includes("dividend") || category.includes("yield") || category.includes("توزيع") || category.includes("عائد");
     })
-    .reduce((sum, tx) => sum + toBaseAmount(db, parseFloat(tx.amount) || 0, portfolioCurrency(db, tx.portfolioId)), 0);
+    .reduce((sum, tx) => sum + toBaseAmount(safeDb, parseFloat(tx.amount) || 0, portfolioCurrency(safeDb, tx.portfolioId)), 0);
 
   const expectedCapitalGains = currentYearIncomeTransactions
     .filter((tx) => {
       const category = String(tx.category || "").toLowerCase();
       return category.includes("capital gain") || category.includes("رأس") || category.includes("رأسمالي");
     })
-    .reduce((sum, tx) => sum + toBaseAmount(db, parseFloat(tx.amount) || 0, portfolioCurrency(db, tx.portfolioId)), 0);
+    .reduce((sum, tx) => sum + toBaseAmount(safeDb, parseFloat(tx.amount) || 0, portfolioCurrency(safeDb, tx.portfolioId)), 0);
 
   const totalCollectedCount = annualIncomeTransactions
     .filter((tx) => getStrictIncomeStatus(tx) === "collected")
@@ -2356,8 +2366,8 @@ function Dashboard({ onNavigateTransactionsByStatus }) {
   const allocationByType = {};
   portfolios.forEach((portfolio) => {
     const typeKey = portfolio.type || t.unassignedType;
-    const portfolioTotal = inv_of_portfolio(db, portfolio.id)
-      .reduce((sum, inv) => sum + toBaseAmount(db, curVal(inv), portfolio.currency || "USD"), 0);
+    const portfolioTotal = inv_of_portfolio(safeDb, portfolio.id)
+      .reduce((sum, inv) => sum + toBaseAmount(safeDb, curVal(inv), portfolio.currency || "USD"), 0);
     if (portfolioTotal > 0) {
       allocationByType[typeKey] = (allocationByType[typeKey] || 0) + portfolioTotal;
     }
@@ -2377,15 +2387,15 @@ function Dashboard({ onNavigateTransactionsByStatus }) {
     .slice(0,5);
 
   // Funding source distribution chart + modal dataset
-  const fundingDistribution = [...new Set([...(db?.settings?.fundingSources || []), ...investments.flatMap((inv) => (inv.funding || []).map((f) => f.source).filter(Boolean))])]
+  const fundingDistribution = [...new Set([...(safeDb?.settings?.fundingSources || []), ...investments.flatMap((inv) => (inv.funding || []).map((f) => f.source).filter(Boolean))])]
     .map((source, idx) => {
       const activeInvestments = investments.filter((inv) => (inv.status || "Active") === "Active");
       const items = activeInvestments
         .map((inv) => {
           const amount = (inv.funding || [])
             .filter((f) => f.source === source)
-            .reduce((sum, f) => sum + toBaseAmount(db, parseFloat(f.amount) || 0, portfolioCurrency(db, inv.portfolioId)), 0);
-          return amount > 0 ? { id: inv.id, name: inv.name, amount: toBaseAmount(db, amount, portfolioCurrency(db, inv.portfolioId)), currency: baseCurrency } : null;
+            .reduce((sum, f) => sum + toBaseAmount(safeDb, parseFloat(f.amount) || 0, portfolioCurrency(safeDb, inv.portfolioId)), 0);
+          return amount > 0 ? { id: inv.id, name: inv.name, amount: toBaseAmount(safeDb, amount, portfolioCurrency(safeDb, inv.portfolioId)), currency: baseCurrency } : null;
         })
         .filter(Boolean);
       const total = items.reduce((sum, item) => sum + item.amount, 0);
@@ -2487,7 +2497,7 @@ function Dashboard({ onNavigateTransactionsByStatus }) {
           accent={T.warning}
           icon={CalendarClock}
         />
-        <KPICard label={t.totalIncome} value={transactions.filter(t=>t.type==="income").reduce((sum, tx)=>sum + toBaseAmount(db, parseFloat(tx.amount)||0, portfolioCurrency(db, tx.portfolioId)), 0)} valueDecimals={2} currency={baseCurrency} sub={`${transactions.filter(tx=>tx.type==="income").length} ${t.payments}`} accent={T.info} icon={Landmark} />
+        <KPICard label={t.totalIncome} value={transactions.filter(t=>t.type==="income").reduce((sum, tx)=>sum + toBaseAmount(safeDb, parseFloat(tx.amount)||0, portfolioCurrency(safeDb, tx.portfolioId)), 0)} valueDecimals={2} currency={baseCurrency} sub={`${transactions.filter(tx=>tx.type==="income").length} ${t.payments}`} accent={T.info} icon={Landmark} />
       </div>
 
       {/* Charts row */}
@@ -5617,10 +5627,23 @@ export default function App() {
 
 function AppContent() {
   const { user, token, dbLoading, db, t, usersConfigReady, userSyncDone } = useApp();
-  if (!user?.id || !token) return <LoginPage/>;
-  if (!usersConfigReady || !userSyncDone) return <LoadingScreen message={t?.loading||"LOADING..."}/>;
-  if (dbLoading || !db) return <LoadingScreen message={t?.loading||"LOADING..."}/>;
-  return <MainApp/>;
+  const [screen, setScreen] = useState("loading");
+
+  useEffect(() => {
+    if (!user?.id || !token) {
+      setScreen("login");
+      return;
+    }
+    if (!usersConfigReady || !userSyncDone || dbLoading || !db) {
+      setScreen("loading");
+      return;
+    }
+    setScreen("main");
+  }, [user?.id, token, usersConfigReady, userSyncDone, dbLoading, db]);
+
+  if (screen === "login") return <LoginPage/>;
+  if (screen === "main") return <MainApp/>;
+  return <LoadingScreen message={t?.loading||"LOADING..."}/>;
 }
 
 import { createRoot } from 'react-dom/client';
