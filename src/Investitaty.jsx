@@ -2064,7 +2064,12 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileO
         {showLabels && (
           <div style={{ display:"flex",alignItems:"center",gap:"6px",marginTop:"8px" }}>
             <div style={{ width:"6px",height:"6px",borderRadius:"50%",background:syncing?"#f59e0b":T.emerald,transition:"background 0.3s" }}/>
-            <button onClick={manualSync} style={{ background:"none",border:"none",padding:0,cursor:"pointer",color:syncing?"#f59e0b90":`${T.emerald}80`,fontSize:"0.62rem",letterSpacing:"0.1em",textTransform:"uppercase",textDecoration:"underline" }}>
+            <button
+              onClick={manualSync}
+              style={{ background:"none",border:"none",padding:0,cursor:"pointer",color:syncing?"#f59e0b90":`${T.emerald}80`,fontSize:"0.62rem",letterSpacing:"0.1em",textTransform:"uppercase",textDecoration:"none" }}
+              onMouseEnter={(e) => { e.currentTarget.style.textDecoration = "underline"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.textDecoration = "none"; }}
+            >
               {syncing ? t.syncing : t.synced}
             </button>
           </div>
@@ -2337,7 +2342,7 @@ function Dashboard({ onNavigateTransactionsByStatus }) {
     onNavigateTransactionsByStatus?.({
       status,
       startDate: currentYearStart,
-      endDate: "",
+      endDate: null,
       dateField: status === "collected" ? "collectedAt" : "depositedAt",
       stamp: Date.now(),
     });
@@ -2453,6 +2458,8 @@ function Dashboard({ onNavigateTransactionsByStatus }) {
                 type="button"
                 onClick={() => goToTransactionsByStatus("collected")}
                 style={{ background:"none", border:"none", padding:0, margin:0, cursor:"pointer", color:T.textMuted, fontSize:"0.72rem", textDecoration:"none", textAlign:isRTL?"right":"left" }}
+                onMouseEnter={(e) => { e.currentTarget.style.textDecoration = "underline"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.textDecoration = "none"; }}
               >
                 {totalCollectedCount} {t.collectedTransactions}
               </button>
@@ -2460,6 +2467,8 @@ function Dashboard({ onNavigateTransactionsByStatus }) {
                 type="button"
                 onClick={() => goToTransactionsByStatus("deposited")}
                 style={{ background:"none", border:"none", padding:0, margin:0, cursor:"pointer", color:T.textMuted, fontSize:"0.72rem", textDecoration:"none", textAlign:isRTL?"right":"left" }}
+                onMouseEnter={(e) => { e.currentTarget.style.textDecoration = "underline"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.textDecoration = "none"; }}
               >
                 {totalDepositedCount} {t.depositedTransactions}
               </button>
@@ -3782,13 +3791,20 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   }, [modalPrefill]);
 
   useEffect(() => {
-    if (!navigationFilter) return;
-    if (navigationFilter.portfolioId) setFilterPortfolio(navigationFilter.portfolioId);
-    if (navigationFilter.investmentId) setFilterInvestment(navigationFilter.investmentId);
-    if (navigationFilter.status) setFilterStatus(navigationFilter.status);
-    if (navigationFilter.startDate !== undefined) setFilterStartDate(navigationFilter.startDate || "");
-    if (navigationFilter.endDate !== undefined) setFilterEndDate(navigationFilter.endDate || "");
-    if (navigationFilter.dateField) setFilterDateField(navigationFilter.dateField);
+    if (!navigationFilter || typeof navigationFilter !== "object") return;
+    const normalizedStatus = ["collected", "deposited", "scheduled", ARCHIVED_FILTER].includes(navigationFilter.status)
+      ? navigationFilter.status
+      : "";
+    const normalizedDateField = ["collectedAt", "depositedAt"].includes(navigationFilter.dateField)
+      ? navigationFilter.dateField
+      : "";
+
+    if (navigationFilter.portfolioId) setFilterPortfolio(String(navigationFilter.portfolioId));
+    if (navigationFilter.investmentId) setFilterInvestment(String(navigationFilter.investmentId));
+    setFilterStatus(normalizedStatus);
+    setFilterStartDate(navigationFilter.startDate ? String(navigationFilter.startDate) : "");
+    setFilterEndDate(navigationFilter.endDate ? String(navigationFilter.endDate) : "");
+    setFilterDateField(normalizedDateField);
   }, [navigationFilter]);
 
   useEffect(() => {
