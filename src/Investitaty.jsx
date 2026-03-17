@@ -3521,25 +3521,25 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                 <div style={{ flex:"0 1 176px", minWidth:"150px" }}>
                   <FormField label="Total Value"><Input value={totalInvestmentValue.toFixed(3)} isRTL={isRTL} readOnly style={{ maxWidth:"176px", color:T.textSecondary }}/></FormField>
                 </div>
-                <div style={{ display:"flex", gap:"8px", alignItems:"flex-end", padding:"8px 10px", border:`1px solid ${T.border}`, borderRadius:"10px", background:T.bgApp }}>
-                  <div style={{ flex:"0 1 186px", minWidth:"156px" }}>
-                    <FormField label={t.currentPrice}><Input type="number" value={form.currentPrice} onChange={e=>f("currentPrice")(e.target.value)} isRTL={isRTL} placeholder="0.00" disabled={Boolean(form.inheritPrice)} style={{ maxWidth:"186px" }}/></FormField>
-                  </div>
-                  <div style={{ display:"flex", flexDirection:"column", justifyContent:"space-between", minWidth:"110px", paddingBottom:"10px" }}>
-                    <span style={{ fontSize:"0.72rem", fontWeight:700, color:T.textMuted, marginBottom:"6px" }}>{t.inheritPrice || "Sync with Wallet"}</span>
-                    <label style={{ display:"inline-flex", alignItems:"center", minHeight:"36px" }}>
-                      <input
-                        type="checkbox"
-                        checked={Boolean(form.inheritPrice)}
-                        onChange={(e)=>{
-                          const checked = e.target.checked;
-                          const walletPrice = parseFloat(portfolios.find((p)=>p.id===form.portfolioId)?.current_price) || 0;
-                          setForm((prev)=>({ ...prev, inheritPrice: checked, currentPrice: checked ? String(walletPrice) : prev.currentPrice }));
-                        }}
-                        style={{ accentColor:T.info, width:"14px",height:"14px",cursor:"pointer" }}
-                      />
-                    </label>
-                  </div>
+                <div style={{ flex:"0 1 320px", minWidth:"252px" }}>
+                  <FormField label={t.currentPrice}>
+                    <div style={{ display:"flex", alignItems:"center", gap:"10px" }}>
+                      <Input type="number" value={form.currentPrice} onChange={e=>f("currentPrice")(e.target.value)} isRTL={isRTL} placeholder="0.00" disabled={Boolean(form.inheritPrice)} style={{ maxWidth:"186px" }}/>
+                      <label style={{ display:"inline-flex", alignItems:"center", gap:"6px", minHeight:"36px", whiteSpace:"nowrap", fontSize:"0.72rem", fontWeight:700, color:T.textMuted }}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(form.inheritPrice)}
+                          onChange={(e)=>{
+                            const checked = e.target.checked;
+                            const walletPrice = parseFloat(portfolios.find((p)=>p.id===form.portfolioId)?.current_price) || 0;
+                            setForm((prev)=>({ ...prev, inheritPrice: checked, currentPrice: checked ? String(walletPrice) : prev.currentPrice }));
+                          }}
+                          style={{ accentColor:T.info, width:"14px",height:"14px",cursor:"pointer" }}
+                        />
+                        <span>{t.inheritPrice || "Sync with Wallet"}</span>
+                      </label>
+                    </div>
+                  </FormField>
                 </div>
               </div>
               <FormField label={t.splitFunding}>
