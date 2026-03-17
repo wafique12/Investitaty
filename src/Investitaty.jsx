@@ -3511,13 +3511,17 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                     options={portfolios.map(p=>({value:p.id,label:p.name}))} placeholder={t.selectPortfolio} isRTL={isRTL}/>
                 </FormField>
               </div>
-              <div style={{ display:"grid", gridTemplateColumns:"0.8fr 1fr 1.1fr", gap:"12px", alignItems:"end" }}>
-                <FormField label={t.quantity} required><Input type="number" value={form.quantity} onChange={e=>{f("quantity")(e.target.value);setInvalidFields(prev=>({...prev,quantity:false}));}} invalid={invalidFields.quantity} isRTL={isRTL} placeholder="0" style={{ maxWidth:"130px" }}/></FormField>
-                <FormField label={t.purchasePrice} required><Input type="number" value={form.purchasePrice} onChange={e=>{f("purchasePrice")(e.target.value);setInvalidFields(prev=>({...prev,purchasePrice:false}));}} invalid={invalidFields.purchasePrice} isRTL={isRTL} placeholder="0.00" style={{ maxWidth:"170px" }}/></FormField>
-                <FormField label={t.totalInvestmentValue}><Input value={totalInvestmentValue.toFixed(3)} isRTL={isRTL} readOnly style={{ maxWidth:"220px", color:T.textSecondary }}/></FormField>
-              </div>
-              <div style={{ display:"flex",alignItems:"flex-end",gap:"12px",flexWrap:"nowrap" }}>
-                <div style={{ flex:"0 1 220px" }}>
+              <div style={{ display:"flex", gap:"12px", alignItems:"flex-end", flexWrap:"wrap" }}>
+                <div style={{ flex:"0 1 110px", minWidth:"96px" }}>
+                  <FormField label={t.quantity} required><Input type="number" value={form.quantity} onChange={e=>{f("quantity")(e.target.value);setInvalidFields(prev=>({...prev,quantity:false}));}} invalid={invalidFields.quantity} isRTL={isRTL} placeholder="0" style={{ maxWidth:"110px" }}/></FormField>
+                </div>
+                <div style={{ flex:"0 1 170px", minWidth:"140px" }}>
+                  <FormField label={t.purchasePrice} required><Input type="number" value={form.purchasePrice} onChange={e=>{f("purchasePrice")(e.target.value);setInvalidFields(prev=>({...prev,purchasePrice:false}));}} invalid={invalidFields.purchasePrice} isRTL={isRTL} placeholder="0.00" style={{ maxWidth:"170px" }}/></FormField>
+                </div>
+                <div style={{ flex:"0 1 210px", minWidth:"170px" }}>
+                  <FormField label={t.totalInvestmentValue}><Input value={totalInvestmentValue.toFixed(3)} isRTL={isRTL} readOnly style={{ maxWidth:"210px", color:T.textSecondary }}/></FormField>
+                </div>
+                <div style={{ flex:"0 1 220px", minWidth:"170px" }}>
                   <FormField label={t.currentPrice}><Input type="number" value={form.currentPrice} onChange={e=>f("currentPrice")(e.target.value)} isRTL={isRTL} placeholder="0.00" disabled={Boolean(form.inheritPrice)} style={{ maxWidth:"220px" }}/></FormField>
                 </div>
                 <label style={{ display:"inline-flex",alignItems:"center",gap:"6px",marginBottom:"10px",fontSize:"0.72rem",color:T.textSecondary,whiteSpace:"nowrap",padding:"0 4px" }}>
