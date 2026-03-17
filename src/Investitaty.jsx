@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { supabase, hasSupabaseConfig, hasSupabaseClient } from "./lib/supabaseClient";
 import BackupService from "./services/BackupService";
-import { DB_FOLDER_NAME, DRIVE_ROOT_FOLDER, ensureDriveOk, getDriveAppFolders } from "./services/DrivePaths";
+import { DB_FOLDER_NAME, DRIVE_ROOT_FOLDER, ensureDriveOk, getDriveAppFolders, setDriveUnauthorizedHandler } from "./services/DrivePaths";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONFIG
@@ -29,6 +29,7 @@ const AUTH_CONSENT_STORAGE_KEY = "investitaty_auth_consent_v1";
 const AUTH_LOGIN_DAY_KEY = "investitaty_auth_login_day_v1";
 const TAB_STORAGE_KEY = "investitaty_active_tab_v1";
 const SESSION_EXPIRED_NOTICE_KEY = "investitaty_session_expired_notice_v1";
+const SESSION_EXPIRED_MESSAGE_KEY = "investitaty_session_expired_message_v1";
 const PORTFOLIOS_COLLAPSE_STORAGE_KEY = "investitaty_portfolios_collapsed_v1";
 const PORTFOLIOS_UI_STORAGE_KEY = "investitaty_portfolios_ui_v1";
 const INVESTMENTS_COLLAPSE_STORAGE_KEY = "investitaty_investments_collapsed_v1";
@@ -642,12 +643,13 @@ const useApp = () => useContext(AppContext);
 // ═══════════════════════════════════════════════════════════════════════════════
 // GOOGLE DRIVE SERVICE (unchanged from Sprint 3)
 // ═══════════════════════════════════════════════════════════════════════════════
-async function findOrCreateDB(token) {
+async function findOrCreateDB(token, options = {}) {
+  const { signal } = options;
   const { dbFolder } = await getDriveAppFolders(token);
   const q = encodeURIComponent(`name='${DB_FILENAME}' and trashed=false and '${dbFolder.id}' in parents`);
   const searchRes = await fetch(
     `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&pageSize=1`,
-    { headers: { Authorization: `Bearer ${token}` } }
+    { headers: { Authorization: `Bearer ${token}` }, signal }
   );
   await ensureDriveOk(searchRes, "Unable to locate database file");
   const searchData = await searchRes.json();
@@ -656,7 +658,7 @@ async function findOrCreateDB(token) {
     const fileId = searchData.files[0].id;
     const fileRes = await fetch(
       `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
-      { headers: { Authorization: `Bearer ${token}` } }
+      { headers: { Authorization: `Bearer ${token}` }, signal }
     );
     await ensureDriveOk(fileRes, "Unable to read database file");
     const data = await fileRes.json();
@@ -677,7 +679,7 @@ async function findOrCreateDB(token) {
   ].join("\r\n");
   const createRes = await fetch(
     "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id",
-    { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": `multipart/related; boundary=${boundary}` }, body: multipart }
+    { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": `multipart/related; boundary=${boundary}` }, body: multipart, signal }
   );
   await ensureDriveOk(createRes, "Unable to initialize database file");
   const created = await createRes.json();
@@ -852,6 +854,31 @@ function useGoogleAuth(lang = "en") {
     else console.log(`${AUTH_DEBUG_PREFIX} ${step}`);
   }, []);
 
+  const clearStaleSessionStorage = useCallback(() => {
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+    localStorage.removeItem(AUTH_LOGIN_DAY_KEY);
+    localStorage.removeItem(SESSION_EXPIRED_NOTICE_KEY);
+    localStorage.removeItem(SESSION_EXPIRED_MESSAGE_KEY);
+  }, []);
+
+  const validateToken = useCallback(async (tokenToValidate) => {
+    const activeToken = tokenToValidate || token;
+    if (!activeToken) return false;
+    try {
+      const res = await fetch("https://www.googleapis.com/oauth2/v1/tokeninfo", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ access_token: activeToken }),
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      const expiresIn = Number(data?.expires_in || 0);
+      return Number.isFinite(expiresIn) && expiresIn > 0;
+    } catch (_) {
+      return false;
+    }
+  }, [token]);
+
   useEffect(() => {
     const storageOK = isLocalStorageAvailable();
     setStorageReady(storageOK);
@@ -946,6 +973,10 @@ function useGoogleAuth(lang = "en") {
       authLog("Sign-in aborted: APIs not ready");
       return;
     }
+
+    clearStaleSessionStorage();
+    setUser(null);
+    setToken(null);
 
     setAuthLoading(true);
     setAuthError(null);
@@ -1060,7 +1091,7 @@ function useGoogleAuth(lang = "en") {
       note: "Using Google account chooser flow to avoid legacy hanging OAuth route",
     });
     tokenClientRef.current.requestAccessToken({ prompt });
-  }, [authLog, gapiReady, hasGrantedConsent, storageReady, translations.drivePermissionRequired]);
+  }, [authLog, gapiReady, hasGrantedConsent, storageReady, clearStaleSessionStorage, translations.drivePermissionRequired]);
 
   const signOut = useCallback(() => {
     authLog("Sign-out requested", { hasToken: Boolean(token) });
@@ -1084,8 +1115,8 @@ function useGoogleAuth(lang = "en") {
     }
   }, [user, token, authLog]);
 
-  return useMemo(() => ({ user, token, authLoading, authError, gapiReady, signIn, signOut }), [
-    user, token, authLoading, authError, gapiReady, signIn, signOut,
+  return useMemo(() => ({ user, token, authLoading, authError, gapiReady, signIn, signOut, validateToken }), [
+    user, token, authLoading, authError, gapiReady, signIn, signOut, validateToken,
   ]);
 }
 
@@ -1110,10 +1141,17 @@ function AppProvider({ children }) {
   const [backupBusy, setBackupBusy] = useState(false);
   const inactivityTimerRef = useRef(null);
   const saveTimerRef = useRef(null);
+  const dbFetchAbortRef = useRef(null);
+  const dbLoadingWatchdogRef = useRef(null);
 
   const clearLocalSessionState = useCallback((shouldSignOut = false) => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+    if (dbLoadingWatchdogRef.current) clearTimeout(dbLoadingWatchdogRef.current);
+    if (dbFetchAbortRef.current) {
+      dbFetchAbortRef.current.abort();
+      dbFetchAbortRef.current = null;
+    }
     setDb(null);
     setFileId(null);
     setSyncError(null);
@@ -1121,8 +1159,24 @@ function AppProvider({ children }) {
     setGatekeeperError(null);
     setUserSyncDone(false);
     setBackupFiles((prev) => (prev.length ? [] : prev));
+    if (shouldSignOut) {
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+      localStorage.removeItem(AUTH_CONSENT_STORAGE_KEY);
+      localStorage.removeItem(AUTH_LOGIN_DAY_KEY);
+    }
     if (shouldSignOut) auth.signOut();
   }, [auth.signOut]);
+
+  useEffect(() => {
+    const onUnauthorized = () => {
+      localStorage.setItem(SESSION_EXPIRED_NOTICE_KEY, "1");
+      localStorage.setItem(SESSION_EXPIRED_MESSAGE_KEY, "Session expired or connection failed. Please log in again.");
+      setSyncError("Session expired or connection failed. Please log in again.");
+      clearLocalSessionState(true);
+    };
+    setDriveUnauthorizedHandler(onUnauthorized);
+    return () => setDriveUnauthorizedHandler(null);
+  }, [clearLocalSessionState]);
 
   const fetchBackups = useCallback(async () => {
     if (!auth.token) return [];
@@ -1362,12 +1416,65 @@ function AppProvider({ children }) {
   }, [auth.user, auth.token, auth.signOut, fetchUsersConfig, usersConfigReady, t.accountBlockedLeader, t.permissionsVerifyFailed]);
 
   useEffect(() => {
-    if (!auth.token || isBlocked || !userSyncDone) return;
+    let cancelled = false;
+    const runSessionValidation = async () => {
+      if (!auth.user?.id || !auth.token) return;
+      if (hasSupabaseClient && supabase?.auth?.getSession) {
+        const { data } = await supabase.auth.getSession().catch(() => ({ data: null }));
+        const supabaseExpired = Boolean(data?.session?.expires_at && data.session.expires_at * 1000 <= Date.now());
+        if (data?.session && supabaseExpired) {
+          if (cancelled) return;
+          localStorage.setItem(SESSION_EXPIRED_NOTICE_KEY, "1");
+          localStorage.setItem(SESSION_EXPIRED_MESSAGE_KEY, "Session expired or connection failed. Please log in again.");
+          setSyncError("Session expired or connection failed. Please log in again.");
+          clearLocalSessionState(true);
+          return;
+        }
+      }
+      const tokenValid = await auth.validateToken(auth.token);
+      if (cancelled || tokenValid) return;
+      localStorage.setItem(SESSION_EXPIRED_NOTICE_KEY, "1");
+      localStorage.setItem(SESSION_EXPIRED_MESSAGE_KEY, "Session expired or connection failed. Please log in again.");
+      setSyncError("Session expired or connection failed. Please log in again.");
+      clearLocalSessionState(true);
+    };
+    runSessionValidation();
+    return () => { cancelled = true; };
+  }, [auth.user?.id, auth.token, auth.validateToken, clearLocalSessionState]);
+
+  useEffect(() => {
+    if (!auth.user?.id || !auth.token || auth.authLoading || isBlocked || !userSyncDone) return;
+    if (dbFetchAbortRef.current) dbFetchAbortRef.current.abort();
+    const controller = new AbortController();
+    dbFetchAbortRef.current = controller;
     setDbLoading(true);
-    findOrCreateDB(auth.token)
-      .then(({ fileId: fid, data }) => { setFileId(fid); setDb(data); setDbLoading(false); })
-      .catch(() => { setSyncError("Failed to access Google Drive."); setDbLoading(false); });
-  }, [auth.token, isBlocked, userSyncDone]);
+    if (dbLoadingWatchdogRef.current) clearTimeout(dbLoadingWatchdogRef.current);
+    dbLoadingWatchdogRef.current = setTimeout(() => {
+      localStorage.setItem(SESSION_EXPIRED_NOTICE_KEY, "1");
+      localStorage.setItem(SESSION_EXPIRED_MESSAGE_KEY, "Session expired or connection failed. Please log in again.");
+      setSyncError("Session expired or connection failed. Please log in again.");
+      clearLocalSessionState(true);
+    }, 10000);
+    findOrCreateDB(auth.token, { signal: controller.signal })
+      .then(({ fileId: fid, data }) => {
+        if (controller.signal.aborted) return;
+        if (dbLoadingWatchdogRef.current) clearTimeout(dbLoadingWatchdogRef.current);
+        setFileId(fid);
+        setDb(data);
+        setDbLoading(false);
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        if (dbLoadingWatchdogRef.current) clearTimeout(dbLoadingWatchdogRef.current);
+        setSyncError("Failed to access Google Drive.");
+        setDbLoading(false);
+      });
+    return () => {
+      controller.abort();
+      if (dbFetchAbortRef.current === controller) dbFetchAbortRef.current = null;
+      if (dbLoadingWatchdogRef.current) clearTimeout(dbLoadingWatchdogRef.current);
+    };
+  }, [auth.user?.id, auth.token, auth.authLoading, isBlocked, userSyncDone, clearLocalSessionState]);
 
   useEffect(() => {
     if (!auth.token || !db || isBlocked || !userSyncDone) return;
@@ -1902,6 +2009,7 @@ import { version } from '../package.json';
 function LoginPage() {
   const { signIn, authLoading, gapiReady, authError, gatekeeperError, lang, setLang, t, isRTL, font } = useApp();
   const [sessionExpiredNotice, setSessionExpiredNotice] = useState(false);
+  const [sessionExpiredMessage, setSessionExpiredMessage] = useState("");
 
   useEffect(() => {
     if (!hasSupabaseConfig || !hasSupabaseClient) {
@@ -1913,9 +2021,11 @@ function LoginPage() {
   useEffect(() => {
     if (localStorage.getItem(SESSION_EXPIRED_NOTICE_KEY) === "1") {
       setSessionExpiredNotice(true);
+      setSessionExpiredMessage(localStorage.getItem(SESSION_EXPIRED_MESSAGE_KEY) || t.sessionExpiredSecurity);
       localStorage.removeItem(SESSION_EXPIRED_NOTICE_KEY);
+      localStorage.removeItem(SESSION_EXPIRED_MESSAGE_KEY);
     }
-  }, []);
+  }, [t.sessionExpiredSecurity]);
 
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{
@@ -1994,7 +2104,7 @@ function LoginPage() {
         )}
         {sessionExpiredNotice && (
           <div style={{ marginTop:"14px",padding:"10px 14px",background:"rgba(245,158,11,0.15)",border:"1px solid rgba(245,158,11,0.35)",borderRadius:"8px",color:"rgba(251,191,36,0.95)",fontSize:"0.76rem" }}>
-            ⚠ {t.sessionExpiredSecurity}
+            ⚠ {sessionExpiredMessage || t.sessionExpiredSecurity}
           </div>
         )}
         {(authError || gatekeeperError || !hasSupabaseConfig || !hasSupabaseClient) && (
