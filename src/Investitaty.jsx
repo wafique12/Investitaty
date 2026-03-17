@@ -62,7 +62,7 @@ const INITIAL_SCHEMA = {
   },
   portfolios:   [],   // { id, name, type, currency, risk, status, color, current_price, notes, created_at, is_hidden }
   investments:  [],   // { id, portfolioId, name, quantity, purchasePrice, currentPrice, purchaseDate, startDate, endDate, investmentMethod, risk, funding:[{source,amount}], notes, status, is_hidden, created_at }
-  transactions: [],   // { id, investmentId, portfolioId, category, amount, currentPrice, syncWithWallet, date, type:"income"|"expense", notes, status:"recorded"|"scheduled"|"cancelled", is_hidden, created_at }
+  transactions: [],   // { id, investmentId, portfolioId, category, amount, date, type:"income"|"expense", notes, status:"recorded"|"scheduled"|"cancelled", is_hidden, created_at }
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -195,7 +195,7 @@ const TRANSLATIONS = {
     initialCapital: "Initial Capital",
     purchasePrice: "Purchase Price (Per Unit)",
     currentPrice: "Current Price (Per Unit)",
-    syncWithWallet: "Sync with Wallet",
+    inheritPrice: "Inherit Price from Wallet",
     totalInvestmentValue: "Total Investment Value",
     totalSplitAmount: "Total Split Amount",
     splitFundingMismatchError: "Split funding total must equal Total Investment Value.",
@@ -449,7 +449,7 @@ const TRANSLATIONS = {
     initialCapital: "رأس المال الابتدائي",
     purchasePrice: "سعر الشراء (لكل وحدة)",
     currentPrice: "السعر الحالي (لكل وحدة)",
-    syncWithWallet: "مزامنة مع المحفظة",
+    inheritPrice: "توريث السعر من المحفظة",
     totalInvestmentValue: "إجمالي قيمة الاستثمار",
     totalSplitAmount: "إجمالي مبلغ التقسيم",
     splitFundingMismatchError: "يجب أن يساوي إجمالي التمويل المقسم إجمالي قيمة الاستثمار.",
@@ -777,12 +777,11 @@ function migrateSchema(data) {
       ? inv.funding
       : (inv.source ? [{ source: inv.source, amount: "" }] : []),
     status: inv.status || out.settings.investmentStatuses?.[0] || "Active",
+    inheritPrice: Boolean(inv.inheritPrice),
   }));
   out.transactions = (out.transactions || []).map(tx => ({
     ...tx,
     status: tx.status || out.settings.transactionStatuses?.[0] || "recorded",
-    currentPrice: tx.currentPrice ?? "",
-    syncWithWallet: Boolean(tx.syncWithWallet),
   }));
 
 
@@ -2364,10 +2363,8 @@ const portfolioCurrency = (db, portfolioId) => (visible(db?.portfolios||[]).find
 const portfolioCurrentPrice = (db, portfolioId) => parseFloat(visible(db?.portfolios||[]).find(p=>p.id===portfolioId)?.current_price) || 0;
 const effectiveCurrentPrice = (db, inv) => {
   if (!db || !inv) return parseFloat(inv?.currentPrice) || 0;
-  const syncedTx = visible(db?.transactions||[]).filter((tx)=>tx.investmentId===inv.id && tx.syncWithWallet);
-  if (!syncedTx.length) return parseFloat(inv?.currentPrice) || 0;
-  const latestSynced = syncedTx[syncedTx.length - 1];
-  return portfolioCurrentPrice(db, latestSynced?.portfolioId || inv?.portfolioId);
+  if (inv?.inheritPrice) return portfolioCurrentPrice(db, inv?.portfolioId);
+  return parseFloat(inv?.currentPrice) || 0;
 };
 const isActiveInvestment = (inv) => String(inv?.status || "Active").toLowerCase() === "active";
 const investmentValue = (inv, db) => (parseFloat(inv?.quantity) || 0) * effectiveCurrentPrice(db, inv);
@@ -3107,7 +3104,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   const [collapsedPortfolios, setCollapsedPortfolios] = useState({});
   const [modalMode, setModalMode] = useState("create");
 
-  const EMPTY = useMemo(() => ({ portfolioId:"",name:"",quantity:"",purchasePrice:"",currentPrice:"",purchaseDate:"",startDate:"",endDate:"",investmentMethod:"",risk:"",funding:[{source:"",amount:""}],status:"Active",notes:"" }), []);
+  const EMPTY = useMemo(() => ({ portfolioId:"",name:"",quantity:"",purchasePrice:"",currentPrice:"",inheritPrice:false,purchaseDate:"",startDate:"",endDate:"",investmentMethod:"",risk:"",funding:[{source:"",amount:""}],status:"Active",notes:"" }), []);
   const [form, setForm] = useState(EMPTY);
   const f = k => v => setForm(p=>({...p,[k]:v}));
 
@@ -3146,7 +3143,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
 
   const openView = (inv) => {
     setForm({ portfolioId:inv.portfolioId,name:inv.name,quantity:inv.quantity||"",purchasePrice:inv.purchasePrice||"",
-      currentPrice:inv.currentPrice||"",purchaseDate:inv.purchaseDate||"",startDate:inv.startDate||"",endDate:inv.endDate||"",investmentMethod:inv.investmentMethod||"",risk:inv.risk||"",funding:(inv.funding&&inv.funding.length?inv.funding:[{source:inv.source||"",amount:""}]),status:inv.status||"Active",notes:inv.notes||"" });
+      currentPrice:inv.currentPrice||"",inheritPrice:Boolean(inv.inheritPrice),purchaseDate:inv.purchaseDate||"",startDate:inv.startDate||"",endDate:inv.endDate||"",investmentMethod:inv.investmentMethod||"",risk:inv.risk||"",funding:(inv.funding&&inv.funding.length?inv.funding:[{source:inv.source||"",amount:""}]),status:inv.status||"Active",notes:inv.notes||"" });
     setEditItem(inv); setModalMode("view"); setShowModal(true);
   };
 
@@ -3179,6 +3176,12 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   const [searchTerm, setSearchTerm] = useState("");
   const [formError, setFormError] = useState("");
   const [invalidFields, setInvalidFields] = useState({});
+
+  useEffect(() => {
+    if (!form.inheritPrice) return;
+    const walletPrice = parseFloat(portfolios.find((p)=>p.id===form.portfolioId)?.current_price) || 0;
+    setForm((prev) => ({ ...prev, currentPrice: String(walletPrice) }));
+  }, [form.inheritPrice, form.portfolioId, portfolios]);
 
   useEffect(() => () => {
     setShowModal(false);
@@ -3429,7 +3432,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                                 ? <QuickPriceField inv={inv} onDone={()=>setEditingPrice(null)}/>
                                 : (
                                   <div style={{ display:"flex",alignItems:"center",gap:"6px" }}>
-                                    <span style={{ color:T.textSecondary }}>{fmtMoney(inv.currentPrice||0,{currency:portfolioCurrency(db, inv.portfolioId)})}</span>
+                                    <span style={{ color:T.textSecondary }}>{fmtMoney(effectiveCurrentPrice(db, inv),{currency:portfolioCurrency(db, inv.portfolioId)})}</span>
                                     <button onClick={()=>setEditingPrice(inv.id)} style={{ background:"none",border:"none",cursor:"pointer",color:T.emerald,padding:"2px",borderRadius:"4px",display:"flex" }} data-icon-tooltip={t.quickUpdatePrice}>
                                       <Zap size={12}/>
                                     </button>
@@ -3487,7 +3490,8 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
               <ReadOnlyField label={t.name} value={form.name} />
               <ReadOnlyField label={t.quantity} value={form.quantity} />
               <ReadOnlyField label={t.purchasePrice} value={form.purchasePrice} />
-              <ReadOnlyField label={t.currentPrice} value={form.currentPrice} />
+              <ReadOnlyField label={t.currentPrice} value={form.inheritPrice ? portfolioCurrentPrice(db, form.portfolioId) : form.currentPrice} />
+              <ReadOnlyField label={t.inheritPrice || "Inherit Price from Wallet"} value={form.inheritPrice ? "Yes" : "No"} />
               <ReadOnlyField label="Balance" value={((Number(form.quantity)||0) * (Number(form.purchasePrice)||0)).toFixed(3)} />
               <ReadOnlyField label={t.purchaseDate} value={form.purchaseDate} />
               <ReadOnlyField label={t.startDate} value={form.startDate} />
@@ -3512,7 +3516,24 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                 <FormField label={t.quantity} required><Input type="number" value={form.quantity} onChange={e=>{f("quantity")(e.target.value);setInvalidFields(prev=>({...prev,quantity:false}));}} invalid={invalidFields.quantity} isRTL={isRTL} placeholder="0"/></FormField>
                 <FormField label={t.purchasePrice} required><Input type="number" value={form.purchasePrice} onChange={e=>{f("purchasePrice")(e.target.value);setInvalidFields(prev=>({...prev,purchasePrice:false}));}} invalid={invalidFields.purchasePrice} isRTL={isRTL} placeholder="0.00"/></FormField>
                 <FormField label={t.totalInvestmentValue}><Input value={totalInvestmentValue.toFixed(3)} isRTL={isRTL} readOnly style={{ background:"#e2e8f0", color:T.textSecondary }}/></FormField>
-                <FormField label={t.currentPrice}><Input type="number" value={form.currentPrice} onChange={e=>f("currentPrice")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
+                <div style={{ display:"flex",alignItems:"flex-end",gap:"10px",flexWrap:"nowrap" }}>
+                  <div style={{ flex:"1 1 auto", minWidth:0 }}>
+                    <FormField label={t.currentPrice}><Input type="number" value={form.currentPrice} onChange={e=>f("currentPrice")(e.target.value)} isRTL={isRTL} placeholder="0.00" disabled={Boolean(form.inheritPrice)}/></FormField>
+                  </div>
+                  <label style={{ display:"inline-flex",alignItems:"center",gap:"6px",marginBottom:"10px",fontSize:"0.74rem",color:T.textSecondary,whiteSpace:"nowrap",padding:"0 4px" }}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(form.inheritPrice)}
+                      onChange={(e)=>{
+                        const checked = e.target.checked;
+                        const walletPrice = parseFloat(portfolios.find((p)=>p.id===form.portfolioId)?.current_price) || 0;
+                        setForm((prev)=>({ ...prev, inheritPrice: checked, currentPrice: checked ? String(walletPrice) : prev.currentPrice }));
+                      }}
+                      style={{ accentColor:T.info, width:"14px",height:"14px",cursor:"pointer" }}
+                    />
+                    {t.inheritPrice || "Inherit Price from Wallet"}
+                  </label>
+                </div>
               </div>
               <FormField label={t.splitFunding}>
                 <div style={{ display:"flex",flexDirection:"column",gap:"8px" }}>
@@ -3551,7 +3572,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
             </>)}
             {modalMode==="edit" && (<>
               <Btn onClick={handleSave}>{t.save}</Btn>
-              <Btn variant="secondary" onClick={()=>{ setForm({ portfolioId:editItem.portfolioId,name:editItem.name,quantity:editItem.quantity||"",purchasePrice:editItem.purchasePrice||"",currentPrice:editItem.currentPrice||"",purchaseDate:editItem.purchaseDate||"",startDate:editItem.startDate||"",endDate:editItem.endDate||"",investmentMethod:editItem.investmentMethod||"",risk:editItem.risk||"",funding:(editItem.funding&&editItem.funding.length?editItem.funding:[{source:editItem.source||"",amount:""}]),status:editItem.status||"Active",notes:editItem.notes||"" }); setFormError(""); setInvalidFields({}); setModalMode("view"); }}>{t.cancel}</Btn>
+              <Btn variant="secondary" onClick={()=>{ setForm({ portfolioId:editItem.portfolioId,name:editItem.name,quantity:editItem.quantity||"",purchasePrice:editItem.purchasePrice||"",currentPrice:editItem.currentPrice||"",inheritPrice:Boolean(editItem.inheritPrice),purchaseDate:editItem.purchaseDate||"",startDate:editItem.startDate||"",endDate:editItem.endDate||"",investmentMethod:editItem.investmentMethod||"",risk:editItem.risk||"",funding:(editItem.funding&&editItem.funding.length?editItem.funding:[{source:editItem.source||"",amount:""}]),status:editItem.status||"Active",notes:editItem.notes||"" }); setFormError(""); setInvalidFields({}); setModalMode("view"); }}>{t.cancel}</Btn>
             </>)}
             {modalMode==="create" && (<>
               <Btn variant="secondary" onClick={closeModal}>{t.cancel}</Btn>
@@ -3680,7 +3701,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const [currentPage, setCurrentPage] = useState(1);
   const [goToPageInput, setGoToPageInput] = useState("1");
 
-  const EMPTY = { portfolioId:"",investmentId:"",category:"",amount:"",currentPrice:"",syncWithWallet:false,date:"",dueDate:"",depositedAt:"",collectedAt:"",type:"income",status:"recorded",notes:"" };
+  const EMPTY = { portfolioId:"",investmentId:"",category:"",amount:"",date:"",dueDate:"",depositedAt:"",collectedAt:"",type:"income",status:"recorded",notes:"" };
   const [form, setForm] = useState(EMPTY);
   const f = k => v => setForm(p=>({...p,[k]:v}));
 
@@ -3877,7 +3898,6 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
     }
     const payload = {
       ...form,
-      syncWithWallet: Boolean(form.syncWithWallet),
       dueDate: form.dueDate || "",
       due_date: form.dueDate || "",
       depositedAt: form.depositedAt || "",
@@ -3894,7 +3914,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
 
   const openView = (tx) => {
     setForm({ portfolioId:tx.portfolioId||"",investmentId:tx.investmentId||"",category:tx.category||"",
-      amount:tx.amount||"",currentPrice:tx.currentPrice||"",syncWithWallet:Boolean(tx.syncWithWallet),date:tx.date||"",dueDate:tx.dueDate||tx.due_date||"",depositedAt:tx.depositedAt||tx.deposited_at||"",collectedAt:tx.collectedAt||tx.collected_at||"",type:tx.type||"income",status:tx.status||"recorded",notes:tx.notes||"" });
+      amount:tx.amount||"",date:tx.date||"",dueDate:tx.dueDate||tx.due_date||"",depositedAt:tx.depositedAt||tx.deposited_at||"",collectedAt:tx.collectedAt||tx.collected_at||"",type:tx.type||"income",status:tx.status||"recorded",notes:tx.notes||"" });
     setEditItem(tx); setModalMode("view"); setFormError(""); setInvalidFields({}); setShowModal(true);
   };
 
@@ -3919,13 +3939,6 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
     const raw = String(value);
     return /^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0, 10) : raw;
   };
-
-  const selectedWalletPrice = parseFloat(portfolios.find((p)=>p.id===form.portfolioId)?.current_price) || 0;
-
-  useEffect(() => {
-    if (!form.syncWithWallet) return;
-    setForm((prev) => ({ ...prev, currentPrice: String(selectedWalletPrice) }));
-  }, [form.syncWithWallet, form.portfolioId, selectedWalletPrice]);
 
   useEffect(() => {
     if (!modalPrefill) return;
@@ -4198,8 +4211,6 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
                 })()}
               />
               <ReadOnlyField label={t.amount} value={fmtMoney(Number(form.amount || 0), { currency:portfolioCurrency(db, form.portfolioId) })} />
-              <ReadOnlyField label={t.currentPrice} value={form.syncWithWallet ? String(portfolios.find((p)=>p.id===form.portfolioId)?.current_price ?? 0) : form.currentPrice} />
-              <ReadOnlyField label={t.syncWithWallet || "Sync with Wallet"} value={form.syncWithWallet ? "Yes" : "No"} />
               <ReadOnlyField label={t.portfolio} value={portfolios.find((p)=>p.id===form.portfolioId)?.name} />
               <ReadOnlyField label="Due Date" value={formatDateDisplay(form.dueDate || editItem?.due_date) || "Pending"} />
               <ReadOnlyField label="Deposited At" value={formatDateDisplay(form.depositedAt || editItem?.deposited_at) || "Pending"} />
@@ -4226,7 +4237,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
           ) : (
             <>
           <FormField label={t.portfolio} required>
-            <Select value={form.portfolioId} onChange={e=>{const nextPortfolioId=e.target.value;f("portfolioId")(nextPortfolioId);f("investmentId")("");if(form.syncWithWallet){const walletPrice=parseFloat(portfolios.find((p)=>p.id===nextPortfolioId)?.current_price)||0;f("currentPrice")(String(walletPrice));}setInvalidFields(prev=>({...prev,portfolioId:false,investmentId:false}));}} invalid={invalidFields.portfolioId}
+            <Select value={form.portfolioId} onChange={e=>{f("portfolioId")(e.target.value);f("investmentId")("");setInvalidFields(prev=>({...prev,portfolioId:false,investmentId:false}));}} invalid={invalidFields.portfolioId}
               options={portfolios.map(p=>({value:p.id,label:p.name}))} placeholder={t.selectPortfolio} isRTL={isRTL}/>
           </FormField>
           <FormField label={t.investment} required>
@@ -4241,23 +4252,6 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
             <FormField label={t.transactionType}><Select value={form.type} onChange={e=>f("type")(e.target.value)} options={typeOpts} isRTL={isRTL}/></FormField>
             <FormField label={t.amount} required><Input type="number" value={form.amount} onChange={e=>{f("amount")(e.target.value);setInvalidFields(prev=>({...prev,amount:false}));}} invalid={invalidFields.amount} isRTL={isRTL} placeholder="0.00"/></FormField>
-          </div>
-          <div style={{ display:"flex",alignItems:"flex-end",gap:"10px",flexWrap:"nowrap" }}>
-            <div style={{ flex:"1 1 auto", minWidth:0 }}>
-              <FormField label={t.currentPrice}><Input type="number" value={form.currentPrice} onChange={e=>f("currentPrice")(e.target.value)} isRTL={isRTL} placeholder="0.00" disabled={Boolean(form.syncWithWallet)}/></FormField>
-            </div>
-            <label style={{ display:"inline-flex",alignItems:"center",gap:"6px",marginBottom:"10px",fontSize:"0.74rem",color:T.textSecondary,whiteSpace:"nowrap",padding:"0 4px" }}>
-              <input
-                type="checkbox"
-                checked={Boolean(form.syncWithWallet)}
-                onChange={(e)=>{
-                  const checked = e.target.checked;
-                  setForm((prev)=>({ ...prev, syncWithWallet: checked, currentPrice: checked ? String(selectedWalletPrice) : prev.currentPrice }));
-                }}
-                style={{ accentColor:T.info, width:"14px",height:"14px",cursor:"pointer" }}
-              />
-              {t.syncWithWallet || "Sync with Wallet"}
-            </label>
           </div>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
             <FormField label={t.date} required><Input type="date" value={form.date} onChange={e=>{f("date")(e.target.value);setInvalidFields(prev=>({...prev,date:false}));}} invalid={invalidFields.date} isRTL={isRTL}/></FormField>
@@ -4279,7 +4273,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
             </>)}
             {modalMode==="edit" && (<>
               <Btn onClick={handleSave}>{t.save}</Btn>
-              <Btn variant="secondary" onClick={()=>{ setForm({ portfolioId:editItem.portfolioId||"",investmentId:editItem.investmentId||"",category:editItem.category||"",amount:editItem.amount||"",currentPrice:editItem.currentPrice||"",syncWithWallet:Boolean(editItem.syncWithWallet),date:editItem.date||"",dueDate:editItem.dueDate||editItem.due_date||"",depositedAt:editItem.depositedAt||editItem.deposited_at||"",collectedAt:editItem.collectedAt||editItem.collected_at||"",type:editItem.type||"income",status:editItem.status||"recorded",notes:editItem.notes||"" }); setFormError(""); setInvalidFields({}); setModalMode("view"); }}>{t.cancel}</Btn>
+              <Btn variant="secondary" onClick={()=>{ setForm({ portfolioId:editItem.portfolioId||"",investmentId:editItem.investmentId||"",category:editItem.category||"",amount:editItem.amount||"",date:editItem.date||"",dueDate:editItem.dueDate||editItem.due_date||"",depositedAt:editItem.depositedAt||editItem.deposited_at||"",collectedAt:editItem.collectedAt||editItem.collected_at||"",type:editItem.type||"income",status:editItem.status||"recorded",notes:editItem.notes||"" }); setFormError(""); setInvalidFields({}); setModalMode("view"); }}>{t.cancel}</Btn>
             </>)}
             {modalMode==="create" && (<>
               <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");setFormError("");setInvalidFields({});}}>{t.cancel}</Btn>
