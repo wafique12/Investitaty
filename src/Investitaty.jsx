@@ -195,7 +195,7 @@ const TRANSLATIONS = {
     initialCapital: "Initial Capital",
     purchasePrice: "Purchase Price (Per Unit)",
     currentPrice: "Current Price (Per Unit)",
-    inheritPrice: "Inherit Price from Wallet",
+    inheritPrice: "Sync with Wallet",
     totalInvestmentValue: "Total Investment Value",
     totalSplitAmount: "Total Split Amount",
     splitFundingMismatchError: "Split funding total must equal Total Investment Value.",
@@ -449,7 +449,7 @@ const TRANSLATIONS = {
     initialCapital: "رأس المال الابتدائي",
     purchasePrice: "سعر الشراء (لكل وحدة)",
     currentPrice: "السعر الحالي (لكل وحدة)",
-    inheritPrice: "توريث السعر من المحفظة",
+    inheritPrice: "مزامنة مع المحفظة",
     totalInvestmentValue: "إجمالي قيمة الاستثمار",
     totalSplitAmount: "إجمالي مبلغ التقسيم",
     splitFundingMismatchError: "يجب أن يساوي إجمالي التمويل المقسم إجمالي قيمة الاستثمار.",
@@ -1899,11 +1899,11 @@ function DateRangeFilter({ startDate, endDate, onChange, onClear, isRTL, label, 
   );
 }
 
-function Input({ value, onChange, type="text", placeholder, isRTL, readOnly = false, className = "", invalid = false, style: extraStyle = {} }) {
+function Input({ value, onChange, type="text", placeholder, isRTL, readOnly = false, disabled = false, className = "", invalid = false, style: extraStyle = {} }) {
   const [focused, setFocused] = useState(false);
   return (
-    <input type={type} value={value} onChange={onChange} placeholder={placeholder} readOnly={readOnly} className={className}
-      style={{ ...inputCss(isRTL), borderColor: invalid ? T.negative : (focused ? T.emerald : T.border), background: readOnly ? "#f1f5f9" : inputCss(isRTL).background, ...extraStyle }}
+    <input type={type} value={value} onChange={onChange} placeholder={placeholder} readOnly={readOnly} disabled={disabled} className={className}
+      style={{ ...inputCss(isRTL), borderColor: invalid ? T.negative : (focused ? T.emerald : T.border), background: (readOnly || disabled) ? "#e2e8f0" : inputCss(isRTL).background, opacity: disabled ? 0.85 : 1, cursor: disabled ? "not-allowed" : "text", ...extraStyle }}
       onFocus={()=>setFocused(true)} onBlur={()=>setFocused(false)}
     />
   );
@@ -3491,7 +3491,6 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
               <ReadOnlyField label={t.quantity} value={form.quantity} />
               <ReadOnlyField label={t.purchasePrice} value={form.purchasePrice} />
               <ReadOnlyField label={t.currentPrice} value={form.inheritPrice ? portfolioCurrentPrice(db, form.portfolioId) : form.currentPrice} />
-              <ReadOnlyField label={t.inheritPrice || "Inherit Price from Wallet"} value={form.inheritPrice ? "Yes" : "No"} />
               <ReadOnlyField label="Balance" value={((Number(form.quantity)||0) * (Number(form.purchasePrice)||0)).toFixed(3)} />
               <ReadOnlyField label={t.purchaseDate} value={form.purchaseDate} />
               <ReadOnlyField label={t.startDate} value={form.startDate} />
@@ -3512,28 +3511,28 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                     options={portfolios.map(p=>({value:p.id,label:p.name}))} placeholder={t.selectPortfolio} isRTL={isRTL}/>
                 </FormField>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-                <FormField label={t.quantity} required><Input type="number" value={form.quantity} onChange={e=>{f("quantity")(e.target.value);setInvalidFields(prev=>({...prev,quantity:false}));}} invalid={invalidFields.quantity} isRTL={isRTL} placeholder="0"/></FormField>
-                <FormField label={t.purchasePrice} required><Input type="number" value={form.purchasePrice} onChange={e=>{f("purchasePrice")(e.target.value);setInvalidFields(prev=>({...prev,purchasePrice:false}));}} invalid={invalidFields.purchasePrice} isRTL={isRTL} placeholder="0.00"/></FormField>
-                <FormField label={t.totalInvestmentValue}><Input value={totalInvestmentValue.toFixed(3)} isRTL={isRTL} readOnly style={{ background:"#e2e8f0", color:T.textSecondary }}/></FormField>
-                <div style={{ display:"flex",alignItems:"flex-end",gap:"10px",flexWrap:"nowrap" }}>
-                  <div style={{ flex:"1 1 auto", minWidth:0 }}>
-                    <FormField label={t.currentPrice}><Input type="number" value={form.currentPrice} onChange={e=>f("currentPrice")(e.target.value)} isRTL={isRTL} placeholder="0.00" disabled={Boolean(form.inheritPrice)}/></FormField>
-                  </div>
-                  <label style={{ display:"inline-flex",alignItems:"center",gap:"6px",marginBottom:"10px",fontSize:"0.74rem",color:T.textSecondary,whiteSpace:"nowrap",padding:"0 4px" }}>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(form.inheritPrice)}
-                      onChange={(e)=>{
-                        const checked = e.target.checked;
-                        const walletPrice = parseFloat(portfolios.find((p)=>p.id===form.portfolioId)?.current_price) || 0;
-                        setForm((prev)=>({ ...prev, inheritPrice: checked, currentPrice: checked ? String(walletPrice) : prev.currentPrice }));
-                      }}
-                      style={{ accentColor:T.info, width:"14px",height:"14px",cursor:"pointer" }}
-                    />
-                    {t.inheritPrice || "Inherit Price from Wallet"}
-                  </label>
+              <div style={{ display:"grid", gridTemplateColumns:"0.8fr 1fr 1.1fr", gap:"12px", alignItems:"end" }}>
+                <FormField label={t.quantity} required><Input type="number" value={form.quantity} onChange={e=>{f("quantity")(e.target.value);setInvalidFields(prev=>({...prev,quantity:false}));}} invalid={invalidFields.quantity} isRTL={isRTL} placeholder="0" style={{ maxWidth:"130px" }}/></FormField>
+                <FormField label={t.purchasePrice} required><Input type="number" value={form.purchasePrice} onChange={e=>{f("purchasePrice")(e.target.value);setInvalidFields(prev=>({...prev,purchasePrice:false}));}} invalid={invalidFields.purchasePrice} isRTL={isRTL} placeholder="0.00" style={{ maxWidth:"170px" }}/></FormField>
+                <FormField label={t.totalInvestmentValue}><Input value={totalInvestmentValue.toFixed(3)} isRTL={isRTL} readOnly style={{ maxWidth:"220px", color:T.textSecondary }}/></FormField>
+              </div>
+              <div style={{ display:"flex",alignItems:"flex-end",gap:"12px",flexWrap:"nowrap" }}>
+                <div style={{ flex:"0 1 220px" }}>
+                  <FormField label={t.currentPrice}><Input type="number" value={form.currentPrice} onChange={e=>f("currentPrice")(e.target.value)} isRTL={isRTL} placeholder="0.00" disabled={Boolean(form.inheritPrice)} style={{ maxWidth:"220px" }}/></FormField>
                 </div>
+                <label style={{ display:"inline-flex",alignItems:"center",gap:"6px",marginBottom:"10px",fontSize:"0.72rem",color:T.textSecondary,whiteSpace:"nowrap",padding:"0 4px" }}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(form.inheritPrice)}
+                    onChange={(e)=>{
+                      const checked = e.target.checked;
+                      const walletPrice = parseFloat(portfolios.find((p)=>p.id===form.portfolioId)?.current_price) || 0;
+                      setForm((prev)=>({ ...prev, inheritPrice: checked, currentPrice: checked ? String(walletPrice) : prev.currentPrice }));
+                    }}
+                    style={{ accentColor:T.info, width:"14px",height:"14px",cursor:"pointer" }}
+                  />
+                  {t.inheritPrice || "Sync with Wallet"}
+                </label>
               </div>
               <FormField label={t.splitFunding}>
                 <div style={{ display:"flex",flexDirection:"column",gap:"8px" }}>
@@ -4251,7 +4250,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
           </FormField>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
             <FormField label={t.transactionType}><Select value={form.type} onChange={e=>f("type")(e.target.value)} options={typeOpts} isRTL={isRTL}/></FormField>
-            <FormField label={t.amount} required><Input type="number" value={form.amount} onChange={e=>{f("amount")(e.target.value);setInvalidFields(prev=>({...prev,amount:false}));}} invalid={invalidFields.amount} isRTL={isRTL} placeholder="0.00"/></FormField>
+            <FormField label={t.amount} required><Input type="number" value={form.amount} onChange={e=>{f("amount")(e.target.value);setInvalidFields(prev=>({...prev,amount:false}));}} invalid={invalidFields.amount} isRTL={isRTL} placeholder="0.00" style={{ maxWidth:"220px" }}/></FormField>
           </div>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
             <FormField label={t.date} required><Input type="date" value={form.date} onChange={e=>{f("date")(e.target.value);setInvalidFields(prev=>({...prev,date:false}));}} invalid={invalidFields.date} isRTL={isRTL}/></FormField>
