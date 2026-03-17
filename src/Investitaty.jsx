@@ -854,6 +854,13 @@ function useGoogleAuth(lang = "en") {
     else console.log(`${AUTH_DEBUG_PREFIX} ${step}`);
   }, []);
 
+  const clearStaleSessionStorage = useCallback(() => {
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+    localStorage.removeItem(AUTH_LOGIN_DAY_KEY);
+    localStorage.removeItem(SESSION_EXPIRED_NOTICE_KEY);
+    localStorage.removeItem(SESSION_EXPIRED_MESSAGE_KEY);
+  }, []);
+
   const validateToken = useCallback(async (tokenToValidate) => {
     const activeToken = tokenToValidate || token;
     if (!activeToken) return false;
@@ -966,6 +973,10 @@ function useGoogleAuth(lang = "en") {
       authLog("Sign-in aborted: APIs not ready");
       return;
     }
+
+    clearStaleSessionStorage();
+    setUser(null);
+    setToken(null);
 
     setAuthLoading(true);
     setAuthError(null);
@@ -1080,7 +1091,7 @@ function useGoogleAuth(lang = "en") {
       note: "Using Google account chooser flow to avoid legacy hanging OAuth route",
     });
     tokenClientRef.current.requestAccessToken({ prompt });
-  }, [authLog, gapiReady, hasGrantedConsent, storageReady, translations.drivePermissionRequired]);
+  }, [authLog, gapiReady, hasGrantedConsent, storageReady, clearStaleSessionStorage, translations.drivePermissionRequired]);
 
   const signOut = useCallback(() => {
     authLog("Sign-out requested", { hasToken: Boolean(token) });
@@ -1411,7 +1422,7 @@ function AppProvider({ children }) {
       if (hasSupabaseClient && supabase?.auth?.getSession) {
         const { data } = await supabase.auth.getSession().catch(() => ({ data: null }));
         const supabaseExpired = Boolean(data?.session?.expires_at && data.session.expires_at * 1000 <= Date.now());
-        if (!data?.session || supabaseExpired) {
+        if (data?.session && supabaseExpired) {
           if (cancelled) return;
           localStorage.setItem(SESSION_EXPIRED_NOTICE_KEY, "1");
           localStorage.setItem(SESSION_EXPIRED_MESSAGE_KEY, "Session expired or connection failed. Please log in again.");
@@ -1432,7 +1443,7 @@ function AppProvider({ children }) {
   }, [auth.user?.id, auth.token, auth.validateToken, clearLocalSessionState]);
 
   useEffect(() => {
-    if (!auth.token || isBlocked || !userSyncDone) return;
+    if (!auth.user?.id || !auth.token || auth.authLoading || isBlocked || !userSyncDone) return;
     if (dbFetchAbortRef.current) dbFetchAbortRef.current.abort();
     const controller = new AbortController();
     dbFetchAbortRef.current = controller;
@@ -1463,7 +1474,7 @@ function AppProvider({ children }) {
       if (dbFetchAbortRef.current === controller) dbFetchAbortRef.current = null;
       if (dbLoadingWatchdogRef.current) clearTimeout(dbLoadingWatchdogRef.current);
     };
-  }, [auth.token, isBlocked, userSyncDone, clearLocalSessionState]);
+  }, [auth.user?.id, auth.token, auth.authLoading, isBlocked, userSyncDone, clearLocalSessionState]);
 
   useEffect(() => {
     if (!auth.token || !db || isBlocked || !userSyncDone) return;
