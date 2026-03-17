@@ -1,6 +1,11 @@
 const DRIVE_ROOT_FOLDER = "Investitaty";
 const DB_FOLDER_NAME = "DB";
 const BACKUP_FOLDER_NAME = "Investaty_Backups";
+let onUnauthorized = null;
+
+export function setDriveUnauthorizedHandler(handler) {
+  onUnauthorized = typeof handler === "function" ? handler : null;
+}
 
 async function parseJsonSafe(res) {
   const txt = await res.text();
@@ -13,6 +18,9 @@ async function parseJsonSafe(res) {
 
 export async function ensureDriveOk(res, fallback) {
   if (res.ok) return;
+  if (res.status === 401 && onUnauthorized) {
+    onUnauthorized();
+  }
   const payload = await parseJsonSafe(res);
   const reason = payload?.error?.message || payload?.message || fallback;
   throw new Error(reason);
