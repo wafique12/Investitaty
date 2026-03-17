@@ -60,7 +60,7 @@ const INITIAL_SCHEMA = {
     baseCurrency: "USD",
     currencyRates: { USD: 1, SAR: 3.75, AED: 3.67, EUR: 0.92, GBP: 0.79 },
   },
-  portfolios:   [],   // { id, name, type, currency, risk, status, color, notes, created_at, is_hidden }
+  portfolios:   [],   // { id, name, type, currency, risk, status, color, current_price, notes, created_at, is_hidden }
   investments:  [],   // { id, portfolioId, name, quantity, purchasePrice, currentPrice, purchaseDate, startDate, endDate, investmentMethod, risk, funding:[{source,amount}], notes, status, is_hidden, created_at }
   transactions: [],   // { id, investmentId, portfolioId, category, amount, date, type:"income"|"expense", notes, status:"recorded"|"scheduled"|"cancelled", is_hidden, created_at }
 };
@@ -195,6 +195,7 @@ const TRANSLATIONS = {
     initialCapital: "Initial Capital",
     purchasePrice: "Purchase Price (Per Unit)",
     currentPrice: "Current Price (Per Unit)",
+    inheritPrice: "Sync with Portfolio",
     totalInvestmentValue: "Total Investment Value",
     totalSplitAmount: "Total Split Amount",
     splitFundingMismatchError: "Split funding total must equal Total Investment Value.",
@@ -448,6 +449,7 @@ const TRANSLATIONS = {
     initialCapital: "رأس المال الابتدائي",
     purchasePrice: "سعر الشراء (لكل وحدة)",
     currentPrice: "السعر الحالي (لكل وحدة)",
+    inheritPrice: "مزامنة مع المحفظة",
     totalInvestmentValue: "إجمالي قيمة الاستثمار",
     totalSplitAmount: "إجمالي مبلغ التقسيم",
     splitFundingMismatchError: "يجب أن يساوي إجمالي التمويل المقسم إجمالي قيمة الاستثمار.",
@@ -762,6 +764,7 @@ function migrateSchema(data) {
     ...p,
     status: p.status || out.settings.investmentStatuses?.[0] || "Active",
     color: p.color || T.chart[idx % T.chart.length],
+    current_price: Number.isFinite(Number(p.current_price)) ? Number(p.current_price) : 0,
   }));
 
   out.investments = (out.investments || []).map(inv => ({
@@ -774,6 +777,7 @@ function migrateSchema(data) {
       ? inv.funding
       : (inv.source ? [{ source: inv.source, amount: "" }] : []),
     status: inv.status || out.settings.investmentStatuses?.[0] || "Active",
+    inheritPrice: Boolean(inv.inheritPrice),
   }));
   out.transactions = (out.transactions || []).map(tx => ({
     ...tx,
@@ -1895,11 +1899,11 @@ function DateRangeFilter({ startDate, endDate, onChange, onClear, isRTL, label, 
   );
 }
 
-function Input({ value, onChange, type="text", placeholder, isRTL, readOnly = false, className = "", invalid = false, style: extraStyle = {} }) {
+function Input({ value, onChange, type="text", placeholder, isRTL, readOnly = false, disabled = false, className = "", invalid = false, style: extraStyle = {} }) {
   const [focused, setFocused] = useState(false);
   return (
-    <input type={type} value={value} onChange={onChange} placeholder={placeholder} readOnly={readOnly} className={className}
-      style={{ ...inputCss(isRTL), borderColor: invalid ? T.negative : (focused ? T.emerald : T.border), background: readOnly ? "#f1f5f9" : inputCss(isRTL).background, ...extraStyle }}
+    <input type={type} value={value} onChange={onChange} placeholder={placeholder} readOnly={readOnly} disabled={disabled} className={className}
+      style={{ ...inputCss(isRTL), borderColor: invalid ? T.negative : (focused ? T.emerald : T.border), background: (readOnly || disabled) ? "#e2e8f0" : inputCss(isRTL).background, opacity: disabled ? 0.85 : 1, cursor: disabled ? "not-allowed" : "text", ...extraStyle }}
       onFocus={()=>setFocused(true)} onBlur={()=>setFocused(false)}
     />
   );
@@ -2281,9 +2285,9 @@ const visible = (arr) => (arr||[]).filter(i=>!i.is_hidden);
 const inv_of_portfolio = (db, pid) => visible(db.investments).filter(i=>i.portfolioId===pid);
 const tx_of_investment = (db, iid) => visible(db.transactions).filter(t=>t.investmentId===iid);
 const tx_of_portfolio  = (db, pid) => visible(db.transactions).filter(t=>t.portfolioId===pid);
-const curVal = (inv) => (parseFloat(inv.quantity)||0)*(parseFloat(inv.currentPrice)||0);
+const curVal = (inv, db) => (parseFloat(inv.quantity)||0) * effectiveCurrentPrice(db, inv);
 const costBasis = (inv) => (parseFloat(inv.quantity)||0)*(parseFloat(inv.purchasePrice)||0);
-const roi = (inv) => { const c=costBasis(inv); return c>0?((curVal(inv)-c)/c)*100:0; };
+const roi = (inv, db) => { const c=costBasis(inv); return c>0?((curVal(inv, db)-c)/c)*100:0; };
 const isCollectedTransaction = (tx) => {
   const status = String(tx?.status || "").toLowerCase();
   return status.includes("collect") || status.includes("record") || Boolean(tx?.collectedAt || tx?.collected_at);
@@ -2356,8 +2360,14 @@ const smartStatusColor = (status) => {
   return T.textMuted;
 };
 const portfolioCurrency = (db, portfolioId) => (visible(db?.portfolios||[]).find(p=>p.id===portfolioId)?.currency || "USD");
+const portfolioCurrentPrice = (db, portfolioId) => parseFloat(visible(db?.portfolios||[]).find(p=>p.id===portfolioId)?.current_price) || 0;
+const effectiveCurrentPrice = (db, inv) => {
+  if (!db || !inv) return parseFloat(inv?.currentPrice) || 0;
+  if (inv?.inheritPrice) return portfolioCurrentPrice(db, inv?.portfolioId);
+  return parseFloat(inv?.currentPrice) || 0;
+};
 const isActiveInvestment = (inv) => String(inv?.status || "Active").toLowerCase() === "active";
-const investmentValue = (inv) => (parseFloat(inv?.quantity) || 0) * (parseFloat(inv?.currentPrice) || 0);
+const investmentValue = (inv, db) => (parseFloat(inv?.quantity) || 0) * effectiveCurrentPrice(db, inv);
 const riskColor = (risk) => {
   const r = String(risk||"").toLowerCase();
   if (r.includes("low") || r.includes("منخفض")) return T.positive;
@@ -2401,7 +2411,7 @@ function Dashboard({ onNavigateTransactionsByStatus }) {
   const activePrincipal = activeInvestments
     .reduce((s,i)=>s+toBaseAmount(safeDb, costBasis(i), portfolioCurrency(safeDb, i.portfolioId)),0);
   const totalPortfolioValue = activeInvestments
-    .reduce((s,i)=>s+toBaseAmount(safeDb, investmentValue(i), portfolioCurrency(safeDb, i.portfolioId)),0);
+    .reduce((s,i)=>s+toBaseAmount(safeDb, investmentValue(i, safeDb), portfolioCurrency(safeDb, i.portfolioId)),0);
   const portfolioDeltaValue = totalPortfolioValue - activePrincipal;
   const portfolioDeltaPct = activePrincipal > 0 ? (portfolioDeltaValue / activePrincipal) * 100 : 0;
 
@@ -2477,7 +2487,7 @@ function Dashboard({ onNavigateTransactionsByStatus }) {
   portfolios.forEach((portfolio) => {
     const typeKey = portfolio.type || t.unassignedType;
     const portfolioTotal = inv_of_portfolio(safeDb, portfolio.id)
-      .reduce((sum, inv) => sum + toBaseAmount(safeDb, curVal(inv), portfolio.currency || "USD"), 0);
+      .reduce((sum, inv) => sum + toBaseAmount(safeDb, curVal(inv, db), portfolio.currency || "USD"), 0);
     if (portfolioTotal > 0) {
       allocationByType[typeKey] = (allocationByType[typeKey] || 0) + portfolioTotal;
     }
@@ -2755,7 +2765,7 @@ function Dashboard({ onNavigateTransactionsByStatus }) {
             {portfolios.map((p,i)=>{
               const pvInvs = inv_of_portfolio(db,p.id);
               const pActiveInvs = pvInvs.filter(isActiveInvestment);
-              const pValue = pActiveInvs.reduce((s,inv)=>s+investmentValue(inv),0);
+              const pValue = pActiveInvs.reduce((s,inv)=>s+investmentValue(inv, db),0);
               const pActivePrincipal = pActiveInvs.reduce((s,inv)=>s+costBasis(inv),0);
               const pRealizedIncome = tx_of_portfolio(db,p.id).filter((tx)=>tx.type==="income" && isCollectedTransaction(tx)).reduce((s,tx)=>s+(parseFloat(tx.amount)||0),0);
               const pRoi   = pActivePrincipal>0?(((pValue + pRealizedIncome)-pActivePrincipal)/pActivePrincipal)*100:0;
@@ -2806,7 +2816,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [collapsedPortfolios, setCollapsedPortfolios] = useState({});
-  const EMPTY = { name:"",type:"",risk:"",currency:"USD",status:"Active",color:T.chart[0],notes:"" };
+  const EMPTY = { name:"",type:"",current_price:"",risk:"",currency:"USD",status:"Active",color:T.chart[0],notes:"" };
   const [form, setForm] = useState(EMPTY);
   const [formError, setFormError] = useState("");
   const [invalidFields, setInvalidFields] = useState({});
@@ -2885,7 +2895,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
     setForm(EMPTY); setShowModal(false); setEditItem(null); setModalMode("create");
   };
 
-  const openView = (p) => { setForm({name:p.name,type:p.type,risk:p.risk,currency:p.currency,status:p.status||"Active",color:p.color||T.chart[0],notes:p.notes||""}); setEditItem(p); setModalMode("view"); setFormError(""); setInvalidFields({}); setShowModal(true); };
+  const openView = (p) => { setForm({name:p.name,type:p.type,current_price:p.current_price??"",risk:p.risk,currency:p.currency,status:p.status||"Active",color:p.color||T.chart[0],notes:p.notes||""}); setEditItem(p); setModalMode("view"); setFormError(""); setInvalidFields({}); setShowModal(true); };
 
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font }}>
@@ -2921,7 +2931,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
         {portfolios.map((p,i) => {
           const invs = inv_of_portfolio(db,p.id);
           const activePrincipal = invs.filter(isActiveInvestment).reduce((sum, inv) => sum + costBasis(inv), 0);
-          const totalValue = invs.filter(isActiveInvestment).reduce((sum, inv)=>sum+curVal(inv),0);
+          const totalValue = invs.filter(isActiveInvestment).reduce((sum, inv)=>sum+curVal(inv, db),0);
           const pTx    = tx_of_portfolio(db,p.id);
           const pIncome = txIncome(pTx);
           const pRealizedIncome = txIncome(pTx.filter((tx)=>isCollectedTransaction(tx)));
@@ -3025,6 +3035,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"10px" }}>
               <ReadOnlyField label={t.name} value={form.name} />
               <ReadOnlyField label={t.type} value={form.type} />
+              <ReadOnlyField label={t.currentPrice} value={form.current_price} />
               <ReadOnlyField label={t.risk} value={form.risk} />
               <ReadOnlyField label={t.currency} value={form.currency} />
               <ReadOnlyField label={t.status} value={form.status} />
@@ -3034,7 +3045,10 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
           ) : (
             <>
               <FormField label={t.name} required><Input value={form.name} onChange={e=>{f("name")(e.target.value);setInvalidFields(prev=>({...prev,name:false}));}} invalid={invalidFields.name} isRTL={isRTL} placeholder={t.name}/></FormField>
-              <FormField label={t.type} required><Select value={form.type} onChange={e=>{f("type")(e.target.value);setInvalidFields(prev=>({...prev,type:false}));}} invalid={invalidFields.type} options={db?.settings?.portfolioTypes||[]} placeholder={t.selectType} isRTL={isRTL}/></FormField>
+              <div style={{ display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:"12px" }}>
+                <FormField label={t.type} required><Select value={form.type} onChange={e=>{f("type")(e.target.value);setInvalidFields(prev=>({...prev,type:false}));}} invalid={invalidFields.type} options={db?.settings?.portfolioTypes||[]} placeholder={t.selectType} isRTL={isRTL}/></FormField>
+                <FormField label={t.currentPrice}><Input type="number" value={form.current_price} onChange={e=>f("current_price")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
+              </div>
               <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
                 <FormField label={t.risk} required><Select value={form.risk} onChange={e=>{f("risk")(e.target.value);setInvalidFields(prev=>({...prev,risk:false}));}} invalid={invalidFields.risk} options={db?.settings?.riskLevels||[]} placeholder={t.selectRisk} isRTL={isRTL}/></FormField>
                 <FormField label={t.status} required><Select value={form.status} onChange={e=>{f("status")(e.target.value);setInvalidFields(prev=>({...prev,status:false}));}} invalid={invalidFields.status} options={statusOpts} isRTL={isRTL}/></FormField>
@@ -3054,7 +3068,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
             </>)}
             {modalMode==="edit" && (<>
               <Btn onClick={handleSave}>{t.save}</Btn>
-              <Btn variant="secondary" onClick={()=>{ setForm({name:editItem.name,type:editItem.type,risk:editItem.risk,currency:editItem.currency,status:editItem.status||"Active",color:editItem.color||T.chart[0],notes:editItem.notes||""}); setFormError(""); setInvalidFields({}); setModalMode("view"); }}>{t.cancel}</Btn>
+              <Btn variant="secondary" onClick={()=>{ setForm({name:editItem.name,type:editItem.type,current_price:editItem.current_price??"",risk:editItem.risk,currency:editItem.currency,status:editItem.status||"Active",color:editItem.color||T.chart[0],notes:editItem.notes||""}); setFormError(""); setInvalidFields({}); setModalMode("view"); }}>{t.cancel}</Btn>
             </>)}
             {modalMode==="create" && (<>
               <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");setFormError("");setInvalidFields({});}}>{t.cancel}</Btn>
@@ -3090,7 +3104,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   const [collapsedPortfolios, setCollapsedPortfolios] = useState({});
   const [modalMode, setModalMode] = useState("create");
 
-  const EMPTY = useMemo(() => ({ portfolioId:"",name:"",quantity:"",purchasePrice:"",currentPrice:"",purchaseDate:"",startDate:"",endDate:"",investmentMethod:"",risk:"",funding:[{source:"",amount:""}],status:"Active",notes:"" }), []);
+  const EMPTY = useMemo(() => ({ portfolioId:"",name:"",quantity:"",purchasePrice:"",currentPrice:"",inheritPrice:false,purchaseDate:"",startDate:"",endDate:"",investmentMethod:"",risk:"",funding:[{source:"",amount:""}],status:"Active",notes:"" }), []);
   const [form, setForm] = useState(EMPTY);
   const f = k => v => setForm(p=>({...p,[k]:v}));
 
@@ -3129,7 +3143,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
 
   const openView = (inv) => {
     setForm({ portfolioId:inv.portfolioId,name:inv.name,quantity:inv.quantity||"",purchasePrice:inv.purchasePrice||"",
-      currentPrice:inv.currentPrice||"",purchaseDate:inv.purchaseDate||"",startDate:inv.startDate||"",endDate:inv.endDate||"",investmentMethod:inv.investmentMethod||"",risk:inv.risk||"",funding:(inv.funding&&inv.funding.length?inv.funding:[{source:inv.source||"",amount:""}]),status:inv.status||"Active",notes:inv.notes||"" });
+      currentPrice:inv.currentPrice||"",inheritPrice:Boolean(inv.inheritPrice),purchaseDate:inv.purchaseDate||"",startDate:inv.startDate||"",endDate:inv.endDate||"",investmentMethod:inv.investmentMethod||"",risk:inv.risk||"",funding:(inv.funding&&inv.funding.length?inv.funding:[{source:inv.source||"",amount:""}]),status:inv.status||"Active",notes:inv.notes||"" });
     setEditItem(inv); setModalMode("view"); setShowModal(true);
   };
 
@@ -3162,6 +3176,12 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   const [searchTerm, setSearchTerm] = useState("");
   const [formError, setFormError] = useState("");
   const [invalidFields, setInvalidFields] = useState({});
+
+  useEffect(() => {
+    if (!form.inheritPrice) return;
+    const walletPrice = parseFloat(portfolios.find((p)=>p.id===form.portfolioId)?.current_price) || 0;
+    setForm((prev) => ({ ...prev, currentPrice: String(walletPrice) }));
+  }, [form.inheritPrice, form.portfolioId, portfolios]);
 
   useEffect(() => () => {
     setShowModal(false);
@@ -3381,8 +3401,8 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                   </thead>
                   <tbody>
                     {invs.map(inv=>{
-                      const roiVal = roi(inv);
-                      const cvVal  = curVal(inv);
+                      const roiVal = roi(inv, db);
+                      const cvVal  = curVal(inv, db);
                       const cbVal  = costBasis(inv);
                       const isExpanded = expandedRow === inv.id;
                       const txs = tx_of_investment(db, inv.id);
@@ -3412,7 +3432,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                                 ? <QuickPriceField inv={inv} onDone={()=>setEditingPrice(null)}/>
                                 : (
                                   <div style={{ display:"flex",alignItems:"center",gap:"6px" }}>
-                                    <span style={{ color:T.textSecondary }}>{fmtMoney(inv.currentPrice||0,{currency:portfolioCurrency(db, inv.portfolioId)})}</span>
+                                    <span style={{ color:T.textSecondary }}>{fmtMoney(effectiveCurrentPrice(db, inv),{currency:portfolioCurrency(db, inv.portfolioId)})}</span>
                                     <button onClick={()=>setEditingPrice(inv.id)} style={{ background:"none",border:"none",cursor:"pointer",color:T.emerald,padding:"2px",borderRadius:"4px",display:"flex" }} data-icon-tooltip={t.quickUpdatePrice}>
                                       <Zap size={12}/>
                                     </button>
@@ -3470,7 +3490,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
               <ReadOnlyField label={t.name} value={form.name} />
               <ReadOnlyField label={t.quantity} value={form.quantity} />
               <ReadOnlyField label={t.purchasePrice} value={form.purchasePrice} />
-              <ReadOnlyField label={t.currentPrice} value={form.currentPrice} />
+              <ReadOnlyField label={t.currentPrice} value={form.inheritPrice ? portfolioCurrentPrice(db, form.portfolioId) : form.currentPrice} />
               <ReadOnlyField label="Balance" value={((Number(form.quantity)||0) * (Number(form.purchasePrice)||0)).toFixed(3)} />
               <ReadOnlyField label={t.purchaseDate} value={form.purchaseDate} />
               <ReadOnlyField label={t.startDate} value={form.startDate} />
@@ -3491,11 +3511,36 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                     options={portfolios.map(p=>({value:p.id,label:p.name}))} placeholder={t.selectPortfolio} isRTL={isRTL}/>
                 </FormField>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-                <FormField label={t.quantity} required><Input type="number" value={form.quantity} onChange={e=>{f("quantity")(e.target.value);setInvalidFields(prev=>({...prev,quantity:false}));}} invalid={invalidFields.quantity} isRTL={isRTL} placeholder="0"/></FormField>
-                <FormField label={t.purchasePrice} required><Input type="number" value={form.purchasePrice} onChange={e=>{f("purchasePrice")(e.target.value);setInvalidFields(prev=>({...prev,purchasePrice:false}));}} invalid={invalidFields.purchasePrice} isRTL={isRTL} placeholder="0.00"/></FormField>
-                <FormField label={t.totalInvestmentValue}><Input value={totalInvestmentValue.toFixed(3)} isRTL={isRTL} readOnly style={{ background:"#e2e8f0", color:T.textSecondary }}/></FormField>
-                <FormField label={t.currentPrice}><Input type="number" value={form.currentPrice} onChange={e=>f("currentPrice")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
+              <div style={{ display:"flex", gap:"12px", alignItems:"flex-end", flexWrap:"wrap" }}>
+                <div style={{ flex:"0 1 104px", minWidth:"92px" }}>
+                  <FormField label={t.quantity} required><Input type="number" value={form.quantity} onChange={e=>{f("quantity")(e.target.value);setInvalidFields(prev=>({...prev,quantity:false}));}} invalid={invalidFields.quantity} isRTL={isRTL} placeholder="0" style={{ maxWidth:"104px" }}/></FormField>
+                </div>
+                <div style={{ flex:"0 1 164px", minWidth:"136px" }}>
+                  <FormField label={t.purchasePrice} required><Input type="number" value={form.purchasePrice} onChange={e=>{f("purchasePrice")(e.target.value);setInvalidFields(prev=>({...prev,purchasePrice:false}));}} invalid={invalidFields.purchasePrice} isRTL={isRTL} placeholder="0.00" style={{ maxWidth:"164px" }}/></FormField>
+                </div>
+                <div style={{ flex:"0 1 176px", minWidth:"150px" }}>
+                  <FormField label="Total Value"><Input value={totalInvestmentValue.toFixed(3)} isRTL={isRTL} readOnly style={{ maxWidth:"176px", color:T.textSecondary }}/></FormField>
+                </div>
+                <div style={{ flex:"0 1 320px", minWidth:"252px" }}>
+                  <FormField label={t.currentPrice}>
+                    <div style={{ display:"flex", alignItems:"center", gap:"10px" }}>
+                      <Input type="number" value={form.currentPrice} onChange={e=>f("currentPrice")(e.target.value)} isRTL={isRTL} placeholder="0.00" disabled={Boolean(form.inheritPrice)} style={{ maxWidth:"186px" }}/>
+                      <label style={{ display:"inline-flex", alignItems:"center", gap:"6px", minHeight:"36px", whiteSpace:"nowrap", fontSize:"0.72rem", fontWeight:700, color:T.textMuted }}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(form.inheritPrice)}
+                          onChange={(e)=>{
+                            const checked = e.target.checked;
+                            const walletPrice = parseFloat(portfolios.find((p)=>p.id===form.portfolioId)?.current_price) || 0;
+                            setForm((prev)=>({ ...prev, inheritPrice: checked, currentPrice: checked ? String(walletPrice) : prev.currentPrice }));
+                          }}
+                          style={{ accentColor:T.info, width:"14px",height:"14px",cursor:"pointer" }}
+                        />
+                        <span>{t.inheritPrice || "Sync with Wallet"}</span>
+                      </label>
+                    </div>
+                  </FormField>
+                </div>
               </div>
               <FormField label={t.splitFunding}>
                 <div style={{ display:"flex",flexDirection:"column",gap:"8px" }}>
@@ -3534,7 +3579,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
             </>)}
             {modalMode==="edit" && (<>
               <Btn onClick={handleSave}>{t.save}</Btn>
-              <Btn variant="secondary" onClick={()=>{ setForm({ portfolioId:editItem.portfolioId,name:editItem.name,quantity:editItem.quantity||"",purchasePrice:editItem.purchasePrice||"",currentPrice:editItem.currentPrice||"",purchaseDate:editItem.purchaseDate||"",startDate:editItem.startDate||"",endDate:editItem.endDate||"",investmentMethod:editItem.investmentMethod||"",risk:editItem.risk||"",funding:(editItem.funding&&editItem.funding.length?editItem.funding:[{source:editItem.source||"",amount:""}]),status:editItem.status||"Active",notes:editItem.notes||"" }); setFormError(""); setInvalidFields({}); setModalMode("view"); }}>{t.cancel}</Btn>
+              <Btn variant="secondary" onClick={()=>{ setForm({ portfolioId:editItem.portfolioId,name:editItem.name,quantity:editItem.quantity||"",purchasePrice:editItem.purchasePrice||"",currentPrice:editItem.currentPrice||"",inheritPrice:Boolean(editItem.inheritPrice),purchaseDate:editItem.purchaseDate||"",startDate:editItem.startDate||"",endDate:editItem.endDate||"",investmentMethod:editItem.investmentMethod||"",risk:editItem.risk||"",funding:(editItem.funding&&editItem.funding.length?editItem.funding:[{source:editItem.source||"",amount:""}]),status:editItem.status||"Active",notes:editItem.notes||"" }); setFormError(""); setInvalidFields({}); setModalMode("view"); }}>{t.cancel}</Btn>
             </>)}
             {modalMode==="create" && (<>
               <Btn variant="secondary" onClick={closeModal}>{t.cancel}</Btn>
@@ -3579,7 +3624,7 @@ function InvestmentDetailExpanded({ inv, txs, db }) {
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px" }}>
             {[
               { label:t.principal,    val:fmtMoney(costBasis(inv),{currency}) },
-              { label:t.currentValue, val:fmtMoney(curVal(inv),{currency}) },
+              { label:t.currentValue, val:fmtMoney(curVal(inv, db),{currency}) },
               { label:t.totalIncome,  val:fmtMoney(income,{currency}),  color:T.positive },
               { label:"Expenses",     val:fmtMoney(expense,{currency}), color:T.negative },
             ].map(m=>(
@@ -4213,7 +4258,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
           </FormField>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
             <FormField label={t.transactionType}><Select value={form.type} onChange={e=>f("type")(e.target.value)} options={typeOpts} isRTL={isRTL}/></FormField>
-            <FormField label={t.amount} required><Input type="number" value={form.amount} onChange={e=>{f("amount")(e.target.value);setInvalidFields(prev=>({...prev,amount:false}));}} invalid={invalidFields.amount} isRTL={isRTL} placeholder="0.00"/></FormField>
+            <FormField label={t.amount} required><Input type="number" value={form.amount} onChange={e=>{f("amount")(e.target.value);setInvalidFields(prev=>({...prev,amount:false}));}} invalid={invalidFields.amount} isRTL={isRTL} placeholder="0.00" style={{ maxWidth:"220px" }}/></FormField>
           </div>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
             <FormField label={t.date} required><Input type="date" value={form.date} onChange={e=>{f("date")(e.target.value);setInvalidFields(prev=>({...prev,date:false}));}} invalid={invalidFields.date} isRTL={isRTL}/></FormField>
@@ -4973,7 +5018,7 @@ function StatisticsTab() {
     const portfolio = portfolioById.get(inv.portfolioId);
     if (!portfolio) return;
     const typeKey = portfolio.type || t.unassignedType;
-    const value = toBaseAmount(db, curVal(inv), portfolio.currency || "USD");
+    const value = toBaseAmount(db, curVal(inv, db), portfolio.currency || "USD");
     if (value <= 0) return;
     allocationByType[typeKey] = (allocationByType[typeKey] || 0) + value;
   });
