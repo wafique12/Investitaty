@@ -195,7 +195,7 @@ const TRANSLATIONS = {
     initialCapital: "Initial Capital",
     purchasePrice: "Purchase Price (Per Unit)",
     currentPrice: "Current Price (Per Unit)",
-    inheritPrice: "Sync with Wallet",
+    inheritPrice: "Sync with Portfolio",
     totalInvestmentValue: "Total Investment Value",
     totalSplitAmount: "Total Split Amount",
     splitFundingMismatchError: "Split funding total must equal Total Investment Value.",
