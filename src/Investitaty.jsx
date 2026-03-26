@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { supabase, hasSupabaseConfig, hasSupabaseClient } from "./lib/supabaseClient";
 import BackupService from "./services/BackupService";
-import { DB_FOLDER_NAME, DRIVE_ROOT_FOLDER, ensureDriveOk, getDriveAppFolders, setDriveUnauthorizedHandler } from "./services/DrivePaths";
+import { DRIVE_DB_PATH, ensureDriveOk, getDriveAppFolders, setDriveUnauthorizedHandler } from "./services/DrivePaths";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONFIG
@@ -23,7 +23,7 @@ const REQUIRED_SCOPES = [
   "https://www.googleapis.com/auth/userinfo.email",
 ];
 const DB_FILENAME = "investitaty_db.json";
-const DB_RELATIVE_PATH = `${DRIVE_ROOT_FOLDER}/${DB_FOLDER_NAME}/${DB_FILENAME}`;
+const DB_RELATIVE_PATH = `${DRIVE_DB_PATH}/${DB_FILENAME}`;
 const AUTH_STORAGE_KEY = "investitaty_auth_v1";
 const AUTH_CONSENT_STORAGE_KEY = "investitaty_auth_consent_v1";
 const AUTH_LOGIN_DAY_KEY = "investitaty_auth_login_day_v1";
@@ -33,6 +33,7 @@ const SESSION_EXPIRED_MESSAGE_KEY = "investitaty_session_expired_message_v1";
 const PORTFOLIOS_COLLAPSE_STORAGE_KEY = "investitaty_portfolios_collapsed_v1";
 const PORTFOLIOS_UI_STORAGE_KEY = "investitaty_portfolios_ui_v1";
 const INVESTMENTS_COLLAPSE_STORAGE_KEY = "investitaty_investments_collapsed_v1";
+const SELECTED_COUNTRY_STORAGE_KEY = "investitaty_selected_country_v1";
 const INACTIVITY_TIMEOUT_MS = 20 * 60 * 1000;
 const AUTH_DEBUG_PREFIX = "[AuthFlow]";
 const OWNER_PROTECTED_EMAIL = "wafique22@gmail.com";
@@ -57,6 +58,8 @@ const INITIAL_SCHEMA = {
     transactionStatuses: ["recorded", "scheduled", "cancelled"],
     transactionCategories: ["Rental Income", "Dividend", "Capital Gain", "Interest", "Maintenance", "Management Fee", "Tax", "Insurance", "Other"],
     currencies:       ["USD", "SAR", "AED", "EUR", "GBP"],
+    countries: ["USA", "Saudi Arabia", "Egypt"],
+    defaultCountry: "USA",
     baseCurrency: "USD",
     currencyRates: { USD: 1, SAR: 3.75, AED: 3.67, EUR: 0.92, GBP: 0.79 },
   },
@@ -269,6 +272,10 @@ const TRANSLATIONS = {
     addItem: "Add",
     dataStorage: "Data stored in",
     language: "Language",
+    country: "Country",
+    countries: "Countries",
+    defaultCountry: "Default Country",
+    setAsDefault: "Set as Default",
     selectPortfolio: "Select Portfolio",
     selectType: "Select type",
     selectRisk: "Select risk",
@@ -523,6 +530,10 @@ const TRANSLATIONS = {
     addItem: "إضافة",
     dataStorage: "البيانات محفوظة في",
     language: "اللغة",
+    country: "الدولة",
+    countries: "الدول",
+    defaultCountry: "الدولة الافتراضية",
+    setAsDefault: "تعيين كافتراضي",
     selectPortfolio: "اختر المحفظة",
     selectType: "اختر النوع",
     selectRisk: "اختر المخاطرة",
@@ -702,6 +713,12 @@ function migrateSchema(data) {
     if (!out.settings[k]) out.settings[k] = INITIAL_SCHEMA.settings[k];
   }
   if (!out.settings.baseCurrency) out.settings.baseCurrency = "USD";
+  if (!Array.isArray(out.settings.countries) || out.settings.countries.length === 0) {
+    out.settings.countries = [...INITIAL_SCHEMA.settings.countries];
+  }
+  if (!out.settings.defaultCountry || !out.settings.countries.includes(out.settings.defaultCountry)) {
+    out.settings.defaultCountry = out.settings.countries[0];
+  }
   const existingRates = out.settings.currencyRates && typeof out.settings.currencyRates === "object" ? out.settings.currencyRates : {};
   out.settings.currencyRates = { ...INITIAL_SCHEMA.settings.currencyRates, ...existingRates };
 
@@ -762,6 +779,7 @@ function migrateSchema(data) {
 
   out.portfolios = (out.portfolios || []).map((p, idx) => ({
     ...p,
+    country: p.country || out.settings.defaultCountry || out.settings.countries?.[0] || "USA",
     status: p.status || out.settings.investmentStatuses?.[0] || "Active",
     color: p.color || T.chart[idx % T.chart.length],
     current_price: Number.isFinite(Number(p.current_price)) ? Number(p.current_price) : 0,
@@ -1134,7 +1152,8 @@ function AppProvider({ children }) {
   const [usersConfigReady, setUsersConfigReady] = useState(false);
   const [gatekeeperError, setGatekeeperError] = useState(null);
   const [userSyncDone, setUserSyncDone] = useState(false);
-  const [db, setDb] = useState(null);
+  const [rawDb, setRawDb] = useState(null);
+  const [selectedCountry, setSelectedCountry] = useState(() => localStorage.getItem(SELECTED_COUNTRY_STORAGE_KEY) || null);
   const [fileId, setFileId] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState(null);
@@ -1156,7 +1175,7 @@ function AppProvider({ children }) {
       dbFetchAbortRef.current.abort();
       dbFetchAbortRef.current = null;
     }
-    setDb(null);
+    setRawDb(null);
     setFileId(null);
     setSyncError(null);
     setDbLoading(false);
@@ -1194,10 +1213,10 @@ function AppProvider({ children }) {
   }, [auth.token]);
 
   const triggerBackup = useCallback(async ({ isAuto = false } = {}) => {
-    if (!auth.token || !db || backupBusy) return null;
+    if (!auth.token || !rawDb || backupBusy) return null;
     setBackupBusy(true);
     try {
-      const result = await BackupService.createBackup(auth.token, db);
+      const result = await BackupService.createBackup(auth.token, rawDb);
       setBackupFiles(result.backups || []);
       setLastBackupAt(result.lastBackupAt || new Date().toISOString());
       return result;
@@ -1208,14 +1227,14 @@ function AppProvider({ children }) {
     } finally {
       setBackupBusy(false);
     }
-  }, [auth.token, db, backupBusy]);
+  }, [auth.token, rawDb, backupBusy]);
 
   const restoreBackup = useCallback(async (backup) => {
     if (!auth.token || !fileId || !backup?.id) return false;
     try {
       const snapshot = await BackupService.downloadBackup(auth.token, backup.id);
       const migrated = migrateSchema(snapshot);
-      setDb(migrated);
+      setRawDb(migrated);
       await saveDB(auth.token, fileId, migrated);
       return true;
     } catch (error) {
@@ -1304,7 +1323,7 @@ function AppProvider({ children }) {
     try {
       const { fileId: fid, data } = await findOrCreateDB(auth.token);
       setFileId(fid);
-      setDb(data);
+      setRawDb(data);
       try { await fetchBackups(); } catch (_) {}
       return true;
     } catch (error) {
@@ -1464,7 +1483,7 @@ function AppProvider({ children }) {
         if (controller.signal.aborted) return;
         if (dbLoadingWatchdogRef.current) clearTimeout(dbLoadingWatchdogRef.current);
         setFileId(fid);
-        setDb(data);
+        setRawDb(data);
         setDbLoading(false);
       })
       .catch(() => {
@@ -1481,7 +1500,7 @@ function AppProvider({ children }) {
   }, [auth.user?.id, auth.token, auth.authLoading, isBlocked, userSyncDone, clearLocalSessionState]);
 
   useEffect(() => {
-    if (!auth.token || !db || isBlocked || !userSyncDone) return;
+    if (!auth.token || !rawDb || isBlocked || !userSyncDone) return;
     let cancelled = false;
     const run = async () => {
       try {
@@ -1500,7 +1519,7 @@ function AppProvider({ children }) {
     };
     run();
     return () => { cancelled = true; };
-  }, [auth.token, db, isBlocked, userSyncDone, fetchBackups, triggerBackup]);
+  }, [auth.token, rawDb, isBlocked, userSyncDone, fetchBackups, triggerBackup]);
 
   useEffect(() => {
     if (!auth.user?.id || !auth.token) return;
@@ -1560,7 +1579,7 @@ function AppProvider({ children }) {
   }, [auth.user?.id, auth.token, clearLocalSessionState]);
 
   const updateDb = useCallback((updater) => {
-    setDb((prev) => {
+    setRawDb((prev) => {
       const next = typeof updater === "function" ? updater(prev) : updater;
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(async () => {
@@ -1653,10 +1672,15 @@ function AppProvider({ children }) {
   }, [updateDb]);
 
   const addItem = useCallback((collection, item) => {
-    const newItem = { ...item, id: Date.now() + "_" + Math.random().toString(36).slice(2), created_at: new Date().toISOString() };
+    const newItem = {
+      ...item,
+      ...(collection === "portfolios" && !item.country ? { country: selectedCountry || "" } : {}),
+      id: Date.now() + "_" + Math.random().toString(36).slice(2),
+      created_at: new Date().toISOString(),
+    };
     updateDb(prev => ({ ...prev, [collection]: [...prev[collection], newItem] }));
     return newItem;
-  }, [updateDb]);
+  }, [updateDb, selectedCountry]);
 
   const updateUserEntry = useCallback(async (email, updater) => {
     if (!hasSupabaseClient) {
@@ -1712,16 +1736,42 @@ function AppProvider({ children }) {
     }
   }, [fetchUsersConfig]);
 
+  const db = useMemo(() => {
+    if (!rawDb) return null;
+    if (!selectedCountry) return rawDb;
+    const allowedPortfolioIds = new Set((rawDb.portfolios || []).filter((p) => p.country === selectedCountry).map((p) => p.id));
+    const investments = (rawDb.investments || []).filter((inv) => allowedPortfolioIds.has(inv.portfolioId));
+    const allowedInvestmentIds = new Set(investments.map((inv) => inv.id));
+    const transactions = (rawDb.transactions || []).filter((tx) => allowedPortfolioIds.has(tx.portfolioId) || allowedInvestmentIds.has(tx.investmentId));
+    return { ...rawDb, portfolios: [...allowedPortfolioIds].length ? (rawDb.portfolios || []).filter((p) => allowedPortfolioIds.has(p.id)) : [], investments, transactions };
+  }, [rawDb, selectedCountry]);
+
+  useEffect(() => {
+    if (!rawDb?.settings?.countries?.length) return;
+    const countries = rawDb.settings.countries;
+    const fallbackCountry = rawDb.settings.defaultCountry || countries[0] || null;
+    if (!selectedCountry || !countries.includes(selectedCountry)) {
+      setSelectedCountry(fallbackCountry);
+    }
+  }, [rawDb, selectedCountry]);
+
+  useEffect(() => {
+    if (selectedCountry) localStorage.setItem(SELECTED_COUNTRY_STORAGE_KEY, selectedCountry);
+    else localStorage.removeItem(SELECTED_COUNTRY_STORAGE_KEY);
+  }, [selectedCountry]);
+
   const value = useMemo(() => ({
-    ...auth, db, fileId, syncing, syncError, dbLoading,
+    ...auth, db, rawDb, fileId, syncing, syncError, dbLoading,
     updateDb, softDelete, archiveItem, unarchiveItem, hardDeleteItem, patchItem, addItem,
+    selectedCountry, setSelectedCountry,
     lang, setLang, t, isRTL, font,
     usersConfig, usersConfigReady, currentRole, isBlocked, hasPermission,
     updateUserEntry, deleteUserEntry, gatekeeperError, userSyncDone,
     backupFiles, lastBackupAt, backupBusy, triggerBackup, restoreBackup, fetchBackups, manualSync,
   }), [
-    auth, db, fileId, syncing, syncError, dbLoading,
+    auth, db, rawDb, fileId, syncing, syncError, dbLoading,
     updateDb, softDelete, archiveItem, unarchiveItem, hardDeleteItem, patchItem, addItem,
+    selectedCountry,
     lang, t, isRTL, font,
     usersConfig, usersConfigReady, currentRole, isBlocked, hasPermission,
     updateUserEntry, deleteUserEntry, gatekeeperError, userSyncDone,
@@ -2156,8 +2206,9 @@ function LoadingScreen({ message }) {
 // SIDEBAR
 // ═══════════════════════════════════════════════════════════════════════════════
 function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileOpen, setMobileOpen }) {
-  const { user, signOut, syncing, t, font, lang, setLang, hasPermission, currentRole, manualSync } = useApp();
+  const { user, signOut, syncing, t, font, lang, setLang, hasPermission, currentRole, manualSync, selectedCountry, setSelectedCountry, rawDb } = useApp();
   const canManageUsers = currentRole === "Owner" || hasPermission("assign_role") || hasPermission("block_user") || hasPermission("unblock_user");
+  const countries = rawDb?.settings?.countries || [];
 
   const navItems = [
     { id:"dashboard",    label:t.dashboard,    icon:<BarChart2 size={17}/> },
@@ -2228,6 +2279,18 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileO
             {["en","ar"].map(l=>(
               <button key={l} onClick={()=>setLang(l)} style={{ background:lang===l?"rgba(255,255,255,0.12)":"transparent",border:`1px solid ${T.borderDark}`,borderRadius:"6px",color:lang===l?"#fff":T.textSidebarMuted,padding:"3px 8px",fontSize:"0.68rem",cursor:"pointer" }}>{l.toUpperCase()}</button>
             ))}
+          </div>
+          <div style={{ marginBottom:"10px" }}>
+            <div style={{ color:T.textSidebarMuted,fontSize:"0.7rem",letterSpacing:"0.06em",marginBottom:"6px" }}>{t.country}</div>
+            <select
+              value={selectedCountry || ""}
+              onChange={(e) => setSelectedCountry(e.target.value)}
+              style={{ width:"100%",padding:"6px 8px",background:"rgba(255,255,255,0.08)",border:`1px solid ${T.borderDark}`,borderRadius:"6px",color:"#fff",fontSize:"0.72rem",fontFamily:font }}
+            >
+              {countries.map((country) => (
+                <option key={country} value={country} style={{ color:"#0f172a" }}>{country}</option>
+              ))}
+            </select>
           </div>
           <div style={{ display:"flex",alignItems:"center",gap:"8px",marginBottom:"8px" }}>
             <div style={{ width:"26px",height:"26px",borderRadius:"50%",overflow:"hidden",background:"rgba(255,255,255,0.1)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:"0.65rem" }}>
@@ -2808,7 +2871,7 @@ function EmptyState({ text }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
 
-  const { db, addItem, archiveItem, unarchiveItem, hardDeleteItem, patchItem, t, isRTL, font } = useApp();
+  const { db, addItem, archiveItem, unarchiveItem, hardDeleteItem, patchItem, t, isRTL, font, selectedCountry } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [modalMode, setModalMode] = useState("create");
@@ -2816,7 +2879,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [collapsedPortfolios, setCollapsedPortfolios] = useState({});
-  const EMPTY = { name:"",type:"",current_price:"",risk:"",currency:"USD",status:"Active",color:T.chart[0],notes:"" };
+  const EMPTY = useMemo(() => ({ name:"", country:selectedCountry || "", type:"",current_price:"",risk:"",currency:"USD",status:"Active",color:T.chart[0],notes:"" }), [selectedCountry]);
   const [form, setForm] = useState(EMPTY);
   const [formError, setFormError] = useState("");
   const [invalidFields, setInvalidFields] = useState({});
@@ -2882,6 +2945,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
       risk: !form.risk,
       status: !form.status,
       currency: !form.currency,
+      country: !form.country,
     };
     setInvalidFields(nextInvalid);
     if (Object.values(nextInvalid).some(Boolean)) {
@@ -2895,7 +2959,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
     setForm(EMPTY); setShowModal(false); setEditItem(null); setModalMode("create");
   };
 
-  const openView = (p) => { setForm({name:p.name,type:p.type,current_price:p.current_price??"",risk:p.risk,currency:p.currency,status:p.status||"Active",color:p.color||T.chart[0],notes:p.notes||""}); setEditItem(p); setModalMode("view"); setFormError(""); setInvalidFields({}); setShowModal(true); };
+  const openView = (p) => { setForm({name:p.name,country:p.country || "",type:p.type,current_price:p.current_price??"",risk:p.risk,currency:p.currency,status:p.status||"Active",color:p.color||T.chart[0],notes:p.notes||""}); setEditItem(p); setModalMode("view"); setFormError(""); setInvalidFields({}); setShowModal(true); };
 
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font }}>
@@ -3034,6 +3098,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
           {modalMode === "view" ? (
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"10px" }}>
               <ReadOnlyField label={t.name} value={form.name} />
+              <ReadOnlyField label={t.country} value={form.country} />
               <ReadOnlyField label={t.type} value={form.type} />
               <ReadOnlyField label={t.currentPrice} value={form.current_price} />
               <ReadOnlyField label={t.risk} value={form.risk} />
@@ -3044,7 +3109,10 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
             </div>
           ) : (
             <>
-              <FormField label={t.name} required><Input value={form.name} onChange={e=>{f("name")(e.target.value);setInvalidFields(prev=>({...prev,name:false}));}} invalid={invalidFields.name} isRTL={isRTL} placeholder={t.name}/></FormField>
+              <div style={{ display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:"12px" }}>
+                <FormField label={t.name} required><Input value={form.name} onChange={e=>{f("name")(e.target.value);setInvalidFields(prev=>({...prev,name:false}));}} invalid={invalidFields.name} isRTL={isRTL} placeholder={t.name}/></FormField>
+                <FormField label={t.country} required><Select value={form.country} onChange={e=>{f("country")(e.target.value);setInvalidFields(prev=>({...prev,country:false}));}} invalid={invalidFields.country} options={db?.settings?.countries||[]} placeholder={t.country} isRTL={isRTL}/></FormField>
+              </div>
               <div style={{ display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:"12px" }}>
                 <FormField label={t.type} required><Select value={form.type} onChange={e=>{f("type")(e.target.value);setInvalidFields(prev=>({...prev,type:false}));}} invalid={invalidFields.type} options={db?.settings?.portfolioTypes||[]} placeholder={t.selectType} isRTL={isRTL}/></FormField>
                 <FormField label={t.currentPrice}><Input type="number" value={form.current_price} onChange={e=>f("current_price")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
@@ -3068,7 +3136,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
             </>)}
             {modalMode==="edit" && (<>
               <Btn onClick={handleSave}>{t.save}</Btn>
-              <Btn variant="secondary" onClick={()=>{ setForm({name:editItem.name,type:editItem.type,current_price:editItem.current_price??"",risk:editItem.risk,currency:editItem.currency,status:editItem.status||"Active",color:editItem.color||T.chart[0],notes:editItem.notes||""}); setFormError(""); setInvalidFields({}); setModalMode("view"); }}>{t.cancel}</Btn>
+              <Btn variant="secondary" onClick={()=>{ setForm({name:editItem.name,country:editItem.country || "",type:editItem.type,current_price:editItem.current_price??"",risk:editItem.risk,currency:editItem.currency,status:editItem.status||"Active",color:editItem.color||T.chart[0],notes:editItem.notes||""}); setFormError(""); setInvalidFields({}); setModalMode("view"); }}>{t.cancel}</Btn>
             </>)}
             {modalMode==="create" && (<>
               <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");setFormError("");setInvalidFields({});}}>{t.cancel}</Btn>
@@ -4326,7 +4394,7 @@ function TxActionMenu({ tx, onClose }) {
 // SETTINGS TAB — Lookup Categories
 // ═══════════════════════════════════════════════════════════════════════════════
 function SettingsTab() {
-  const { db, updateDb, t, isRTL, font, backupFiles, lastBackupAt, backupBusy, triggerBackup, restoreBackup, fetchBackups } = useApp();
+  const { db, updateDb, t, isRTL, font, backupFiles, lastBackupAt, backupBusy, triggerBackup, restoreBackup, fetchBackups, selectedCountry, setSelectedCountry } = useApp();
   const [newItems, setNewItems] = useState({});
   const [editingItems, setEditingItems] = useState({});
   const [currencyError, setCurrencyError] = useState("");
@@ -4342,13 +4410,22 @@ function SettingsTab() {
     { key:"transactionStatuses",  label:t.transactionStatuses,  icon:<Layers size={15}/> },
     { key:"transactionCategories", label:t.transactionCategories, icon:<Tag size={15}/> },
     { key:"currencies",            label:t.currencies,            icon:<DollarSign size={15}/> },
+    { key:"countries",             label:t.countries,             icon:<Globe size={15}/> },
   ];
 
   const addItem = (key) => {
     const val = (newItems[key]||"").trim();
     if (!val) return;
     if ((db.settings[key]||[]).includes(val)) return;
-    updateDb(prev=>({ ...prev, settings:{ ...prev.settings, [key]:[...(prev.settings[key]||[]),val] } }));
+    updateDb(prev=>({
+      ...prev,
+      settings:{
+        ...prev.settings,
+        [key]:[...(prev.settings[key]||[]),val],
+        ...(key === "countries" && !prev.settings.defaultCountry ? { defaultCountry: val } : {}),
+      },
+    }));
+    if (key === "countries" && !selectedCountry) setSelectedCountry(val);
     setNewItems(p=>({...p,[key]:""}));
   };
 
@@ -4443,6 +4520,61 @@ function SettingsTab() {
     setCurrencyError("");
   };
 
+  const setDefaultCountry = (country) => {
+    updateDb((prev) => ({ ...prev, settings: { ...prev.settings, defaultCountry: country } }));
+    setSelectedCountry(country);
+  };
+
+  const renameCountry = (idx) => {
+    const editKey = `countries-${idx}`;
+    const nextName = (editingItems[editKey] || "").trim();
+    if (!nextName) return;
+    const current = (db?.settings?.countries || [])[idx];
+    if (!current) return;
+    if ((db?.settings?.countries || []).some((c, i) => i !== idx && c === nextName)) return;
+    updateDb((prev) => {
+      const countries = [...(prev.settings.countries || [])];
+      countries[idx] = nextName;
+      const next = {
+        ...prev,
+        settings: {
+          ...prev.settings,
+          countries,
+          defaultCountry: prev.settings.defaultCountry === current ? nextName : prev.settings.defaultCountry,
+        },
+        portfolios: (prev.portfolios || []).map((p) => p.country === current ? { ...p, country: nextName } : p),
+      };
+      return next;
+    });
+    if (selectedCountry === current) setSelectedCountry(nextName);
+    setEditingItems((prev) => {
+      const out = { ...prev };
+      delete out[editKey];
+      return out;
+    });
+  };
+
+  const removeCountry = (idx) => {
+    const current = (db?.settings?.countries || [])[idx];
+    if (!current) return;
+    const portfoliosInCountry = (db?.portfolios || []).some((p) => p.country === current);
+    if (portfoliosInCountry) {
+      window.alert("Move or delete portfolios in this country before removing it.");
+      return;
+    }
+    const countries = (db?.settings?.countries || []).filter((_, i) => i !== idx);
+    const fallback = countries[0] || "";
+    updateDb((prev) => ({
+      ...prev,
+      settings: {
+        ...prev.settings,
+        countries,
+        defaultCountry: prev.settings.defaultCountry === current ? fallback : prev.settings.defaultCountry,
+      },
+    }));
+    if (selectedCountry === current && fallback) setSelectedCountry(fallback);
+  };
+
   const handleManualBackup = async () => {
     await triggerBackup({ isAuto: false });
     await fetchBackups();
@@ -4458,6 +4590,12 @@ function SettingsTab() {
   };
 
   const shownDate = lastBackupAt ? new Date(lastBackupAt).toLocaleString() : t.backupNoDate;
+  const settingsGridStyle = {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))",
+    gap: "16px",
+    alignItems: "stretch",
+  };
 
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font }}>
@@ -4466,15 +4604,49 @@ function SettingsTab() {
         <div style={{ fontSize:"0.82rem",color:T.textMuted,marginTop:"4px" }}>{t.settingsDesc}</div>
       </div>
 
-      <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:"16px" }}>
+      <div style={settingsGridStyle}>
         {sections.map(({ key, label, icon }) => (
-          <Card key={key} style={{ padding:"14px" }}>
+          <Card key={key} hover style={{ padding:"14px" }}>
             <div style={{ display:"flex",alignItems:"center",gap:"8px",marginBottom:"12px" }}>
               <div style={{ width:"28px",height:"28px",borderRadius:"7px",background:T.emeraldBg,display:"flex",alignItems:"center",justifyContent:"center",color:T.emerald,flexShrink:0 }}>{icon}</div>
               <h4 style={{ margin:0,fontSize:"0.82rem",fontWeight:600,color:T.textPrimary }}>{label}</h4>
             </div>
 
-            {key === "currencies" ? (
+            {key === "countries" ? (
+              <>
+                <div style={{ display:"grid",gap:"8px",marginBottom:"12px" }}>
+                  {(db?.settings?.countries||[]).map((country, i) => {
+                    const editKey = `countries-${i}`;
+                    const isEditing = Object.prototype.hasOwnProperty.call(editingItems, editKey);
+                    const isDefault = country === (db?.settings?.defaultCountry || "");
+                    return (
+                      <div key={`${country}-${i}`} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"8px", padding:"8px 10px", border:`1px solid ${isDefault ? T.emerald : T.border}`, borderRadius:"9px", background:isDefault ? "rgba(16,185,129,0.12)" : "#f8fafc", color:T.textPrimary }}>
+                        <div style={{ display:"flex",alignItems:"center",gap:"6px" }}>
+                          {isEditing ? (
+                            <input value={editingItems[editKey]} onChange={(e)=>setEditingItems((prev)=>({ ...prev, [editKey]:e.target.value }))} onKeyDown={(e)=>e.key==="Enter"&&renameCountry(i)} style={{ width:"140px", padding:"4px 6px", background:T.bgInput, border:`1px solid ${T.border}`, borderRadius:"6px", color:T.textPrimary, fontSize:"0.75rem" }} />
+                          ) : (
+                            <span style={{ fontSize:"0.78rem", fontWeight:600, color:T.textPrimary }}>{country}</span>
+                          )}
+                          {isDefault && <span style={{ fontSize:"0.68rem", color:T.emerald, fontWeight:700, letterSpacing:"0.05em" }}>DEFAULT</span>}
+                        </div>
+                        <div style={{ display:"flex",alignItems:"center",gap:"6px" }}>
+                          {!isDefault && <Btn size="sm" variant="secondary" onClick={() => setDefaultCountry(country)}>{t.setAsDefault}</Btn>}
+                          {isEditing ? (
+                            <>
+                              <button onClick={()=>renameCountry(i)} style={{ border:"none", background:"none", color:T.positive, cursor:"pointer", display:"flex" }}><Check size={13}/></button>
+                              <button onClick={()=>setEditingItems((prev)=>{ const out={...prev}; delete out[editKey]; return out; })} style={{ border:"none", background:"none", color:T.textMuted, cursor:"pointer", display:"flex" }}><X size={13}/></button>
+                            </>
+                          ) : (
+                            <button onClick={()=>startEditItem("countries", i, country)} style={{ border:"none", background:"none", color:T.textSecondary, cursor:"pointer", display:"flex" }}><Edit3 size={13}/></button>
+                          )}
+                          <button onClick={()=>removeCountry(i)} style={{ border:"none", background:"none", color:T.negative, cursor:"pointer", display:"flex" }}><Trash2 size={13}/></button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            ) : key === "currencies" ? (
               <>
                 <div style={{ marginBottom:"10px" }}>
                   <Select value={baseCurrency} onChange={(e)=>setBaseCurrency(e.target.value)} options={(db?.settings?.currencies||[]).map((c)=>({ value:c, label:`Base · ${c}` }))} isRTL={isRTL} />
@@ -4557,33 +4729,35 @@ function SettingsTab() {
             </div>
           </Card>
         ))}
-      </div>
-
-      <Card style={{ marginTop:"20px",padding:"16px 20px",width:"min(100%, 360px)" }}>
-        <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:"10px",flexWrap:"wrap",marginBottom:"10px" }}>
-          <div>
-            <h4 style={{ margin:"0 0 4px",fontSize:"0.92rem",color:T.textPrimary }}>{t.backupTitle}</h4>
-            <div style={{ fontSize:"0.78rem",color:T.textMuted }}>{t.backupInfo}: <strong style={{ color:T.textSecondary }}>{shownDate}</strong></div>
-          </div>
-          <Btn onClick={handleManualBackup} disabled={backupBusy} icon={<RefreshCw size={14} />}>{t.backupNow}</Btn>
-        </div>
-        <div style={{ display:"grid",gap:"8px" }}>
-          {backupFiles.length === 0 && (
-            <div style={{ fontSize:"0.8rem",color:T.textMuted }}>{t.backupNoItems}</div>
-          )}
-          {backupFiles.slice(0, 5).map((backup) => (
-            <div key={backup.id} style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:"8px",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:"8px",background:T.bgApp }}>
-              <div style={{ display:"flex",flexDirection:"column",gap:"2px" }}>
-                <span style={{ fontSize:"0.78rem",color:T.textPrimary,fontWeight:500 }}>{backup.name}</span>
-                <span style={{ fontSize:"0.72rem",color:T.textMuted }}>{new Date(backup.createdTime).toLocaleString()}</span>
-              </div>
-              <button data-icon-tooltip="Restore" onClick={() => setRestoreCandidate(backup)} style={{ border:"none",background:"none",cursor:"pointer",color:T.emerald,display:"flex",padding:"3px" }}>
-                <RotateCcw size={14} />
-              </button>
+        <Card hover style={{ padding:"14px", display:"flex", flexDirection:"column" }}>
+          <div style={{ display:"flex",alignItems:"center",gap:"8px",marginBottom:"10px" }}>
+            <div style={{ width:"28px",height:"28px",borderRadius:"7px",background:T.emeraldBg,display:"flex",alignItems:"center",justifyContent:"center",color:T.emerald,flexShrink:0 }}>
+              <RefreshCw size={15}/>
             </div>
-          ))}
-        </div>
-      </Card>
+            <div style={{ minWidth:0,flex:1 }}>
+              <h4 style={{ margin:0,fontSize:"0.82rem",fontWeight:600,color:T.textPrimary }}>{t.backupTitle}</h4>
+              <div style={{ fontSize:"0.74rem",color:T.textMuted,marginTop:"2px" }}>{t.backupInfo}: <strong style={{ color:T.textSecondary }}>{shownDate}</strong></div>
+            </div>
+            <Btn onClick={handleManualBackup} disabled={backupBusy} icon={<RefreshCw size={14} />}>{t.backupNow}</Btn>
+          </div>
+          <div style={{ display:"grid",gap:"8px" }}>
+            {backupFiles.length === 0 && (
+              <div style={{ fontSize:"0.74rem",color:T.textMuted,fontStyle:"italic" }}>{t.backupNoItems}</div>
+            )}
+            {backupFiles.slice(0, 5).map((backup) => (
+              <div key={backup.id} style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:"8px",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:"9px",background:T.bgApp }}>
+                <div style={{ display:"flex",flexDirection:"column",gap:"2px",minWidth:0 }}>
+                  <span style={{ fontSize:"0.78rem",color:T.textPrimary,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{backup.name}</span>
+                  <span style={{ fontSize:"0.72rem",color:T.textMuted }}>{new Date(backup.createdTime).toLocaleString()}</span>
+                </div>
+                <button data-icon-tooltip="Restore" onClick={() => setRestoreCandidate(backup)} style={{ border:"none",background:"none",cursor:"pointer",color:T.emerald,display:"flex",padding:"3px",borderRadius:"6px" }}>
+                  <RotateCcw size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
 
       {/* DB info card */}
       <Card style={{ marginTop:"20px",padding:"16px 20px" }}>
