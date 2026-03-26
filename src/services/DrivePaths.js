@@ -1,6 +1,14 @@
-const DRIVE_ROOT_FOLDER = "Investitaty";
+import packageJson from "../../package.json";
+
+const DRIVE_ROOT_FOLDER = "Investaty";
+const APP_ENVIRONMENT = packageJson.environment || "development";
+const ENV_FOLDER_NAME = `data.${APP_ENVIRONMENT}`;
+const DATA_FOLDER_NAME = "data";
 const DB_FOLDER_NAME = "DB";
 const BACKUP_FOLDER_NAME = "Investaty_Backups";
+const DRIVE_BASE_PATH = `${DRIVE_ROOT_FOLDER}/${ENV_FOLDER_NAME}/${DATA_FOLDER_NAME}`;
+const DRIVE_DB_PATH = `${DRIVE_BASE_PATH}/${DB_FOLDER_NAME}`;
+const DRIVE_BACKUP_PATH = `${DRIVE_BASE_PATH}/${BACKUP_FOLDER_NAME}`;
 let onUnauthorized = null;
 
 export function setDriveUnauthorizedHandler(handler) {
@@ -57,15 +65,29 @@ export async function findOrCreateFolder(token, name, parentId = null) {
 
 export async function getDriveAppFolders(token) {
   const root = await findOrCreateFolder(token, DRIVE_ROOT_FOLDER);
-  const dbFolder = await findOrCreateFolder(token, DB_FOLDER_NAME, root.id);
-  const backupFolder = await findOrCreateFolder(token, BACKUP_FOLDER_NAME, root.id);
+  const envFolder = await findOrCreateFolder(token, ENV_FOLDER_NAME, root.id);
+  const dataFolder = await findOrCreateFolder(token, DATA_FOLDER_NAME, envFolder.id);
+  const dbFolder = await findOrCreateFolder(token, DB_FOLDER_NAME, dataFolder.id);
+  const backupFolder = await findOrCreateFolder(token, BACKUP_FOLDER_NAME, dataFolder.id);
   return {
     root,
+    envFolder,
+    dataFolder,
     dbFolder,
     backupFolder,
-    dbPath: `${DRIVE_ROOT_FOLDER}/${DB_FOLDER_NAME}`,
-    backupPath: `${DRIVE_ROOT_FOLDER}/${BACKUP_FOLDER_NAME}`,
+    dbPath: DRIVE_DB_PATH,
+    backupPath: DRIVE_BACKUP_PATH,
   };
 }
 
-export { DRIVE_ROOT_FOLDER, DB_FOLDER_NAME, BACKUP_FOLDER_NAME };
+export {
+  APP_ENVIRONMENT,
+  BACKUP_FOLDER_NAME,
+  DATA_FOLDER_NAME,
+  DB_FOLDER_NAME,
+  DRIVE_BACKUP_PATH,
+  DRIVE_BASE_PATH,
+  DRIVE_DB_PATH,
+  DRIVE_ROOT_FOLDER,
+  ENV_FOLDER_NAME,
+};
