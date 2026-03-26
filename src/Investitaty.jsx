@@ -1153,7 +1153,7 @@ function AppProvider({ children }) {
   const [gatekeeperError, setGatekeeperError] = useState(null);
   const [userSyncDone, setUserSyncDone] = useState(false);
   const [rawDb, setRawDb] = useState(null);
-  const [selectedCountry, setSelectedCountry] = useState(() => localStorage.getItem(SELECTED_COUNTRY_STORAGE_KEY) || "");
+  const [selectedCountry, setSelectedCountry] = useState(() => localStorage.getItem(SELECTED_COUNTRY_STORAGE_KEY) || null);
   const [fileId, setFileId] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState(null);
@@ -1213,10 +1213,10 @@ function AppProvider({ children }) {
   }, [auth.token]);
 
   const triggerBackup = useCallback(async ({ isAuto = false } = {}) => {
-    if (!auth.token || !db || backupBusy) return null;
+    if (!auth.token || !rawDb || backupBusy) return null;
     setBackupBusy(true);
     try {
-      const result = await BackupService.createBackup(auth.token, db);
+      const result = await BackupService.createBackup(auth.token, rawDb);
       setBackupFiles(result.backups || []);
       setLastBackupAt(result.lastBackupAt || new Date().toISOString());
       return result;
@@ -1227,7 +1227,7 @@ function AppProvider({ children }) {
     } finally {
       setBackupBusy(false);
     }
-  }, [auth.token, db, backupBusy]);
+  }, [auth.token, rawDb, backupBusy]);
 
   const restoreBackup = useCallback(async (backup) => {
     if (!auth.token || !fileId || !backup?.id) return false;
@@ -1737,7 +1737,7 @@ function AppProvider({ children }) {
   }, [fetchUsersConfig]);
 
   const db = useMemo(() => {
-    if (!rawDb) return rawDb;
+    if (!rawDb) return null;
     if (!selectedCountry) return rawDb;
     const allowedPortfolioIds = new Set((rawDb.portfolios || []).filter((p) => p.country === selectedCountry).map((p) => p.id));
     const investments = (rawDb.investments || []).filter((inv) => allowedPortfolioIds.has(inv.portfolioId));
@@ -1749,7 +1749,7 @@ function AppProvider({ children }) {
   useEffect(() => {
     if (!rawDb?.settings?.countries?.length) return;
     const countries = rawDb.settings.countries;
-    const fallbackCountry = rawDb.settings.defaultCountry || countries[0];
+    const fallbackCountry = rawDb.settings.defaultCountry || countries[0] || null;
     if (!selectedCountry || !countries.includes(selectedCountry)) {
       setSelectedCountry(fallbackCountry);
     }
@@ -1757,6 +1757,7 @@ function AppProvider({ children }) {
 
   useEffect(() => {
     if (selectedCountry) localStorage.setItem(SELECTED_COUNTRY_STORAGE_KEY, selectedCountry);
+    else localStorage.removeItem(SELECTED_COUNTRY_STORAGE_KEY);
   }, [selectedCountry]);
 
   const value = useMemo(() => ({
@@ -2207,6 +2208,7 @@ function LoadingScreen({ message }) {
 function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileOpen, setMobileOpen }) {
   const { user, signOut, syncing, t, font, lang, setLang, hasPermission, currentRole, manualSync, selectedCountry, setSelectedCountry, rawDb } = useApp();
   const canManageUsers = currentRole === "Owner" || hasPermission("assign_role") || hasPermission("block_user") || hasPermission("unblock_user");
+  const countries = rawDb?.settings?.countries || [];
 
   const navItems = [
     { id:"dashboard",    label:t.dashboard,    icon:<BarChart2 size={17}/> },
@@ -2285,7 +2287,7 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileO
               onChange={(e) => setSelectedCountry(e.target.value)}
               style={{ width:"100%",padding:"6px 8px",background:"rgba(255,255,255,0.08)",border:`1px solid ${T.borderDark}`,borderRadius:"6px",color:"#fff",fontSize:"0.72rem",fontFamily:font }}
             >
-              {(rawDb?.settings?.countries || []).map((country) => (
+              {countries.map((country) => (
                 <option key={country} value={country} style={{ color:"#0f172a" }}>{country}</option>
               ))}
             </select>
