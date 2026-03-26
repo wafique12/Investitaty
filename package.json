@@ -1,6 +1,6 @@
 {
   "name": "investitaty",
-  "version": "1.3.1",
+  "version": "1.4.1",
   "private": true,
   "dependencies": {
     "react": "^18.2.0",
@@ -15,5 +15,6 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
-  }
+  },
+  "environment": "production"
 }
