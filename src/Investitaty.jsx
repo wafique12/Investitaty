@@ -4590,6 +4590,12 @@ function SettingsTab() {
   };
 
   const shownDate = lastBackupAt ? new Date(lastBackupAt).toLocaleString() : t.backupNoDate;
+  const settingsGridStyle = {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))",
+    gap: "16px",
+    alignItems: "stretch",
+  };
 
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font }}>
@@ -4598,9 +4604,9 @@ function SettingsTab() {
         <div style={{ fontSize:"0.82rem",color:T.textMuted,marginTop:"4px" }}>{t.settingsDesc}</div>
       </div>
 
-      <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:"16px" }}>
+      <div style={settingsGridStyle}>
         {sections.map(({ key, label, icon }) => (
-          <Card key={key} style={{ padding:"14px" }}>
+          <Card key={key} hover style={{ padding:"14px" }}>
             <div style={{ display:"flex",alignItems:"center",gap:"8px",marginBottom:"12px" }}>
               <div style={{ width:"28px",height:"28px",borderRadius:"7px",background:T.emeraldBg,display:"flex",alignItems:"center",justifyContent:"center",color:T.emerald,flexShrink:0 }}>{icon}</div>
               <h4 style={{ margin:0,fontSize:"0.82rem",fontWeight:600,color:T.textPrimary }}>{label}</h4>
@@ -4723,36 +4729,35 @@ function SettingsTab() {
             </div>
           </Card>
         ))}
-      </div>
-
-      <Card hover style={{ marginTop:"16px",padding:"14px" }}>
-        <div style={{ display:"flex",alignItems:"center",gap:"8px",marginBottom:"10px" }}>
-          <div style={{ width:"28px",height:"28px",borderRadius:"7px",background:T.emeraldBg,display:"flex",alignItems:"center",justifyContent:"center",color:T.emerald,flexShrink:0 }}>
-            <RefreshCw size={15}/>
-          </div>
-          <div style={{ minWidth:0,flex:1 }}>
-            <h4 style={{ margin:0,fontSize:"0.82rem",fontWeight:600,color:T.textPrimary }}>{t.backupTitle}</h4>
-            <div style={{ fontSize:"0.74rem",color:T.textMuted,marginTop:"2px" }}>{t.backupInfo}: <strong style={{ color:T.textSecondary }}>{shownDate}</strong></div>
-          </div>
-          <Btn onClick={handleManualBackup} disabled={backupBusy} icon={<RefreshCw size={14} />}>{t.backupNow}</Btn>
-        </div>
-        <div style={{ display:"grid",gap:"8px" }}>
-          {backupFiles.length === 0 && (
-            <div style={{ fontSize:"0.74rem",color:T.textMuted,fontStyle:"italic" }}>{t.backupNoItems}</div>
-          )}
-          {backupFiles.slice(0, 5).map((backup) => (
-            <div key={backup.id} style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:"8px",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:"9px",background:T.bgApp }}>
-              <div style={{ display:"flex",flexDirection:"column",gap:"2px",minWidth:0 }}>
-                <span style={{ fontSize:"0.78rem",color:T.textPrimary,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{backup.name}</span>
-                <span style={{ fontSize:"0.72rem",color:T.textMuted }}>{new Date(backup.createdTime).toLocaleString()}</span>
-              </div>
-              <button data-icon-tooltip="Restore" onClick={() => setRestoreCandidate(backup)} style={{ border:"none",background:"none",cursor:"pointer",color:T.emerald,display:"flex",padding:"3px",borderRadius:"6px" }}>
-                <RotateCcw size={14} />
-              </button>
+        <Card hover style={{ padding:"14px", display:"flex", flexDirection:"column" }}>
+          <div style={{ display:"flex",alignItems:"center",gap:"8px",marginBottom:"10px" }}>
+            <div style={{ width:"28px",height:"28px",borderRadius:"7px",background:T.emeraldBg,display:"flex",alignItems:"center",justifyContent:"center",color:T.emerald,flexShrink:0 }}>
+              <RefreshCw size={15}/>
             </div>
-          ))}
-        </div>
-      </Card>
+            <div style={{ minWidth:0,flex:1 }}>
+              <h4 style={{ margin:0,fontSize:"0.82rem",fontWeight:600,color:T.textPrimary }}>{t.backupTitle}</h4>
+              <div style={{ fontSize:"0.74rem",color:T.textMuted,marginTop:"2px" }}>{t.backupInfo}: <strong style={{ color:T.textSecondary }}>{shownDate}</strong></div>
+            </div>
+            <Btn onClick={handleManualBackup} disabled={backupBusy} icon={<RefreshCw size={14} />}>{t.backupNow}</Btn>
+          </div>
+          <div style={{ display:"grid",gap:"8px" }}>
+            {backupFiles.length === 0 && (
+              <div style={{ fontSize:"0.74rem",color:T.textMuted,fontStyle:"italic" }}>{t.backupNoItems}</div>
+            )}
+            {backupFiles.slice(0, 5).map((backup) => (
+              <div key={backup.id} style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:"8px",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:"9px",background:T.bgApp }}>
+                <div style={{ display:"flex",flexDirection:"column",gap:"2px",minWidth:0 }}>
+                  <span style={{ fontSize:"0.78rem",color:T.textPrimary,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{backup.name}</span>
+                  <span style={{ fontSize:"0.72rem",color:T.textMuted }}>{new Date(backup.createdTime).toLocaleString()}</span>
+                </div>
+                <button data-icon-tooltip="Restore" onClick={() => setRestoreCandidate(backup)} style={{ border:"none",background:"none",cursor:"pointer",color:T.emerald,display:"flex",padding:"3px",borderRadius:"6px" }}>
+                  <RotateCcw size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
 
       {/* DB info card */}
       <Card style={{ marginTop:"20px",padding:"16px 20px" }}>
