@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { supabase, hasSupabaseConfig, hasSupabaseClient } from "./lib/supabaseClient";
 import BackupService from "./services/BackupService";
-import { DB_FOLDER_NAME, DRIVE_ROOT_FOLDER, ensureDriveOk, getDriveAppFolders, setDriveUnauthorizedHandler } from "./services/DrivePaths";
+import { DRIVE_DB_PATH, ensureDriveOk, getDriveAppFolders, setDriveUnauthorizedHandler } from "./services/DrivePaths";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONFIG
@@ -23,7 +23,7 @@ const REQUIRED_SCOPES = [
   "https://www.googleapis.com/auth/userinfo.email",
 ];
 const DB_FILENAME = "investitaty_db.json";
-const DB_RELATIVE_PATH = `${DRIVE_ROOT_FOLDER}/${DB_FOLDER_NAME}/${DB_FILENAME}`;
+const DB_RELATIVE_PATH = `${DRIVE_DB_PATH}/${DB_FILENAME}`;
 const AUTH_STORAGE_KEY = "investitaty_auth_v1";
 const AUTH_CONSENT_STORAGE_KEY = "investitaty_auth_consent_v1";
 const AUTH_LOGIN_DAY_KEY = "investitaty_auth_login_day_v1";
