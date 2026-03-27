@@ -275,7 +275,7 @@ const TRANSLATIONS = {
     language: "Language",
     country: "Country",
     countries: "Countries",
-    countryBaseCurrency: "Base Currency",
+    countryBaseCurrency: "Currency",
     defaultCountry: "Default Country",
     setAsDefault: "Set as Default",
     selectPortfolio: "Select Portfolio",
@@ -534,7 +534,7 @@ const TRANSLATIONS = {
     language: "اللغة",
     country: "الدولة",
     countries: "الدول",
-    countryBaseCurrency: "العملة الأساسية",
+    countryBaseCurrency: "العملة",
     defaultCountry: "الدولة الافتراضية",
     setAsDefault: "تعيين كافتراضي",
     selectPortfolio: "اختر المحفظة",
@@ -4702,13 +4702,13 @@ function SettingsTab() {
                           </div>
                           <div style={{ display:"flex", alignItems:"center", gap:"8px", minWidth:0, flexWrap:"nowrap" }}>
                             <span style={{ fontSize:"0.68rem", color:T.textMuted, fontWeight:600, whiteSpace:"nowrap" }}>{t.countryBaseCurrency}</span>
-                            <div style={{ width:"136px", flexShrink:0 }}>
+                            <div style={{ width:"78px", flexShrink:0 }}>
                               <Select
                                 value={getCountryBaseCurrency(country)}
                                 onChange={(e) => setCountryBaseCurrency(country, e.target.value)}
                                 options={db?.settings?.currencies || []}
                                 isRTL={isRTL}
-                                style={{ minHeight:"34px", padding:"6px 10px", fontSize:"0.75rem" }}
+                                style={{ minHeight:"34px", padding:"6px 8px", fontSize:"0.75rem", textAlign:"center" }}
                               />
                             </div>
                             <Btn
