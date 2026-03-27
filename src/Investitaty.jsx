@@ -4244,11 +4244,14 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
                       <td style={{ padding:"11px 10px",position:"relative" }} onClick={e=>e.stopPropagation()}>
                         <div style={{ display:"flex",gap:"3px",justifyContent:"flex-end" }}>
                           <button data-icon-tooltip={t.viewDetails} onClick={()=>openView(tx)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"5px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.info} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><Eye size={13}/></button>
-                          <button data-icon-tooltip={t.settings} onClick={()=>setOpenMenu(openMenu===txRowId?null:txRowId)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"5px",display:"flex",position:"relative" }}
+                          <button
+                            data-icon-tooltip={t.settings}
+                            onClick={(e)=>setOpenMenu(openMenu?.id===txRowId ? null : { id: txRowId, anchorEl: e.currentTarget })}
+                            style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"5px",display:"flex",position:"relative" }}
                             onMouseEnter={e=>{e.currentTarget.style.background=T.bgApp; e.currentTarget.style.color=T.warning;}} onMouseLeave={e=>{e.currentTarget.style.background="none"; e.currentTarget.style.color=T.textMuted;}}>
                             <MoreVertical size={13}/>
                           </button>
-                          {openMenu===txRowId && <TxActionMenu tx={tx} onClose={()=>setOpenMenu(null)}/>}
+                          {openMenu?.id===txRowId && <TxActionMenu tx={tx} anchorEl={openMenu?.anchorEl} onClose={()=>setOpenMenu(null)}/>}
                         </div>
                       </td>
                     </tr>
@@ -4397,10 +4400,38 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   );
 }
 
-function TxActionMenu({ tx, onClose }) {
+function TxActionMenu({ tx, onClose, anchorEl }) {
   const { patchItem, archiveItem, unarchiveItem, hardDeleteItem, t, db, isRTL } = useApp();
   const ref = useRef(null);
+  const [position, setPosition] = useState({ top:0, left:0, openUp:false });
   const txId = tx?.id;
+
+  useEffect(() => {
+    const updatePosition = () => {
+      if (!anchorEl || !ref.current) return;
+      const anchorRect = anchorEl.getBoundingClientRect();
+      const menuRect = ref.current.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      const viewportWidth = window.innerWidth;
+      const gap = 6;
+      const openUp = anchorRect.bottom + gap + menuRect.height > viewportHeight - 10;
+      const preferredTop = openUp
+        ? anchorRect.top - menuRect.height - gap
+        : anchorRect.bottom + gap;
+      const top = Math.max(10, Math.min(preferredTop, viewportHeight - menuRect.height - 10));
+      const left = Math.max(10, Math.min(anchorRect.right - menuRect.width, viewportWidth - menuRect.width - 10));
+      setPosition({ top, left, openUp });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [anchorEl]);
+
   useEffect(() => {
     const h = e => { if(ref.current&&!ref.current.contains(e.target)) onClose(); };
     document.addEventListener("mousedown",h); return ()=>document.removeEventListener("mousedown",h);
@@ -4415,7 +4446,22 @@ function TxActionMenu({ tx, onClose }) {
     { label:t.deleteItem, icon:<Trash2 size={13}/>, color:T.negative, show:true, action:()=>{ if (!txId) return onClose(); if(window.confirm(t.deleteCascadeWarning)) hardDeleteItem("transactions",txId); onClose(); } },
   ].filter(a=>a.show);
   return (
-    <div ref={ref} style={{ position:"absolute",right:0,top:"calc(100% + 4px)",zIndex:5000,background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:"10px",minWidth:"170px",boxShadow:"0 8px 28px rgba(0,0,0,0.15)",overflow:"hidden" }}>
+    <div
+      ref={ref}
+      style={{
+        position:"fixed",
+        left:`${position.left}px`,
+        top:`${position.top}px`,
+        zIndex:12000,
+        background:T.bgCard,
+        border:`1px solid ${T.border}`,
+        borderRadius:"10px",
+        minWidth:"170px",
+        boxShadow:"0 8px 28px rgba(0,0,0,0.15)",
+        overflow:"hidden",
+      }}
+      data-open-direction={position.openUp ? "up" : "down"}
+    >
       {actions.map(a=>(
         <button key={a.label} onClick={a.action} style={{ display:"flex",alignItems:"center",gap:"8px",width:"100%",padding:"9px 14px",background:"none",border:"none",color:a.color,fontSize:"0.78rem",fontWeight:500,cursor:"pointer",textAlign:isRTL?"right":"left" }}
           onMouseEnter={e=>e.currentTarget.style.background=T.bgApp}
