@@ -59,6 +59,7 @@ const INITIAL_SCHEMA = {
     transactionCategories: ["Rental Income", "Dividend", "Capital Gain", "Interest", "Maintenance", "Management Fee", "Tax", "Insurance", "Other"],
     currencies:       ["USD", "SAR", "AED", "EUR", "GBP"],
     countries: ["USA", "Saudi Arabia", "Egypt"],
+    countryBaseCurrencies: { USA: "USD", "Saudi Arabia": "USD", Egypt: "USD" },
     defaultCountry: "USA",
     baseCurrency: "USD",
     currencyRates: { USD: 1, SAR: 3.75, AED: 3.67, EUR: 0.92, GBP: 0.79 },
@@ -274,6 +275,7 @@ const TRANSLATIONS = {
     language: "Language",
     country: "Country",
     countries: "Countries",
+    countryBaseCurrency: "Base Currency",
     defaultCountry: "Default Country",
     setAsDefault: "Set as Default",
     selectPortfolio: "Select Portfolio",
@@ -532,6 +534,7 @@ const TRANSLATIONS = {
     language: "اللغة",
     country: "الدولة",
     countries: "الدول",
+    countryBaseCurrency: "العملة الأساسية",
     defaultCountry: "الدولة الافتراضية",
     setAsDefault: "تعيين كافتراضي",
     selectPortfolio: "اختر المحفظة",
@@ -719,6 +722,19 @@ function migrateSchema(data) {
   if (!out.settings.defaultCountry || !out.settings.countries.includes(out.settings.defaultCountry)) {
     out.settings.defaultCountry = out.settings.countries[0];
   }
+  const countryBaseCurrencies = out.settings.countryBaseCurrencies && typeof out.settings.countryBaseCurrencies === "object"
+    ? { ...out.settings.countryBaseCurrencies }
+    : {};
+  const validCurrencies = Array.isArray(out.settings.currencies) && out.settings.currencies.length
+    ? out.settings.currencies
+    : INITIAL_SCHEMA.settings.currencies;
+  out.settings.countryBaseCurrencies = {};
+  (out.settings.countries || []).forEach((country) => {
+    const mappedCurrency = countryBaseCurrencies[country];
+    out.settings.countryBaseCurrencies[country] = validCurrencies.includes(mappedCurrency)
+      ? mappedCurrency
+      : (out.settings.baseCurrency || "USD");
+  });
   const existingRates = out.settings.currencyRates && typeof out.settings.currencyRates === "object" ? out.settings.currencyRates : {};
   out.settings.currencyRates = { ...INITIAL_SCHEMA.settings.currencyRates, ...existingRates };
 
@@ -1153,7 +1169,7 @@ function AppProvider({ children }) {
   const [gatekeeperError, setGatekeeperError] = useState(null);
   const [userSyncDone, setUserSyncDone] = useState(false);
   const [rawDb, setRawDb] = useState(null);
-  const [selectedCountry, setSelectedCountry] = useState(() => localStorage.getItem(SELECTED_COUNTRY_STORAGE_KEY) || null);
+  const [selectedCountryName, setSelectedCountryName] = useState(() => localStorage.getItem(SELECTED_COUNTRY_STORAGE_KEY) || null);
   const [fileId, setFileId] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState(null);
@@ -1671,16 +1687,20 @@ function AppProvider({ children }) {
     });
   }, [updateDb]);
 
+  const setSelectedCountry = useCallback((nextCountry) => {
+    setSelectedCountryName(typeof nextCountry === "string" ? nextCountry : (nextCountry?.name || null));
+  }, []);
+
   const addItem = useCallback((collection, item) => {
     const newItem = {
       ...item,
-      ...(collection === "portfolios" && !item.country ? { country: selectedCountry || "" } : {}),
+      ...(collection === "portfolios" && !item.country ? { country: selectedCountryName || "" } : {}),
       id: Date.now() + "_" + Math.random().toString(36).slice(2),
       created_at: new Date().toISOString(),
     };
     updateDb(prev => ({ ...prev, [collection]: [...prev[collection], newItem] }));
     return newItem;
-  }, [updateDb, selectedCountry]);
+  }, [updateDb, selectedCountryName]);
 
   const updateUserEntry = useCallback(async (email, updater) => {
     if (!hasSupabaseClient) {
@@ -1738,27 +1758,38 @@ function AppProvider({ children }) {
 
   const db = useMemo(() => {
     if (!rawDb) return null;
-    if (!selectedCountry) return rawDb;
-    const allowedPortfolioIds = new Set((rawDb.portfolios || []).filter((p) => p.country === selectedCountry).map((p) => p.id));
+    if (!selectedCountryName) return rawDb;
+    const allowedPortfolioIds = new Set((rawDb.portfolios || []).filter((p) => p.country === selectedCountryName).map((p) => p.id));
     const investments = (rawDb.investments || []).filter((inv) => allowedPortfolioIds.has(inv.portfolioId));
     const allowedInvestmentIds = new Set(investments.map((inv) => inv.id));
     const transactions = (rawDb.transactions || []).filter((tx) => allowedPortfolioIds.has(tx.portfolioId) || allowedInvestmentIds.has(tx.investmentId));
     return { ...rawDb, portfolios: [...allowedPortfolioIds].length ? (rawDb.portfolios || []).filter((p) => allowedPortfolioIds.has(p.id)) : [], investments, transactions };
-  }, [rawDb, selectedCountry]);
+  }, [rawDb, selectedCountryName]);
+
+  const selectedCountry = useMemo(() => {
+    if (!rawDb?.settings?.countries?.length) return null;
+    const fallbackCountry = rawDb.settings.defaultCountry || rawDb.settings.countries[0];
+    const name = selectedCountryName && rawDb.settings.countries.includes(selectedCountryName) ? selectedCountryName : fallbackCountry;
+    if (!name) return null;
+    return {
+      name,
+      baseCurrency: countryBaseCurrencyCode(rawDb, name),
+    };
+  }, [rawDb, selectedCountryName]);
 
   useEffect(() => {
     if (!rawDb?.settings?.countries?.length) return;
     const countries = rawDb.settings.countries;
     const fallbackCountry = rawDb.settings.defaultCountry || countries[0] || null;
-    if (!selectedCountry || !countries.includes(selectedCountry)) {
-      setSelectedCountry(fallbackCountry);
+    if (!selectedCountryName || !countries.includes(selectedCountryName)) {
+      setSelectedCountryName(fallbackCountry);
     }
-  }, [rawDb, selectedCountry]);
+  }, [rawDb, selectedCountryName]);
 
   useEffect(() => {
-    if (selectedCountry) localStorage.setItem(SELECTED_COUNTRY_STORAGE_KEY, selectedCountry);
+    if (selectedCountryName) localStorage.setItem(SELECTED_COUNTRY_STORAGE_KEY, selectedCountryName);
     else localStorage.removeItem(SELECTED_COUNTRY_STORAGE_KEY);
-  }, [selectedCountry]);
+  }, [selectedCountryName]);
 
   const value = useMemo(() => ({
     ...auth, db, rawDb, fileId, syncing, syncError, dbLoading,
@@ -1771,7 +1802,7 @@ function AppProvider({ children }) {
   }), [
     auth, db, rawDb, fileId, syncing, syncError, dbLoading,
     updateDb, softDelete, archiveItem, unarchiveItem, hardDeleteItem, patchItem, addItem,
-    selectedCountry,
+    selectedCountry, setSelectedCountry,
     lang, t, isRTL, font,
     usersConfig, usersConfigReady, currentRole, isBlocked, hasPermission,
     updateUserEntry, deleteUserEntry, gatekeeperError, userSyncDone,
@@ -2283,7 +2314,7 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileO
           <div style={{ marginBottom:"10px" }}>
             <div style={{ color:T.textSidebarMuted,fontSize:"0.7rem",letterSpacing:"0.06em",marginBottom:"6px" }}>{t.country}</div>
             <select
-              value={selectedCountry || ""}
+              value={selectedCountry?.name || ""}
               onChange={(e) => setSelectedCountry(e.target.value)}
               style={{ width:"100%",padding:"6px 8px",background:"rgba(255,255,255,0.08)",border:`1px solid ${T.borderDark}`,borderRadius:"6px",color:"#fff",fontSize:"0.72rem",fontFamily:font }}
             >
@@ -2372,6 +2403,11 @@ const txStatusDate = (tx) => {
 const txIncome = (txs) => txs.filter(t=>t.type==="income").reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
 const txExpense = (txs) => txs.filter(t=>t.type==="expense").reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
 const baseCurrencyCode = (db) => db?.settings?.baseCurrency || "USD";
+const countryBaseCurrencyCode = (db, countryName) => {
+  if (!countryName) return baseCurrencyCode(db);
+  const mapped = db?.settings?.countryBaseCurrencies?.[countryName];
+  return mapped || baseCurrencyCode(db);
+};
 const currencyRateFromUSD = (db, currency="USD") => {
   const parsed = Number(db?.settings?.currencyRates?.[currency]);
   if (!Number.isFinite(parsed) || parsed <= 0) return currency === "USD" ? 1 : 0;
@@ -2386,7 +2422,7 @@ const convertCurrency = (db, amount, sourceCurrency="USD", targetCurrency="USD")
   const amountInUsd = safeAmount / sourceRate;
   return amountInUsd * targetRate;
 };
-const toBaseAmount = (db, amount, sourceCurrency="USD") => convertCurrency(db, amount, sourceCurrency, baseCurrencyCode(db));
+const toBaseAmount = (db, amount, sourceCurrency="USD", targetCurrency=baseCurrencyCode(db)) => convertCurrency(db, amount, sourceCurrency, targetCurrency);
 const currencySymbol = (currency="USD") => ({ USD:"$", EUR:"€", GBP:"£", SAR:"﷼", AED:"د.إ" }[currency] || currency);
 const fmtMoney = (v, { compact=false, currency="USD", decimals=3 } = {}) => {
   const n = Number(v||0);
@@ -2459,7 +2495,7 @@ function useIsMobile(breakpoint = 1024) {
 // DASHBOARD — KPI + Charts + Portfolio cards
 // ═══════════════════════════════════════════════════════════════════════════════
 function Dashboard({ onNavigateTransactionsByStatus }) {
-  const { db, t, isRTL, font } = useApp();
+  const { db, t, isRTL, font, selectedCountry } = useApp();
   const [sourceModal, setSourceModal] = useState(null);
   const [dashboardFundingLegendExpanded, setDashboardFundingLegendExpanded] = useState(false);
   const [hiddenDashboardFundingSources, setHiddenDashboardFundingSources] = useState(() => new Set());
@@ -2468,13 +2504,13 @@ function Dashboard({ onNavigateTransactionsByStatus }) {
   const portfolios = useMemo(() => visible(safeDb?.portfolios || []), [safeDb]);
   const investments = useMemo(() => visible(safeDb?.investments || []), [safeDb]);
   const transactions = useMemo(() => visible(safeDb?.transactions || []), [safeDb]);
-  const baseCurrency = baseCurrencyCode(safeDb);
+  const baseCurrency = selectedCountry?.baseCurrency || baseCurrencyCode(safeDb);
 
   const activeInvestments = useMemo(() => investments.filter(isActiveInvestment), [investments]);
   const activePrincipal = activeInvestments
-    .reduce((s,i)=>s+toBaseAmount(safeDb, costBasis(i), portfolioCurrency(safeDb, i.portfolioId)),0);
+    .reduce((s,i)=>s+toBaseAmount(safeDb, costBasis(i), portfolioCurrency(safeDb, i.portfolioId), baseCurrency),0);
   const totalPortfolioValue = activeInvestments
-    .reduce((s,i)=>s+toBaseAmount(safeDb, investmentValue(i, safeDb), portfolioCurrency(safeDb, i.portfolioId)),0);
+    .reduce((s,i)=>s+toBaseAmount(safeDb, investmentValue(i, safeDb), portfolioCurrency(safeDb, i.portfolioId), baseCurrency),0);
   const portfolioDeltaValue = totalPortfolioValue - activePrincipal;
   const portfolioDeltaPct = activePrincipal > 0 ? (portfolioDeltaValue / activePrincipal) * 100 : 0;
 
@@ -2500,7 +2536,7 @@ function Dashboard({ onNavigateTransactionsByStatus }) {
 
   const annualIncomeTransactions = transactions.filter(isCurrentYearAnnualIncomeRecord);
   const totalAnnualIncome = annualIncomeTransactions
-    .reduce((sum, tx)=>sum + toBaseAmount(safeDb, parseFloat(tx.amount)||0, portfolioCurrency(safeDb, tx.portfolioId)), 0);
+    .reduce((sum, tx)=>sum + toBaseAmount(safeDb, parseFloat(tx.amount)||0, portfolioCurrency(safeDb, tx.portfolioId), baseCurrency), 0);
 
   const currentYearIncomeTransactions = transactions.filter((tx) => {
     if (tx.type !== "income") return false;
@@ -2516,14 +2552,14 @@ function Dashboard({ onNavigateTransactionsByStatus }) {
       const category = String(tx.category || "").toLowerCase();
       return category.includes("dividend") || category.includes("yield") || category.includes("توزيع") || category.includes("عائد");
     })
-    .reduce((sum, tx) => sum + toBaseAmount(safeDb, parseFloat(tx.amount) || 0, portfolioCurrency(safeDb, tx.portfolioId)), 0);
+    .reduce((sum, tx) => sum + toBaseAmount(safeDb, parseFloat(tx.amount) || 0, portfolioCurrency(safeDb, tx.portfolioId), baseCurrency), 0);
 
   const expectedCapitalGains = currentYearIncomeTransactions
     .filter((tx) => {
       const category = String(tx.category || "").toLowerCase();
       return category.includes("capital gain") || category.includes("رأس") || category.includes("رأسمالي");
     })
-    .reduce((sum, tx) => sum + toBaseAmount(safeDb, parseFloat(tx.amount) || 0, portfolioCurrency(safeDb, tx.portfolioId)), 0);
+    .reduce((sum, tx) => sum + toBaseAmount(safeDb, parseFloat(tx.amount) || 0, portfolioCurrency(safeDb, tx.portfolioId), baseCurrency), 0);
 
   const totalCollectedCount = annualIncomeTransactions
     .filter((tx) => getStrictIncomeStatus(tx) === "collected")
@@ -2550,7 +2586,7 @@ function Dashboard({ onNavigateTransactionsByStatus }) {
   portfolios.forEach((portfolio) => {
     const typeKey = portfolio.type || t.unassignedType;
     const portfolioTotal = inv_of_portfolio(safeDb, portfolio.id)
-      .reduce((sum, inv) => sum + toBaseAmount(safeDb, curVal(inv, db), portfolio.currency || "USD"), 0);
+      .reduce((sum, inv) => sum + toBaseAmount(safeDb, curVal(inv, db), portfolio.currency || "USD", baseCurrency), 0);
     if (portfolioTotal > 0) {
       allocationByType[typeKey] = (allocationByType[typeKey] || 0) + portfolioTotal;
     }
@@ -2577,8 +2613,8 @@ function Dashboard({ onNavigateTransactionsByStatus }) {
         .map((inv) => {
           const amount = (inv.funding || [])
             .filter((f) => f.source === source)
-            .reduce((sum, f) => sum + toBaseAmount(safeDb, parseFloat(f.amount) || 0, portfolioCurrency(safeDb, inv.portfolioId)), 0);
-          return amount > 0 ? { id: inv.id, name: inv.name, amount: toBaseAmount(safeDb, amount, portfolioCurrency(safeDb, inv.portfolioId)), currency: baseCurrency } : null;
+            .reduce((sum, f) => sum + toBaseAmount(safeDb, parseFloat(f.amount) || 0, portfolioCurrency(safeDb, inv.portfolioId), baseCurrency), 0);
+          return amount > 0 ? { id: inv.id, name: inv.name, amount, currency: baseCurrency } : null;
         })
         .filter(Boolean);
       const total = items.reduce((sum, item) => sum + item.amount, 0);
@@ -2680,7 +2716,7 @@ function Dashboard({ onNavigateTransactionsByStatus }) {
           accent={T.warning}
           icon={CalendarClock}
         />
-        <KPICard label={t.totalIncome} value={transactions.filter(t=>t.type==="income").reduce((sum, tx)=>sum + toBaseAmount(safeDb, parseFloat(tx.amount)||0, portfolioCurrency(safeDb, tx.portfolioId)), 0)} valueDecimals={2} currency={baseCurrency} sub={`${transactions.filter(tx=>tx.type==="income").length} ${t.payments}`} accent={T.info} icon={Landmark} />
+        <KPICard label={t.totalIncome} value={transactions.filter(t=>t.type==="income").reduce((sum, tx)=>sum + toBaseAmount(safeDb, parseFloat(tx.amount)||0, portfolioCurrency(safeDb, tx.portfolioId), baseCurrency), 0)} valueDecimals={2} currency={baseCurrency} sub={`${transactions.filter(tx=>tx.type==="income").length} ${t.payments}`} accent={T.info} icon={Landmark} />
       </div>
 
       {/* Charts row */}
@@ -2879,7 +2915,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [collapsedPortfolios, setCollapsedPortfolios] = useState({});
-  const EMPTY = useMemo(() => ({ name:"", country:selectedCountry || "", type:"",current_price:"",risk:"",currency:"USD",status:"Active",color:T.chart[0],notes:"" }), [selectedCountry]);
+  const EMPTY = useMemo(() => ({ name:"", country:selectedCountry?.name || "", type:"",current_price:"",risk:"",currency:"USD",status:"Active",color:T.chart[0],notes:"" }), [selectedCountry]);
   const [form, setForm] = useState(EMPTY);
   const [formError, setFormError] = useState("");
   const [invalidFields, setInvalidFields] = useState({});
@@ -4423,9 +4459,15 @@ function SettingsTab() {
         ...prev.settings,
         [key]:[...(prev.settings[key]||[]),val],
         ...(key === "countries" && !prev.settings.defaultCountry ? { defaultCountry: val } : {}),
+        ...(key === "countries" ? {
+          countryBaseCurrencies: {
+            ...(prev.settings.countryBaseCurrencies || {}),
+            [val]: prev.settings.baseCurrency || "USD",
+          },
+        } : {}),
       },
     }));
-    if (key === "countries" && !selectedCountry) setSelectedCountry(val);
+    if (key === "countries" && !selectedCountry?.name) setSelectedCountry(val);
     setNewItems(p=>({...p,[key]:""}));
   };
 
@@ -4456,6 +4498,8 @@ function SettingsTab() {
 
   const baseCurrency = db?.settings?.baseCurrency || "USD";
   const currencyRates = db?.settings?.currencyRates || {};
+  const countryBaseCurrencies = db?.settings?.countryBaseCurrencies || {};
+  const getCountryBaseCurrency = (country) => countryBaseCurrencies[country] || baseCurrency;
   const setBaseCurrency = (value) => {
     updateDb((prev) => ({
       ...prev,
@@ -4471,6 +4515,18 @@ function SettingsTab() {
       settings: {
         ...prev.settings,
         currencyRates: { ...(prev.settings.currencyRates || {}), [currency]: Number(value) || 0 },
+      },
+    }));
+  };
+  const setCountryBaseCurrency = (country, currency) => {
+    updateDb((prev) => ({
+      ...prev,
+      settings: {
+        ...prev.settings,
+        countryBaseCurrencies: {
+          ...(prev.settings.countryBaseCurrencies || {}),
+          [country]: currency,
+        },
       },
     }));
   };
@@ -4492,12 +4548,16 @@ function SettingsTab() {
       const existingRate = rates[current] ?? 0;
       delete rates[current];
       rates[nextName] = existingRate;
+      const countryBaseCurrencies = Object.fromEntries(
+        Object.entries(prev.settings.countryBaseCurrencies || {}).map(([country, currency]) => [country, currency === current ? nextName : currency])
+      );
       return {
         ...prev,
         settings: {
           ...prev.settings,
           currencies: list,
           baseCurrency: prev.settings.baseCurrency === current ? nextName : prev.settings.baseCurrency,
+          countryBaseCurrencies,
           currencyRates: rates,
         },
       };
@@ -4509,6 +4569,11 @@ function SettingsTab() {
   const deleteCurrency = (currency) => {
     if (currency === baseCurrency) {
       setCurrencyError("Please assign another base currency before deleting this one.");
+      return;
+    }
+    const usedByCountry = Object.entries(countryBaseCurrencies).find(([, mappedCurrency]) => mappedCurrency === currency)?.[0];
+    if (usedByCountry) {
+      setCurrencyError(`Please change ${usedByCountry}'s base currency before deleting ${currency}.`);
       return;
     }
     updateDb((prev) => {
@@ -4535,18 +4600,22 @@ function SettingsTab() {
     updateDb((prev) => {
       const countries = [...(prev.settings.countries || [])];
       countries[idx] = nextName;
+      const countryBaseCurrencies = { ...(prev.settings.countryBaseCurrencies || {}) };
+      countryBaseCurrencies[nextName] = countryBaseCurrencies[current] || prev.settings.baseCurrency || "USD";
+      delete countryBaseCurrencies[current];
       const next = {
         ...prev,
         settings: {
           ...prev.settings,
           countries,
+          countryBaseCurrencies,
           defaultCountry: prev.settings.defaultCountry === current ? nextName : prev.settings.defaultCountry,
         },
         portfolios: (prev.portfolios || []).map((p) => p.country === current ? { ...p, country: nextName } : p),
       };
       return next;
     });
-    if (selectedCountry === current) setSelectedCountry(nextName);
+    if (selectedCountry?.name === current) setSelectedCountry(nextName);
     setEditingItems((prev) => {
       const out = { ...prev };
       delete out[editKey];
@@ -4569,10 +4638,11 @@ function SettingsTab() {
       settings: {
         ...prev.settings,
         countries,
+        countryBaseCurrencies: Object.fromEntries(Object.entries(prev.settings.countryBaseCurrencies || {}).filter(([country]) => country !== current)),
         defaultCountry: prev.settings.defaultCountry === current ? fallback : prev.settings.defaultCountry,
       },
     }));
-    if (selectedCountry === current && fallback) setSelectedCountry(fallback);
+    if (selectedCountry?.name === current && fallback) setSelectedCountry(fallback);
   };
 
   const handleManualBackup = async () => {
@@ -4621,16 +4691,38 @@ function SettingsTab() {
                     const isDefault = country === (db?.settings?.defaultCountry || "");
                     return (
                       <div key={`${country}-${i}`} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"8px", padding:"8px 10px", border:`1px solid ${isDefault ? T.emerald : T.border}`, borderRadius:"9px", background:isDefault ? "rgba(16,185,129,0.12)" : "#f8fafc", color:T.textPrimary }}>
-                        <div style={{ display:"flex",alignItems:"center",gap:"6px" }}>
-                          {isEditing ? (
-                            <input value={editingItems[editKey]} onChange={(e)=>setEditingItems((prev)=>({ ...prev, [editKey]:e.target.value }))} onKeyDown={(e)=>e.key==="Enter"&&renameCountry(i)} style={{ width:"140px", padding:"4px 6px", background:T.bgInput, border:`1px solid ${T.border}`, borderRadius:"6px", color:T.textPrimary, fontSize:"0.75rem" }} />
-                          ) : (
-                            <span style={{ fontSize:"0.78rem", fontWeight:600, color:T.textPrimary }}>{country}</span>
-                          )}
-                          {isDefault && <span style={{ fontSize:"0.68rem", color:T.emerald, fontWeight:700, letterSpacing:"0.05em" }}>DEFAULT</span>}
+                        <div style={{ display:"grid", gap:"6px", minWidth:0, flex:1 }}>
+                          <div style={{ display:"flex",alignItems:"center",gap:"6px" }}>
+                            {isEditing ? (
+                              <input value={editingItems[editKey]} onChange={(e)=>setEditingItems((prev)=>({ ...prev, [editKey]:e.target.value }))} onKeyDown={(e)=>e.key==="Enter"&&renameCountry(i)} style={{ width:"140px", padding:"4px 6px", background:T.bgInput, border:`1px solid ${T.border}`, borderRadius:"6px", color:T.textPrimary, fontSize:"0.75rem" }} />
+                            ) : (
+                              <span style={{ fontSize:"0.78rem", fontWeight:600, color:T.textPrimary }}>{country}</span>
+                            )}
+                            {isDefault && <span style={{ fontSize:"0.68rem", color:T.emerald, fontWeight:700, letterSpacing:"0.05em" }}>DEFAULT</span>}
+                          </div>
+                          <div style={{ display:"flex", alignItems:"center", gap:"8px", minWidth:0, flexWrap:"nowrap" }}>
+                            <span style={{ fontSize:"0.68rem", color:T.textMuted, fontWeight:600, whiteSpace:"nowrap" }}>{t.countryBaseCurrency}</span>
+                            <div style={{ width:"136px", flexShrink:0 }}>
+                              <Select
+                                value={getCountryBaseCurrency(country)}
+                                onChange={(e) => setCountryBaseCurrency(country, e.target.value)}
+                                options={db?.settings?.currencies || []}
+                                isRTL={isRTL}
+                                style={{ minHeight:"34px", padding:"6px 10px", fontSize:"0.75rem" }}
+                              />
+                            </div>
+                            <Btn
+                              size="sm"
+                              variant="secondary"
+                              disabled={isDefault}
+                              onClick={() => !isDefault && setDefaultCountry(country)}
+                              style={{ minHeight:"34px", padding:"0 12px", fontSize:"0.72rem", whiteSpace:"nowrap" }}
+                            >
+                              {t.setAsDefault}
+                            </Btn>
+                          </div>
                         </div>
                         <div style={{ display:"flex",alignItems:"center",gap:"6px" }}>
-                          {!isDefault && <Btn size="sm" variant="secondary" onClick={() => setDefaultCountry(country)}>{t.setAsDefault}</Btn>}
                           {isEditing ? (
                             <>
                               <button onClick={()=>renameCountry(i)} style={{ border:"none", background:"none", color:T.positive, cursor:"pointer", display:"flex" }}><Check size={13}/></button>
@@ -5074,7 +5166,7 @@ function FundingSourceBreakdownTable({ rows, currency, onOpenInvestments }) {
 }
 
 function StatisticsTab() {
-  const { db, t, isRTL, font } = useApp();
+  const { db, t, isRTL, font, selectedCountry } = useApp();
   const [selectedYears, setSelectedYears] = useState([]);
   const [selectedInvestmentStatus, setSelectedInvestmentStatus] = useState("");
   const [selectedPortfolioId, setSelectedPortfolioId] = useState("");
@@ -5086,7 +5178,7 @@ function StatisticsTab() {
   const investments = visible(db?.investments || []);
   const transactions = visible(db?.transactions || []);
   const portfolios = visible(db?.portfolios || []);
-  const primaryCurrency = baseCurrencyCode(db);
+  const primaryCurrency = selectedCountry?.baseCurrency || baseCurrencyCode(db);
   const investmentStatuses = db?.settings?.investmentStatuses?.length ? db.settings.investmentStatuses : ["Active", "Paused", "Closed"];
 
   const filteredInvestments = investments.filter((inv) => {
@@ -5116,7 +5208,7 @@ function StatisticsTab() {
   filteredInvestments.forEach((inv) => {
     const bucket = toRiskBucket(inv.risk);
     if (!bucket) return;
-    capitalByRisk[bucket] += toBaseAmount(db, costBasis(inv), portfolioCurrency(db, inv.portfolioId));
+    capitalByRisk[bucket] += toBaseAmount(db, costBasis(inv), portfolioCurrency(db, inv.portfolioId), primaryCurrency);
   });
 
   const incomeByYearRisk = {};
@@ -5140,13 +5232,13 @@ function StatisticsTab() {
     incomeByYearStatus[statusYear] = incomeByYearStatus[statusYear] || Object.fromEntries(statuses.map((s)=>[s,0]));
 
     if (tx.type === "income" && tx.status !== "cancelled") {
-      if (risk) incomeByYearRisk[year][risk] += toBaseAmount(db, parseFloat(tx.amount) || 0, portfolioCurrency(db, tx.portfolioId));
+      if (risk) incomeByYearRisk[year][risk] += toBaseAmount(db, parseFloat(tx.amount) || 0, portfolioCurrency(db, tx.portfolioId), primaryCurrency);
       if (incomeByYearStatus[statusYear][tx.status] === undefined) incomeByYearStatus[statusYear][tx.status] = 0;
-      incomeByYearStatus[statusYear][tx.status] += toBaseAmount(db, parseFloat(tx.amount) || 0, portfolioCurrency(db, tx.portfolioId));
+      incomeByYearStatus[statusYear][tx.status] += toBaseAmount(db, parseFloat(tx.amount) || 0, portfolioCurrency(db, tx.portfolioId), primaryCurrency);
     }
 
     if (tx.type === "expense" && tx.status !== "cancelled" && risk) {
-      lossByYearRisk[year][risk] += toBaseAmount(db, parseFloat(tx.amount) || 0, portfolioCurrency(db, tx.portfolioId));
+      lossByYearRisk[year][risk] += toBaseAmount(db, parseFloat(tx.amount) || 0, portfolioCurrency(db, tx.portfolioId), primaryCurrency);
     }
   });
 
@@ -5192,7 +5284,7 @@ function StatisticsTab() {
     const portfolio = portfolioById.get(inv.portfolioId);
     if (!portfolio) return;
     const typeKey = portfolio.type || t.unassignedType;
-    const value = toBaseAmount(db, curVal(inv, db), portfolio.currency || "USD");
+    const value = toBaseAmount(db, curVal(inv, db), portfolio.currency || "USD", primaryCurrency);
     if (value <= 0) return;
     allocationByType[typeKey] = (allocationByType[typeKey] || 0) + value;
   });
@@ -5212,7 +5304,7 @@ function StatisticsTab() {
     const breakdown = [];
     let total = 0;
     filteredInvestments.forEach((inv) => {
-      const amount = (inv.funding || []).filter((f) => f.source === source).reduce((sum, f) => sum + toBaseAmount(db, parseFloat(f.amount) || 0, portfolioCurrency(db, inv.portfolioId)), 0);
+      const amount = (inv.funding || []).filter((f) => f.source === source).reduce((sum, f) => sum + toBaseAmount(db, parseFloat(f.amount) || 0, portfolioCurrency(db, inv.portfolioId), primaryCurrency), 0);
       if (amount > 0) {
         breakdown.push({ investment:inv.name || t.unassignedInvestment, amount });
         total += amount;
