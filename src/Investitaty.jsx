@@ -1694,6 +1694,38 @@ function AppProvider({ children }) {
         if (["cancelled", "paused", "closed"].includes(nextStatus)) {
           next.investments = (prev.investments || []).map((inv) => inv.portfolioId === id ? { ...inv, status: patch.status } : inv);
         }
+        const existingPortfolio = (prev.portfolios || []).find((item) => item.id === id);
+        const hasCurrentPricePatch = Object.prototype.hasOwnProperty.call(patch || {}, "current_price");
+        if (existingPortfolio && hasCurrentPricePatch) {
+          const prevPriceRaw = existingPortfolio.current_price;
+          const nextPriceRaw = patch.current_price;
+          const priceChanged = !isSamePriceValue(prevPriceRaw, nextPriceRaw);
+
+          if (priceChanged) {
+            const timestamp = new Date().toISOString();
+            const syncedInvestments = (prev.investments || []).filter((inv) => inv.portfolioId === id && Boolean(inv.inheritPrice));
+            if (syncedInvestments.length) {
+              const syncedEntries = syncedInvestments
+                .filter((inv) => {
+                  const lastEntry = (prev.priceHistory || [])
+                    .filter((entry) => entry.investmentId === inv.id)
+                    .sort((a, b) => new Date(b.timestamp || b.created_at || 0) - new Date(a.timestamp || a.created_at || 0))[0];
+                  if (!lastEntry) return true;
+                  return !isSamePriceValue(lastEntry.currentPrice, nextPriceRaw);
+                })
+                .map((inv, idx) => ({
+                  id: `${Date.now()}_${idx}_${Math.random().toString(36).slice(2)}`,
+                  created_at: timestamp,
+                  investmentId: inv.id,
+                  investmentName: inv.name || "—",
+                  purchasePrice: String(inv.purchasePrice ?? ""),
+                  currentPrice: String(nextPriceRaw ?? ""),
+                  timestamp,
+                }));
+              next.priceHistory = [...(prev.priceHistory || []), ...syncedEntries];
+            }
+          }
+        }
       }
       return next;
     });
@@ -2447,6 +2479,12 @@ const toDateOnly = (value) => {
   if (Number.isNaN(parsed.getTime())) return null;
   parsed.setHours(0, 0, 0, 0);
   return parsed;
+};
+const isSamePriceValue = (left, right) => {
+  const leftNum = Number(left);
+  const rightNum = Number(right);
+  if (Number.isFinite(leftNum) && Number.isFinite(rightNum)) return leftNum === rightNum;
+  return String(left ?? "").trim() === String(right ?? "").trim();
 };
 const getSmartTxStatus = (tx) => {
   const due = toDateOnly(tx?.dueDate || tx?.due_date);
@@ -3283,8 +3321,9 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     setFormError("");
     const payload = { ...form, funding:(form.funding||[]).filter(r=>r.source||r.amount), source:undefined };
     if (editItem) {
-      const purchaseChanged = String(editItem.purchasePrice ?? "") !== String(payload.purchasePrice ?? "");
-      const currentChanged = String(editItem.currentPrice ?? "") !== String(payload.currentPrice ?? "");
+      const storedInvestment = investments.find((inv) => inv.id === editItem.id) || editItem;
+      const purchaseChanged = !isSamePriceValue(storedInvestment?.purchasePrice, payload.purchasePrice);
+      const currentChanged = !isSamePriceValue(storedInvestment?.currentPrice, payload.currentPrice);
       patchItem("investments",editItem.id,payload);
       if (purchaseChanged || currentChanged) createPriceHistoryEntry(editItem, payload.purchasePrice, payload.currentPrice);
     }
@@ -4537,7 +4576,26 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
       </Card>
 
       {showModal && (
-        <Modal title={modalMode==="create"?t.addTransaction:`${t.view} ${t.transactions}`} onClose={closeTransactionModal}>
+        <Modal
+          title={(() => {
+            if (modalMode === "create") return t.addTransaction;
+            const modalInvestmentId = editItem?.investmentId || form.investmentId || filterInvestment || "";
+            const modalInvestmentName = allInvestments.find((inv) => inv.id === modalInvestmentId)?.name
+              || navigationFilter?.investmentName
+              || "";
+            return (
+              <span style={{ display:"inline-flex", alignItems:"baseline", gap:"8px", flexWrap:"wrap" }}>
+                <span>{`${t.view} ${t.transactions}`}</span>
+                {modalInvestmentName && (
+                  <span style={{ fontSize:"0.84em", color:T.textSecondary, fontWeight:500 }}>
+                    - {modalInvestmentName}
+                  </span>
+                )}
+              </span>
+            );
+          })()}
+          onClose={closeTransactionModal}
+        >
           {modalMode === "view" ? (
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"10px" }}>
               <ReadOnlyField label={t.transactionType} value={form.type} />
