@@ -67,6 +67,7 @@ const INITIAL_SCHEMA = {
   portfolios:   [],   // { id, name, type, currency, risk, status, color, current_price, notes, created_at, is_hidden }
   investments:  [],   // { id, portfolioId, name, quantity, purchasePrice, currentPrice, purchaseDate, startDate, endDate, investmentMethod, risk, funding:[{source,amount}], notes, status, is_hidden, created_at }
   transactions: [],   // { id, investmentId, portfolioId, category, amount, date, type:"income"|"expense", notes, status:"recorded"|"scheduled"|"cancelled", is_hidden, created_at }
+  priceHistory: [],   // { id, investmentId, investmentName, purchasePrice, currentPrice, timestamp, created_at }
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -199,6 +200,8 @@ const TRANSLATIONS = {
     initialCapital: "Initial Capital",
     purchasePrice: "Purchase Price (Per Unit)",
     currentPrice: "Current Price (Per Unit)",
+    viewPriceHistory: "View Price History",
+    priceHistoryLog: "Price History Log",
     inheritPrice: "Sync with Portfolio",
     totalInvestmentValue: "Total Investment Value",
     totalSplitAmount: "Total Split Amount",
@@ -458,6 +461,8 @@ const TRANSLATIONS = {
     initialCapital: "رأس المال الابتدائي",
     purchasePrice: "سعر الشراء (لكل وحدة)",
     currentPrice: "السعر الحالي (لكل وحدة)",
+    viewPriceHistory: "عرض سجل الأسعار",
+    priceHistoryLog: "سجل الأسعار",
     inheritPrice: "مزامنة مع المحفظة",
     totalInvestmentValue: "إجمالي قيمة الاستثمار",
     totalSplitAmount: "إجمالي مبلغ التقسيم",
@@ -709,6 +714,7 @@ function migrateSchema(data) {
     portfolios:   data.portfolios   || [],
     investments:  [],
     transactions: [],
+    priceHistory: data.priceHistory || [],
   };
 
   // Ensure all new settings keys exist
@@ -816,6 +822,10 @@ function migrateSchema(data) {
   out.transactions = (out.transactions || []).map(tx => ({
     ...tx,
     status: tx.status || out.settings.transactionStatuses?.[0] || "recorded",
+  }));
+  out.priceHistory = (out.priceHistory || []).map((entry) => ({
+    ...entry,
+    timestamp: entry.timestamp || entry.created_at || new Date().toISOString(),
   }));
 
 
@@ -2494,7 +2504,7 @@ function useIsMobile(breakpoint = 1024) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // DASHBOARD — KPI + Charts + Portfolio cards
 // ═══════════════════════════════════════════════════════════════════════════════
-function Dashboard({ onNavigateTransactionsByStatus }) {
+function Dashboard({ onNavigateTransactionsByStatus, onNavigateTransactionsByInvestment }) {
   const { db, t, isRTL, font, selectedCountry } = useApp();
   const [sourceModal, setSourceModal] = useState(null);
   const [dashboardFundingLegendExpanded, setDashboardFundingLegendExpanded] = useState(false);
@@ -2771,9 +2781,23 @@ function Dashboard({ onNavigateTransactionsByStatus }) {
                   const badgeColor = isLate ? T.negative : (diff<=7?T.warning:T.positive);
                   const badgeLabel = isLate ? t.smartStatusLate : (diff===0?t.today:`${Math.max(diff,0)}${t.days}`);
                   const inv = (db.investments||[]).find(i=>i.id===tx.investmentId);
+                  const investmentName = inv?.name || tx.investmentName || "";
                   return (
-                    <div key={tx.id||i} style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 0",borderBottom:i<upcoming.length-1?`1px solid ${T.border}`:"none" }}>
-                      <div>
+                    <button
+                      key={tx.id||i}
+                      type="button"
+                      onClick={() => {
+                        if (!investmentName) return;
+                        onNavigateTransactionsByInvestment?.({
+                          investmentId: tx.investmentId || "",
+                          investmentName,
+                          portfolioId: tx.portfolioId || "",
+                          stamp: Date.now(),
+                        });
+                      }}
+                      style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 0",borderBottom:i<upcoming.length-1?`1px solid ${T.border}`:"none", width:"100%", border:"none", background:"transparent", cursor:investmentName ? "pointer" : "default", textAlign:isRTL ? "right" : "left", fontFamily:"inherit" }}
+                    >
+                      <div style={{ minWidth:0 }}>
                         <div style={{ fontSize:"0.8rem",fontWeight:500,color:T.textPrimary,marginBottom:"1px" }}>{tx.category}</div>
                         <div style={{ fontSize:"0.7rem",color:T.textMuted }}>{inv?.name||"—"}</div>
                       </div>
@@ -2781,7 +2805,7 @@ function Dashboard({ onNavigateTransactionsByStatus }) {
                         <span style={{ fontSize:"0.85rem",fontWeight:600,color:T.positive }}>+{fmtMoney(tx.amount,{currency:portfolioCurrency(db, tx.portfolioId)})}</span>
                         <Chip color={badgeColor}>{badgeLabel}</Chip>
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -3206,6 +3230,9 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   const [editingPrice, setEditingPrice] = useState(null);
   const [expandedRow, setExpandedRow] = useState(null);
   const [collapsedPortfolios, setCollapsedPortfolios] = useState({});
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [editingHistoryId, setEditingHistoryId] = useState(null);
+  const [historyDraft, setHistoryDraft] = useState({});
   const [modalMode, setModalMode] = useState("create");
 
   const EMPTY = useMemo(() => ({ portfolioId:"",name:"",quantity:"",purchasePrice:"",currentPrice:"",inheritPrice:false,purchaseDate:"",startDate:"",endDate:"",investmentMethod:"",risk:"",funding:[{source:"",amount:""}],status:"Active",notes:"" }), []);
@@ -3214,6 +3241,18 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
 
   const portfolios = visible(db?.portfolios||[]);
   const investments = db?.investments||[];
+  const priceHistory = db?.priceHistory || [];
+
+  const createPriceHistoryEntry = useCallback((investment, nextPurchasePrice, nextCurrentPrice) => {
+    if (!investment) return;
+    addItem("priceHistory", {
+      investmentId: investment.id,
+      investmentName: investment.name || "—",
+      purchasePrice: String(nextPurchasePrice ?? investment.purchasePrice ?? ""),
+      currentPrice: String(nextCurrentPrice ?? investment.currentPrice ?? ""),
+      timestamp: new Date().toISOString(),
+    });
+  }, [addItem]);
 
 
   const handleSave = () => {
@@ -3239,7 +3278,12 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     }
     setFormError("");
     const payload = { ...form, funding:(form.funding||[]).filter(r=>r.source||r.amount), source:undefined };
-    if (editItem) { patchItem("investments",editItem.id,payload); }
+    if (editItem) {
+      const purchaseChanged = String(editItem.purchasePrice ?? "") !== String(payload.purchasePrice ?? "");
+      const currentChanged = String(editItem.currentPrice ?? "") !== String(payload.currentPrice ?? "");
+      patchItem("investments",editItem.id,payload);
+      if (purchaseChanged || currentChanged) createPriceHistoryEntry(editItem, payload.purchasePrice, payload.currentPrice);
+    }
     else { addItem("investments",payload); }
     setInvalidFields({});
     setForm(EMPTY); closeModal();
@@ -3249,6 +3293,34 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     setForm({ portfolioId:inv.portfolioId,name:inv.name,quantity:inv.quantity||"",purchasePrice:inv.purchasePrice||"",
       currentPrice:inv.currentPrice||"",inheritPrice:Boolean(inv.inheritPrice),purchaseDate:inv.purchaseDate||"",startDate:inv.startDate||"",endDate:inv.endDate||"",investmentMethod:inv.investmentMethod||"",risk:inv.risk||"",funding:(inv.funding&&inv.funding.length?inv.funding:[{source:inv.source||"",amount:""}]),status:inv.status||"Active",notes:inv.notes||"" });
     setEditItem(inv); setModalMode("view"); setShowModal(true);
+    setEditingHistoryId(null);
+    setHistoryDraft({});
+  };
+
+  const selectedInvestmentHistory = useMemo(() => {
+    if (!editItem?.id) return [];
+    return (priceHistory || [])
+      .filter((entry) => entry.investmentId === editItem.id)
+      .sort((a, b) => new Date(b.timestamp || b.created_at || 0) - new Date(a.timestamp || a.created_at || 0));
+  }, [priceHistory, editItem]);
+
+  const removeHistoryEntry = (entry) => {
+    const entryDate = new Date(entry.timestamp || entry.created_at || "");
+    if (Number.isNaN(entryDate.getTime())) return;
+    const year = entryDate.getFullYear();
+    const countInYear = selectedInvestmentHistory.filter((item) => {
+      const itemDate = new Date(item.timestamp || item.created_at || "");
+      return !Number.isNaN(itemDate.getTime()) && itemDate.getFullYear() === year;
+    }).length;
+    if (countInYear <= 1) {
+      window.alert("Cannot delete the last record for this year.");
+      return;
+    }
+    hardDeleteItem("priceHistory", entry.id);
+    if (editingHistoryId === entry.id) {
+      setEditingHistoryId(null);
+      setHistoryDraft({});
+    }
   };
 
   const updateFunding = (idx, key, value) => {
@@ -3293,6 +3365,9 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     setEditingPrice(null);
     setExpandedRow(null);
     setCollapsedPortfolios({});
+    setShowHistoryModal(false);
+    setEditingHistoryId(null);
+    setHistoryDraft({});
     setModalMode("create");
     setFilterStartDate("");
     setFilterEndDate("");
@@ -3309,8 +3384,11 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
 
   const closeModal = useCallback(() => {
     setShowModal(false);
+    setShowHistoryModal(false);
     setEditItem(null);
     setModalMode("create");
+    setEditingHistoryId(null);
+    setHistoryDraft({});
     setForm(EMPTY);
     setFormError("");
     setInvalidFields({});
@@ -3678,6 +3756,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
           )}
           <div style={{ display:"flex",justifyContent:"flex-end",gap:"10px",marginTop:"8px" }}>
             {modalMode==="view" && (<>
+              <Btn variant="secondary" onClick={()=>setShowHistoryModal(true)}>{t.viewPriceHistory || "View Price History"}</Btn>
               <Btn onClick={()=>setModalMode("edit")}>{t.editInModal}</Btn>
               <Btn variant="secondary" onClick={closeModal}>{t.returnLabel}</Btn>
             </>)}
@@ -3689,6 +3768,65 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
               <Btn variant="secondary" onClick={closeModal}>{t.cancel}</Btn>
               <Btn onClick={handleSave}>{t.save}</Btn>
             </>)}
+          </div>
+        </Modal>
+      )}
+      {showHistoryModal && editItem && (
+        <Modal title={t.priceHistoryLog || "Price History Log"} maxWidth="760px" onClose={() => { setShowHistoryModal(false); setEditingHistoryId(null); setHistoryDraft({}); }}>
+          <div style={{ fontSize:"0.8rem", color:T.textSecondary, marginBottom:"10px" }}>{editItem.name}</div>
+          <div style={{ maxHeight:"420px", overflowY:"auto", paddingRight:"2px", display:"flex", flexDirection:"column", gap:"8px" }}>
+            {selectedInvestmentHistory.length === 0 ? (
+              <EmptyState text={t.noRecords} />
+            ) : selectedInvestmentHistory.map((entry) => {
+              const isEditing = editingHistoryId === entry.id;
+              const ts = entry.timestamp || entry.created_at || "";
+              return (
+                <div key={entry.id} style={{ border:`1px solid ${T.border}`, borderRadius:"10px", padding:"10px 12px", background:T.bgCard }}>
+                  {isEditing ? (
+                    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))", gap:"8px", alignItems:"end" }}>
+                      <FormField label={t.purchasePrice}><Input type="number" value={historyDraft.purchasePrice ?? ""} onChange={(e)=>setHistoryDraft((prev)=>({ ...prev, purchasePrice:e.target.value }))} isRTL={isRTL} /></FormField>
+                      <FormField label={t.currentPrice}><Input type="number" value={historyDraft.currentPrice ?? ""} onChange={(e)=>setHistoryDraft((prev)=>({ ...prev, currentPrice:e.target.value }))} isRTL={isRTL} /></FormField>
+                      <FormField label={t.date}><Input type="datetime-local" value={historyDraft.timestamp ?? ""} onChange={(e)=>setHistoryDraft((prev)=>({ ...prev, timestamp:e.target.value }))} isRTL={isRTL} /></FormField>
+                      <div style={{ display:"flex", gap:"6px", justifyContent:"flex-end" }}>
+                        <Btn size="sm" onClick={() => {
+                          patchItem("priceHistory", entry.id, {
+                            purchasePrice: historyDraft.purchasePrice ?? "",
+                            currentPrice: historyDraft.currentPrice ?? "",
+                            timestamp: historyDraft.timestamp ? new Date(historyDraft.timestamp).toISOString() : entry.timestamp,
+                          });
+                          setEditingHistoryId(null);
+                          setHistoryDraft({});
+                        }}>{t.save}</Btn>
+                        <Btn size="sm" variant="secondary" onClick={() => { setEditingHistoryId(null); setHistoryDraft({}); }}>{t.cancel}</Btn>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"10px", flexWrap:"wrap" }}>
+                      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))", gap:"8px", flex:1, minWidth:"220px" }}>
+                        <ReadOnlyField label={t.purchasePrice} value={entry.purchasePrice} />
+                        <ReadOnlyField label={t.currentPrice} value={entry.currentPrice} />
+                        <ReadOnlyField label={t.date} value={ts ? new Date(ts).toLocaleString() : "—"} />
+                      </div>
+                      <div style={{ display:"flex", gap:"6px" }}>
+                        <button type="button" onClick={() => {
+                          const timestampValue = ts ? new Date(ts) : null;
+                          setEditingHistoryId(entry.id);
+                          setHistoryDraft({
+                            purchasePrice: entry.purchasePrice ?? "",
+                            currentPrice: entry.currentPrice ?? "",
+                            timestamp: timestampValue && !Number.isNaN(timestampValue.getTime()) ? timestampValue.toISOString().slice(0, 16) : "",
+                          });
+                        }} style={{ border:"none", background:"transparent", color:T.info, cursor:"pointer", display:"flex", padding:"4px" }}><Edit3 size={14}/></button>
+                        <button type="button" onClick={() => removeHistoryEntry(entry)} style={{ border:"none", background:"transparent", color:T.negative, cursor:"pointer", display:"flex", padding:"4px" }}><Trash2 size={14}/></button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ display:"flex", justifyContent:"flex-end", marginTop:"10px" }}>
+            <Btn variant="secondary" onClick={() => { setShowHistoryModal(false); setEditingHistoryId(null); setHistoryDraft({}); }}>{t.close}</Btn>
           </div>
         </Modal>
       )}
@@ -4071,12 +4209,17 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
       : "";
 
     if (navigationFilter.portfolioId) setFilterPortfolio(String(navigationFilter.portfolioId));
-    if (navigationFilter.investmentId) setFilterInvestment(String(navigationFilter.investmentId));
+    if (navigationFilter.investmentId) {
+      setFilterInvestment(String(navigationFilter.investmentId));
+    } else if (navigationFilter.investmentName) {
+      const matchByName = allInvestments.find((inv) => inv.name === String(navigationFilter.investmentName));
+      setFilterInvestment(matchByName?.id || "");
+    }
     setFilterStatus(normalizedStatus);
     setFilterStartDate(navigationFilter.startDate ? String(navigationFilter.startDate) : "");
     setFilterEndDate(navigationFilter.endDate ? String(navigationFilter.endDate) : "");
     setFilterDateField(normalizedDateField);
-  }, [navigationFilter]);
+  }, [navigationFilter, allInvestments]);
 
   useEffect(() => {
     if (!filterInvestment) return;
@@ -5919,6 +6062,17 @@ function MainApp() {
     setActiveTab("transactions");
   };
 
+  const goToTransactionsFromDashboardCashFlow = (filter) => {
+    setTxNavigationFilter({
+      investmentId: filter?.investmentId || "",
+      investmentName: filter?.investmentName || "",
+      portfolioId: filter?.portfolioId || "",
+      stamp: Date.now(),
+    });
+    setSmartBackVisible(false);
+    setActiveTab("transactions");
+  };
+
   const handleSmartBack = () => {
     setActiveTab("investments");
     const saved = Number(localStorage.getItem("investments_scroll_top") || "0");
@@ -5935,7 +6089,7 @@ function MainApp() {
   };
 
   const tabs = {
-    dashboard:    <Dashboard onNavigateTransactionsByStatus={(filter) => { setTxNavigationFilter(filter); setActiveTab("transactions"); }} />,
+    dashboard:    <Dashboard onNavigateTransactionsByStatus={(filter) => { setTxNavigationFilter(filter); setActiveTab("transactions"); }} onNavigateTransactionsByInvestment={goToTransactionsFromDashboardCashFlow} />,
     portfolios:   <PortfoliosTab onQuickAddInvestment={quickAddInvestment} onViewInvestments={goToInvestmentsForPortfolio} />,
     investments:  <InvestmentsTab onQuickAddTransaction={quickAddTransaction} onViewTransactions={goToTransactionsForInvestment} modalPrefill={investmentPrefill} navigationFilter={investmentNavigationFilter} onModalPrefillConsumed={() => setInvestmentPrefill(null)} showPortfolioBack={showPortfolioBackInInvestments || sessionStorage.getItem("investments_from_portfolio_link_v1") === "1"} onPortfolioBack={handlePortfolioBackFromInvestments} />,
     transactions: <TransactionsTab showSmartBack={smartBackVisible} onSmartBack={handleSmartBack} navigationFilter={txNavigationFilter} modalPrefill={transactionPrefill} />,
