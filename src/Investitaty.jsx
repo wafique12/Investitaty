@@ -1699,25 +1699,29 @@ function AppProvider({ children }) {
         if (existingPortfolio && hasCurrentPricePatch) {
           const prevPriceRaw = existingPortfolio.current_price;
           const nextPriceRaw = patch.current_price;
-          const prevPriceNum = Number(prevPriceRaw);
-          const nextPriceNum = Number(nextPriceRaw);
-          const priceChanged = (Number.isFinite(prevPriceNum) && Number.isFinite(nextPriceNum))
-            ? prevPriceNum !== nextPriceNum
-            : String(prevPriceRaw ?? "") !== String(nextPriceRaw ?? "");
+          const priceChanged = !isSamePriceValue(prevPriceRaw, nextPriceRaw);
 
           if (priceChanged) {
             const timestamp = new Date().toISOString();
             const syncedInvestments = (prev.investments || []).filter((inv) => inv.portfolioId === id && Boolean(inv.inheritPrice));
             if (syncedInvestments.length) {
-              const syncedEntries = syncedInvestments.map((inv, idx) => ({
-                id: `${Date.now()}_${idx}_${Math.random().toString(36).slice(2)}`,
-                created_at: timestamp,
-                investmentId: inv.id,
-                investmentName: inv.name || "—",
-                purchasePrice: String(inv.purchasePrice ?? ""),
-                currentPrice: String(nextPriceRaw ?? ""),
-                timestamp,
-              }));
+              const syncedEntries = syncedInvestments
+                .filter((inv) => {
+                  const lastEntry = (prev.priceHistory || [])
+                    .filter((entry) => entry.investmentId === inv.id)
+                    .sort((a, b) => new Date(b.timestamp || b.created_at || 0) - new Date(a.timestamp || a.created_at || 0))[0];
+                  if (!lastEntry) return true;
+                  return !isSamePriceValue(lastEntry.currentPrice, nextPriceRaw);
+                })
+                .map((inv, idx) => ({
+                  id: `${Date.now()}_${idx}_${Math.random().toString(36).slice(2)}`,
+                  created_at: timestamp,
+                  investmentId: inv.id,
+                  investmentName: inv.name || "—",
+                  purchasePrice: String(inv.purchasePrice ?? ""),
+                  currentPrice: String(nextPriceRaw ?? ""),
+                  timestamp,
+                }));
               next.priceHistory = [...(prev.priceHistory || []), ...syncedEntries];
             }
           }
@@ -2475,6 +2479,12 @@ const toDateOnly = (value) => {
   if (Number.isNaN(parsed.getTime())) return null;
   parsed.setHours(0, 0, 0, 0);
   return parsed;
+};
+const isSamePriceValue = (left, right) => {
+  const leftNum = Number(left);
+  const rightNum = Number(right);
+  if (Number.isFinite(leftNum) && Number.isFinite(rightNum)) return leftNum === rightNum;
+  return String(left ?? "").trim() === String(right ?? "").trim();
 };
 const getSmartTxStatus = (tx) => {
   const due = toDateOnly(tx?.dueDate || tx?.due_date);
@@ -3311,8 +3321,9 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     setFormError("");
     const payload = { ...form, funding:(form.funding||[]).filter(r=>r.source||r.amount), source:undefined };
     if (editItem) {
-      const purchaseChanged = String(editItem.purchasePrice ?? "") !== String(payload.purchasePrice ?? "");
-      const currentChanged = String(editItem.currentPrice ?? "") !== String(payload.currentPrice ?? "");
+      const storedInvestment = investments.find((inv) => inv.id === editItem.id) || editItem;
+      const purchaseChanged = !isSamePriceValue(storedInvestment?.purchasePrice, payload.purchasePrice);
+      const currentChanged = !isSamePriceValue(storedInvestment?.currentPrice, payload.currentPrice);
       patchItem("investments",editItem.id,payload);
       if (purchaseChanged || currentChanged) createPriceHistoryEntry(editItem, payload.purchasePrice, payload.currentPrice);
     }
