@@ -5450,12 +5450,23 @@ function StatisticsTab() {
   };
 
   const invById = new Map(filteredInvestments.map((i) => [i.id, i]));
+  const currentYear = new Date().getFullYear();
+  const lifecycleYears = filteredInvestments.flatMap((inv) => {
+    const startYear = new Date(inv.startDate || inv.purchaseDate || inv.created_at || Date.now()).getFullYear();
+    if (!Number.isFinite(startYear)) return [];
+    const endYearRaw = inv.endDate ? new Date(inv.endDate).getFullYear() : currentYear;
+    const endYear = Number.isFinite(endYearRaw) ? endYearRaw : currentYear;
+    const maxYear = Math.max(startYear, endYear);
+    const years = [];
+    for (let y = startYear; y <= maxYear; y += 1) years.push(y);
+    return years;
+  });
   const yearlyRows = [...new Set([
+    ...lifecycleYears,
     ...filteredTransactions.map((tx) => new Date(tx.date || tx.created_at || Date.now()).getFullYear()),
     ...priceHistory
       .filter((entry) => filteredInvestmentIds.has(entry.investmentId))
       .map((entry) => new Date(entry.timestamp || entry.created_at || Date.now()).getFullYear()),
-    ...filteredInvestments.map((inv) => new Date(inv.purchaseDate || inv.created_at || Date.now()).getFullYear()),
   ])]
     .filter((y) => Number.isFinite(y))
     .sort((a, b) => b - a);
@@ -5494,7 +5505,6 @@ function StatisticsTab() {
     }
   });
 
-  const currentYear = new Date().getFullYear();
   visibleYears.forEach((year) => {
     if (year > currentYear) return;
     lossByYearRisk[year] = lossByYearRisk[year] || { low:0, medium:0, high:0 };
@@ -5502,15 +5512,17 @@ function StatisticsTab() {
       const risk = toRiskBucket(inv?.risk);
       if (!risk) return;
       const investmentStart = new Date(inv.startDate || inv.purchaseDate || inv.created_at || Date.now()).getFullYear();
-      if (!Number.isFinite(investmentStart) || year < investmentStart) return;
+      const investmentEndRaw = inv.endDate ? new Date(inv.endDate).getFullYear() : currentYear;
+      const investmentEnd = Number.isFinite(investmentEndRaw) ? investmentEndRaw : currentYear;
+      if (!Number.isFinite(investmentStart) || year < investmentStart || year > investmentEnd) return;
 
       const entriesForYear = priceHistory
         .filter((entry) => entry.investmentId === inv.id && new Date(entry.timestamp || entry.created_at || Date.now()).getFullYear() === year)
         .sort((a, b) => new Date(b.timestamp || b.created_at || 0) - new Date(a.timestamp || a.created_at || 0));
       const latest = entriesForYear[0];
-      if (!latest) return;
+      if (!latest && year < currentYear) return;
       const baselinePerUnit = Number(inv.purchasePrice ?? 0);
-      const currentPerUnit = Number(latest.currentPrice ?? 0);
+      const currentPerUnit = Number(latest?.currentPrice ?? inv.currentPrice ?? 0);
       const qty = Number(inv.quantity) || 0;
       const yearDelta = (currentPerUnit - baselinePerUnit) * qty;
       if (!Number.isFinite(yearDelta) || yearDelta === 0) return;
