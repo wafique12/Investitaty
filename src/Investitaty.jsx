@@ -11,6 +11,7 @@ import {
 import { supabase, hasSupabaseConfig, hasSupabaseClient } from "./lib/supabaseClient";
 import BackupService from "./services/BackupService";
 import { DRIVE_DB_PATH, ensureDriveOk, getDriveAppFolders, setDriveUnauthorizedHandler } from "./services/DrivePaths";
+import pkg from "../package.json";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONFIG
@@ -38,6 +39,7 @@ const INACTIVITY_TIMEOUT_MS = 20 * 60 * 1000;
 const AUTH_DEBUG_PREFIX = "[AuthFlow]";
 const OWNER_PROTECTED_EMAIL = "wafique22@gmail.com";
 const ARCHIVED_FILTER = "__archived__";
+const RUNTIME_ENV = String(pkg?.environment || "").trim().toLowerCase();
 
 const normalizeRole = (role) => {
   const value = String(role || "").trim().toLowerCase();
@@ -67,6 +69,7 @@ const INITIAL_SCHEMA = {
   portfolios:   [],   // { id, name, type, currency, risk, status, color, current_price, notes, created_at, is_hidden }
   investments:  [],   // { id, portfolioId, name, quantity, purchasePrice, currentPrice, purchaseDate, startDate, endDate, investmentMethod, risk, funding:[{source,amount}], notes, status, is_hidden, created_at }
   transactions: [],   // { id, investmentId, portfolioId, category, amount, date, type:"income"|"expense", notes, status:"recorded"|"scheduled"|"cancelled", is_hidden, created_at }
+  priceHistory: [],   // { id, investmentId, investmentName, purchasePrice, currentPrice, timestamp, created_at }
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -133,7 +136,7 @@ const TRANSLATIONS = {
     investmentVolumeRiskMatrix: "Investment Volume vs Risk Matrix",
     annualProfitsByRiskLevel: "Annual Profits by Risk Level",
     annualProfitsByStatus: "Annual Profits by Transaction Status",
-    lossAnalysisMatrix: "Loss Analysis Matrix",
+    lossAnalysisMatrix: "Capital Profits/Loss Analysis Matrix",
     assetAllocationOverview: "Asset Allocation Overview",
     centralizedCategoryAnalytics: "Centralized Item/Category Analytics",
     fundingSourceBreakdown: "Funding Sources Distribution",
@@ -199,6 +202,8 @@ const TRANSLATIONS = {
     initialCapital: "Initial Capital",
     purchasePrice: "Purchase Price (Per Unit)",
     currentPrice: "Current Price (Per Unit)",
+    viewPriceHistory: "View Price History",
+    priceHistoryLog: "Price History Log",
     inheritPrice: "Sync with Portfolio",
     totalInvestmentValue: "Total Investment Value",
     totalSplitAmount: "Total Split Amount",
@@ -392,7 +397,7 @@ const TRANSLATIONS = {
     investmentVolumeRiskMatrix: "مصفوفة حجم الاستثمار مقابل المخاطرة",
     annualProfitsByRiskLevel: "الأرباح السنوية حسب المخاطرة",
     annualProfitsByStatus: "الأرباح السنوية حسب حالة المعاملة",
-    lossAnalysisMatrix: "مصفوفة تحليل الخسائر",
+    lossAnalysisMatrix: "مصفوفة تحليل أرباح/خسائر رأس المال",
     assetAllocationOverview: "نظرة توزيع الأصول",
     centralizedCategoryAnalytics: "تحليلات العناصر/الفئات المركزية",
     fundingSourceBreakdown: "توزيع مصادر التمويل",
@@ -458,6 +463,8 @@ const TRANSLATIONS = {
     initialCapital: "رأس المال الابتدائي",
     purchasePrice: "سعر الشراء (لكل وحدة)",
     currentPrice: "السعر الحالي (لكل وحدة)",
+    viewPriceHistory: "عرض سجل الأسعار",
+    priceHistoryLog: "سجل الأسعار",
     inheritPrice: "مزامنة مع المحفظة",
     totalInvestmentValue: "إجمالي قيمة الاستثمار",
     totalSplitAmount: "إجمالي مبلغ التقسيم",
@@ -709,6 +716,7 @@ function migrateSchema(data) {
     portfolios:   data.portfolios   || [],
     investments:  [],
     transactions: [],
+    priceHistory: data.priceHistory || [],
   };
 
   // Ensure all new settings keys exist
@@ -816,6 +824,10 @@ function migrateSchema(data) {
   out.transactions = (out.transactions || []).map(tx => ({
     ...tx,
     status: tx.status || out.settings.transactionStatuses?.[0] || "recorded",
+  }));
+  out.priceHistory = (out.priceHistory || []).map((entry) => ({
+    ...entry,
+    timestamp: entry.timestamp || entry.created_at || new Date().toISOString(),
   }));
 
 
@@ -2494,7 +2506,7 @@ function useIsMobile(breakpoint = 1024) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // DASHBOARD — KPI + Charts + Portfolio cards
 // ═══════════════════════════════════════════════════════════════════════════════
-function Dashboard({ onNavigateTransactionsByStatus }) {
+function Dashboard({ onNavigateTransactionsByStatus, onNavigateTransactionsByInvestment }) {
   const { db, t, isRTL, font, selectedCountry } = useApp();
   const [sourceModal, setSourceModal] = useState(null);
   const [dashboardFundingLegendExpanded, setDashboardFundingLegendExpanded] = useState(false);
@@ -2771,9 +2783,24 @@ function Dashboard({ onNavigateTransactionsByStatus }) {
                   const badgeColor = isLate ? T.negative : (diff<=7?T.warning:T.positive);
                   const badgeLabel = isLate ? t.smartStatusLate : (diff===0?t.today:`${Math.max(diff,0)}${t.days}`);
                   const inv = (db.investments||[]).find(i=>i.id===tx.investmentId);
+                  const investmentName = inv?.name || tx.investmentName || "";
                   return (
-                    <div key={tx.id||i} style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 0",borderBottom:i<upcoming.length-1?`1px solid ${T.border}`:"none" }}>
-                      <div>
+                    <button
+                      key={tx.id||i}
+                      type="button"
+                      onClick={() => {
+                        if (!investmentName) return;
+                        onNavigateTransactionsByInvestment?.({
+                          transactionId: tx.id || "",
+                          investmentId: tx.investmentId || "",
+                          investmentName,
+                          portfolioId: tx.portfolioId || "",
+                          stamp: Date.now(),
+                        });
+                      }}
+                      style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 0",borderBottom:i<upcoming.length-1?`1px solid ${T.border}`:"none", width:"100%", border:"none", background:"transparent", cursor:investmentName ? "pointer" : "default", textAlign:isRTL ? "right" : "left", fontFamily:"inherit" }}
+                    >
+                      <div style={{ minWidth:0 }}>
                         <div style={{ fontSize:"0.8rem",fontWeight:500,color:T.textPrimary,marginBottom:"1px" }}>{tx.category}</div>
                         <div style={{ fontSize:"0.7rem",color:T.textMuted }}>{inv?.name||"—"}</div>
                       </div>
@@ -2781,7 +2808,7 @@ function Dashboard({ onNavigateTransactionsByStatus }) {
                         <span style={{ fontSize:"0.85rem",fontWeight:600,color:T.positive }}>+{fmtMoney(tx.amount,{currency:portfolioCurrency(db, tx.portfolioId)})}</span>
                         <Chip color={badgeColor}>{badgeLabel}</Chip>
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -3206,6 +3233,10 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   const [editingPrice, setEditingPrice] = useState(null);
   const [expandedRow, setExpandedRow] = useState(null);
   const [collapsedPortfolios, setCollapsedPortfolios] = useState({});
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyEditingRowId, setHistoryEditingRowId] = useState(null);
+  const [historyDraft, setHistoryDraft] = useState({});
+  const [historyNotice, setHistoryNotice] = useState("");
   const [modalMode, setModalMode] = useState("create");
 
   const EMPTY = useMemo(() => ({ portfolioId:"",name:"",quantity:"",purchasePrice:"",currentPrice:"",inheritPrice:false,purchaseDate:"",startDate:"",endDate:"",investmentMethod:"",risk:"",funding:[{source:"",amount:""}],status:"Active",notes:"" }), []);
@@ -3214,6 +3245,18 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
 
   const portfolios = visible(db?.portfolios||[]);
   const investments = db?.investments||[];
+  const priceHistory = db?.priceHistory || [];
+
+  const createPriceHistoryEntry = useCallback((investment, nextPurchasePrice, nextCurrentPrice) => {
+    if (!investment) return;
+    addItem("priceHistory", {
+      investmentId: investment.id,
+      investmentName: investment.name || "—",
+      purchasePrice: String(nextPurchasePrice ?? investment.purchasePrice ?? ""),
+      currentPrice: String(nextCurrentPrice ?? investment.currentPrice ?? ""),
+      timestamp: new Date().toISOString(),
+    });
+  }, [addItem]);
 
 
   const handleSave = () => {
@@ -3239,7 +3282,12 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     }
     setFormError("");
     const payload = { ...form, funding:(form.funding||[]).filter(r=>r.source||r.amount), source:undefined };
-    if (editItem) { patchItem("investments",editItem.id,payload); }
+    if (editItem) {
+      const purchaseChanged = String(editItem.purchasePrice ?? "") !== String(payload.purchasePrice ?? "");
+      const currentChanged = String(editItem.currentPrice ?? "") !== String(payload.currentPrice ?? "");
+      patchItem("investments",editItem.id,payload);
+      if (purchaseChanged || currentChanged) createPriceHistoryEntry(editItem, payload.purchasePrice, payload.currentPrice);
+    }
     else { addItem("investments",payload); }
     setInvalidFields({});
     setForm(EMPTY); closeModal();
@@ -3249,6 +3297,36 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     setForm({ portfolioId:inv.portfolioId,name:inv.name,quantity:inv.quantity||"",purchasePrice:inv.purchasePrice||"",
       currentPrice:inv.currentPrice||"",inheritPrice:Boolean(inv.inheritPrice),purchaseDate:inv.purchaseDate||"",startDate:inv.startDate||"",endDate:inv.endDate||"",investmentMethod:inv.investmentMethod||"",risk:inv.risk||"",funding:(inv.funding&&inv.funding.length?inv.funding:[{source:inv.source||"",amount:""}]),status:inv.status||"Active",notes:inv.notes||"" });
     setEditItem(inv); setModalMode("view"); setShowModal(true);
+    setHistoryEditingRowId(null);
+    setHistoryDraft({});
+    setHistoryNotice("");
+  };
+
+  const selectedInvestmentHistory = useMemo(() => {
+    if (!editItem?.id) return [];
+    return (priceHistory || [])
+      .filter((entry) => entry.investmentId === editItem.id)
+      .sort((a, b) => new Date(b.timestamp || b.created_at || 0) - new Date(a.timestamp || a.created_at || 0));
+  }, [priceHistory, editItem]);
+
+  const removeHistoryEntry = (entry) => {
+    const entryDate = new Date(entry.timestamp || entry.created_at || "");
+    if (Number.isNaN(entryDate.getTime())) return;
+    const year = entryDate.getFullYear();
+    const countInYear = selectedInvestmentHistory.filter((item) => {
+      const itemDate = new Date(item.timestamp || item.created_at || "");
+      return !Number.isNaN(itemDate.getTime()) && itemDate.getFullYear() === year;
+    }).length;
+    if (countInYear <= 1) {
+      setHistoryNotice("Cannot delete the last record for this year.");
+      return;
+    }
+    hardDeleteItem("priceHistory", entry.id);
+    setHistoryDraft((prev) => {
+      const next = { ...prev };
+      delete next[entry.id];
+      return next;
+    });
   };
 
   const updateFunding = (idx, key, value) => {
@@ -3293,6 +3371,10 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     setEditingPrice(null);
     setExpandedRow(null);
     setCollapsedPortfolios({});
+    setShowHistoryModal(false);
+    setHistoryEditingRowId(null);
+    setHistoryDraft({});
+    setHistoryNotice("");
     setModalMode("create");
     setFilterStartDate("");
     setFilterEndDate("");
@@ -3309,8 +3391,12 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
 
   const closeModal = useCallback(() => {
     setShowModal(false);
+    setShowHistoryModal(false);
     setEditItem(null);
     setModalMode("create");
+    setHistoryEditingRowId(null);
+    setHistoryDraft({});
+    setHistoryNotice("");
     setForm(EMPTY);
     setFormError("");
     setInvalidFields({});
@@ -3678,6 +3764,15 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
           )}
           <div style={{ display:"flex",justifyContent:"flex-end",gap:"10px",marginTop:"8px" }}>
             {modalMode==="view" && (<>
+              <button
+                type="button"
+                onClick={()=>setShowHistoryModal(true)}
+                style={{ background:"#1e3a8a", border:"1px solid #1d4ed8", color:"#dbeafe", padding:"8px 12px", borderRadius:"8px", fontSize:"0.82rem", fontWeight:600, cursor:"pointer", transition:"background 0.15s ease" }}
+                onMouseEnter={(e)=>{ e.currentTarget.style.background = "#1d4ed8"; }}
+                onMouseLeave={(e)=>{ e.currentTarget.style.background = "#1e3a8a"; }}
+              >
+                {t.viewPriceHistory || "View Price History"}
+              </button>
               <Btn onClick={()=>setModalMode("edit")}>{t.editInModal}</Btn>
               <Btn variant="secondary" onClick={closeModal}>{t.returnLabel}</Btn>
             </>)}
@@ -3689,6 +3784,112 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
               <Btn variant="secondary" onClick={closeModal}>{t.cancel}</Btn>
               <Btn onClick={handleSave}>{t.save}</Btn>
             </>)}
+          </div>
+        </Modal>
+      )}
+      {showHistoryModal && editItem && (
+        <Modal
+          title={(
+            <span style={{ display:"inline-flex", alignItems:"baseline", gap:"8px", flexWrap:"wrap" }}>
+              <span>{t.priceHistoryLog || "Price History Log"}</span>
+              <span style={{ fontSize:"0.84em", color:T.textSecondary, fontWeight:500 }}>
+                - {editItem.name}
+              </span>
+            </span>
+          )}
+          maxWidth="760px"
+          onClose={() => { setShowHistoryModal(false); setHistoryEditingRowId(null); setHistoryDraft({}); setHistoryNotice(""); }}
+        >
+          {historyNotice && (
+            <div style={{ marginBottom:"10px", padding:"10px 12px", borderRadius:"8px", border:"1px solid rgba(245,158,11,0.4)", background:"rgba(245,158,11,0.12)", color:"#f59e0b", fontSize:"0.8rem" }}>
+              {historyNotice}
+            </div>
+          )}
+          <div style={{ maxHeight:"420px", overflowY:"auto", overflowX:"auto", paddingRight:"2px" }}>
+            {selectedInvestmentHistory.length === 0 ? (
+              <EmptyState text={t.noRecords} />
+            ) : (
+              <table style={{ width:"100%", minWidth:"680px", borderCollapse:"collapse", fontSize:"0.8rem" }}>
+                <thead>
+                  <tr style={{ background:T.bgApp }}>
+                    <th style={{ padding:"9px 10px", borderBottom:`1px solid ${T.border}`, color:T.textMuted, textAlign:isRTL ? "right" : "left", whiteSpace:"nowrap" }}>{t.purchasePrice}</th>
+                    <th style={{ padding:"9px 10px", borderBottom:`1px solid ${T.border}`, color:T.textMuted, textAlign:isRTL ? "right" : "left", whiteSpace:"nowrap" }}>{t.currentPrice}</th>
+                    <th style={{ padding:"9px 10px", borderBottom:`1px solid ${T.border}`, color:T.textMuted, textAlign:isRTL ? "right" : "left", whiteSpace:"nowrap" }}>{t.date}</th>
+                    <th style={{ padding:"9px 10px", borderBottom:`1px solid ${T.border}`, color:T.textMuted, textAlign:"right" }}>{t.actions || "Actions"}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedInvestmentHistory.map((entry, idx) => {
+                    const ts = entry.timestamp || entry.created_at || "";
+                    const isEditing = historyEditingRowId === entry.id;
+                    const rowDraft = historyDraft[entry.id] || {
+                      purchasePrice: entry.purchasePrice ?? "",
+                      currentPrice: entry.currentPrice ?? "",
+                      timestamp: ts ? new Date(ts).toISOString().slice(0, 16) : "",
+                    };
+                    return (
+                      <tr key={entry.id} style={{ background:idx % 2 ? T.bgCard : "transparent" }}>
+                        <td style={{ padding:"8px 10px", borderTop:`1px solid ${T.border}` }}>
+                          {isEditing ? (
+                            <Input type="number" value={rowDraft.purchasePrice} onChange={(e)=>setHistoryDraft((prev)=>({ ...prev, [entry.id]: { ...rowDraft, purchasePrice:e.target.value } }))} isRTL={isRTL} />
+                          ) : (
+                            <span style={{ color:T.textPrimary, whiteSpace:"nowrap" }}>{rowDraft.purchasePrice || "0"}</span>
+                          )}
+                        </td>
+                        <td style={{ padding:"8px 10px", borderTop:`1px solid ${T.border}` }}>
+                          {isEditing ? (
+                            <Input type="number" value={rowDraft.currentPrice} onChange={(e)=>setHistoryDraft((prev)=>({ ...prev, [entry.id]: { ...rowDraft, currentPrice:e.target.value } }))} isRTL={isRTL} />
+                          ) : (
+                            <span style={{ color:T.textPrimary, whiteSpace:"nowrap" }}>{rowDraft.currentPrice || "0"}</span>
+                          )}
+                        </td>
+                        <td style={{ padding:"8px 10px", borderTop:`1px solid ${T.border}` }}>
+                          {isEditing ? (
+                            <Input type="datetime-local" value={rowDraft.timestamp} onChange={(e)=>setHistoryDraft((prev)=>({ ...prev, [entry.id]: { ...rowDraft, timestamp:e.target.value } }))} isRTL={isRTL} />
+                          ) : (
+                            <span style={{ color:T.textSecondary, whiteSpace:"nowrap" }}>{ts ? new Date(ts).toLocaleString() : "—"}</span>
+                          )}
+                        </td>
+                        <td style={{ padding:"8px 10px", borderTop:`1px solid ${T.border}`, textAlign:"right" }}>
+                          <div style={{ display:"inline-flex", gap:"6px" }}>
+                            {!isEditing ? (
+                              <button
+                                type="button"
+                                data-icon-tooltip={t.edit}
+                                onClick={() => {
+                                  setHistoryNotice("");
+                                  setHistoryEditingRowId(entry.id);
+                                  setHistoryDraft((prev)=>({ ...prev, [entry.id]: rowDraft }));
+                                }}
+                                style={{ border:"none", background:"transparent", color:T.info, cursor:"pointer", display:"flex", padding:"4px" }}
+                              ><Edit3 size={14}/></button>
+                            ) : (
+                              <button
+                                type="button"
+                                data-icon-tooltip={t.save}
+                                onClick={() => {
+                                  patchItem("priceHistory", entry.id, {
+                                    purchasePrice: rowDraft.purchasePrice ?? "",
+                                    currentPrice: rowDraft.currentPrice ?? "",
+                                    timestamp: rowDraft.timestamp ? new Date(rowDraft.timestamp).toISOString() : entry.timestamp,
+                                  });
+                                  setHistoryEditingRowId(null);
+                                }}
+                                style={{ border:"none", background:"transparent", color:T.positive, cursor:"pointer", display:"flex", padding:"4px" }}
+                              ><Check size={14}/></button>
+                            )}
+                            <button type="button" data-icon-tooltip={t.deleteItem} onClick={() => removeHistoryEntry(entry)} style={{ border:"none", background:"transparent", color:T.negative, cursor:"pointer", display:"flex", padding:"4px" }}><Trash2 size={14}/></button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+          <div style={{ display:"flex", justifyContent:"flex-end", marginTop:"10px" }}>
+            <Btn variant="secondary" onClick={() => { setShowHistoryModal(false); setHistoryEditingRowId(null); setHistoryDraft({}); setHistoryNotice(""); }}>{t.close}</Btn>
           </div>
         </Modal>
       )}
@@ -3791,7 +3992,7 @@ function InvestmentDetailExpanded({ inv, txs, db }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // TRANSACTIONS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
-function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmartBack }) {
+function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmartBack, onBackToDashboard }) {
 
   const { db, addItem, archiveItem, hardDeleteItem, patchItem, t, isRTL, font } = useApp();
   const [showModal, setShowModal] = useState(false);
@@ -3811,6 +4012,8 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const [pageSize, setPageSize] = useState(50);
   const [currentPage, setCurrentPage] = useState(1);
   const [goToPageInput, setGoToPageInput] = useState("1");
+  const autoOpenedTxRef = useRef("");
+  const [viewOpenedFromDashboard, setViewOpenedFromDashboard] = useState(false);
 
   const EMPTY = { portfolioId:"",investmentId:"",category:"",amount:"",date:"",dueDate:"",depositedAt:"",collectedAt:"",type:"income",status:"recorded",notes:"" };
   const [form, setForm] = useState(EMPTY);
@@ -4026,7 +4229,16 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const openView = (tx) => {
     setForm({ portfolioId:tx.portfolioId||"",investmentId:tx.investmentId||"",category:tx.category||"",
       amount:tx.amount||"",date:tx.date||"",dueDate:tx.dueDate||tx.due_date||"",depositedAt:tx.depositedAt||tx.deposited_at||"",collectedAt:tx.collectedAt||tx.collected_at||"",type:tx.type||"income",status:tx.status||"recorded",notes:tx.notes||"" });
+    setViewOpenedFromDashboard(false);
     setEditItem(tx); setModalMode("view"); setFormError(""); setInvalidFields({}); setShowModal(true);
+  };
+  const closeTransactionModal = () => {
+    setShowModal(false);
+    setEditItem(null);
+    setModalMode("create");
+    setFormError("");
+    setInvalidFields({});
+    setViewOpenedFromDashboard(false);
   };
 
   const totalInc = txIncome(filtered);
@@ -4071,12 +4283,27 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
       : "";
 
     if (navigationFilter.portfolioId) setFilterPortfolio(String(navigationFilter.portfolioId));
-    if (navigationFilter.investmentId) setFilterInvestment(String(navigationFilter.investmentId));
+    if (navigationFilter.investmentId) {
+      setFilterInvestment(String(navigationFilter.investmentId));
+    } else if (navigationFilter.investmentName) {
+      const matchByName = allInvestments.find((inv) => inv.name === String(navigationFilter.investmentName));
+      setFilterInvestment(matchByName?.id || "");
+    }
     setFilterStatus(normalizedStatus);
     setFilterStartDate(navigationFilter.startDate ? String(navigationFilter.startDate) : "");
     setFilterEndDate(navigationFilter.endDate ? String(navigationFilter.endDate) : "");
     setFilterDateField(normalizedDateField);
-  }, [navigationFilter]);
+    if (navigationFilter.transactionId) {
+      const navKey = `${navigationFilter.stamp || "nostamp"}:${navigationFilter.transactionId}`;
+      if (autoOpenedTxRef.current === navKey) return;
+      const targetTx = allTx.find((tx) => String(tx.id) === String(navigationFilter.transactionId));
+      if (targetTx) {
+        openView(targetTx);
+        setViewOpenedFromDashboard(Boolean(navigationFilter.fromDashboard));
+      }
+      autoOpenedTxRef.current = navKey;
+    }
+  }, [navigationFilter, allInvestments, allTx]);
 
   useEffect(() => {
     if (!filterInvestment) return;
@@ -4310,7 +4537,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
       </Card>
 
       {showModal && (
-        <Modal title={modalMode==="create"?t.addTransaction:`${t.view} ${t.transactions}`} onClose={()=>{setShowModal(false);setEditItem(null);setModalMode("create");setFormError("");setInvalidFields({});}}>
+        <Modal title={modalMode==="create"?t.addTransaction:`${t.view} ${t.transactions}`} onClose={closeTransactionModal}>
           {modalMode === "view" ? (
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"10px" }}>
               <ReadOnlyField label={t.transactionType} value={form.type} />
@@ -4383,14 +4610,21 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
           <div style={{ display:"flex",justifyContent:"flex-end",gap:"10px",marginTop:"8px" }}>
             {modalMode==="view" && (<>
               <Btn onClick={()=>setModalMode("edit")}>{t.editInModal}</Btn>
-              <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");setFormError("");setInvalidFields({});}}>{t.returnLabel}</Btn>
+              <Btn variant="secondary" onClick={() => {
+                if (viewOpenedFromDashboard) {
+                  closeTransactionModal();
+                  onBackToDashboard?.();
+                  return;
+                }
+                closeTransactionModal();
+              }}>{t.returnLabel}</Btn>
             </>)}
             {modalMode==="edit" && (<>
               <Btn onClick={handleSave}>{t.save}</Btn>
               <Btn variant="secondary" onClick={()=>{ setForm({ portfolioId:editItem.portfolioId||"",investmentId:editItem.investmentId||"",category:editItem.category||"",amount:editItem.amount||"",date:editItem.date||"",dueDate:editItem.dueDate||editItem.due_date||"",depositedAt:editItem.depositedAt||editItem.deposited_at||"",collectedAt:editItem.collectedAt||editItem.collected_at||"",type:editItem.type||"income",status:editItem.status||"recorded",notes:editItem.notes||"" }); setFormError(""); setInvalidFields({}); setModalMode("view"); }}>{t.cancel}</Btn>
             </>)}
             {modalMode==="create" && (<>
-              <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");setFormError("");setInvalidFields({});}}>{t.cancel}</Btn>
+              <Btn variant="secondary" onClick={closeTransactionModal}>{t.cancel}</Btn>
               <Btn onClick={handleSave}>{t.save}</Btn>
             </>)}
           </div>
@@ -5137,7 +5371,7 @@ function FundingLegendGrid({ rows, currency = "USD", textColor = "#dbeafe", valu
   );
 }
 
-function StatisticsMatrixTable({ title, headers, rows, currency = "USD" }) {
+function StatisticsMatrixTable({ title, headers, rows, currency = "USD", colorizeNumeric = false }) {
   const { isRTL } = useApp();
   return (
     <div style={{ overflowX:"auto" }}>
@@ -5154,11 +5388,16 @@ function StatisticsMatrixTable({ title, headers, rows, currency = "USD" }) {
             const isTotal = row.isTotal;
             return (
               <tr key={row.key || idx} style={{ background:isTotal?"rgba(16,185,129,0.16)":(idx % 2 ? "rgba(148,163,184,0.07)" : "transparent") }}>
-                {row.values.map((cell, ci) => (
-                  <td key={`${row.key||idx}-${ci}`} style={{ padding:"10px 12px", borderTop:"1px solid rgba(148,163,184,0.16)", color:isTotal?"#f8fafc":"#cbd5e1", fontWeight:isTotal?700:500, whiteSpace:"nowrap", textAlign:isRTL?"right":"left" }}>
+                {row.values.map((cell, ci) => {
+                  const isValueColumn = ci > 0;
+                  const tone = colorizeNumeric && isValueColumn && typeof cell === "number"
+                    ? (cell > 0 ? "#22c55e" : cell < 0 ? "#ef4444" : "#f8fafc")
+                    : (isTotal ? "#f8fafc" : "#cbd5e1");
+                  return (
+                  <td key={`${row.key||idx}-${ci}`} style={{ padding:"10px 12px", borderTop:"1px solid rgba(148,163,184,0.16)", color:tone, fontWeight:isTotal?700:500, whiteSpace:"nowrap", textAlign:isRTL?"right":"left" }}>
                     {typeof cell === "number" ? fmtMoney(cell, { currency }) : cell}
                   </td>
-                ))}
+                );})}
               </tr>
             );
           })}
@@ -5223,6 +5462,7 @@ function StatisticsTab() {
 
   const investments = visible(db?.investments || []);
   const transactions = visible(db?.transactions || []);
+  const priceHistory = db?.priceHistory || [];
   const portfolios = visible(db?.portfolios || []);
   const primaryCurrency = selectedCountry?.baseCurrency || baseCurrencyCode(db);
   const investmentStatuses = db?.settings?.investmentStatuses?.length ? db.settings.investmentStatuses : ["Active", "Paused", "Closed"];
@@ -5245,7 +5485,24 @@ function StatisticsTab() {
   };
 
   const invById = new Map(filteredInvestments.map((i) => [i.id, i]));
-  const yearlyRows = [...new Set(filteredTransactions.map((tx) => new Date(tx.date || tx.created_at || Date.now()).getFullYear()))]
+  const currentYear = new Date().getFullYear();
+  const lifecycleYears = filteredInvestments.flatMap((inv) => {
+    const startYear = new Date(inv.startDate || inv.purchaseDate || inv.created_at || Date.now()).getFullYear();
+    if (!Number.isFinite(startYear)) return [];
+    const endYearRaw = inv.endDate ? new Date(inv.endDate).getFullYear() : currentYear;
+    const endYear = Number.isFinite(endYearRaw) ? endYearRaw : currentYear;
+    const maxYear = Math.max(startYear, endYear);
+    const years = [];
+    for (let y = startYear; y <= maxYear; y += 1) years.push(y);
+    return years;
+  });
+  const yearlyRows = [...new Set([
+    ...lifecycleYears,
+    ...filteredTransactions.map((tx) => new Date(tx.date || tx.created_at || Date.now()).getFullYear()),
+    ...priceHistory
+      .filter((entry) => filteredInvestmentIds.has(entry.investmentId))
+      .map((entry) => new Date(entry.timestamp || entry.created_at || Date.now()).getFullYear()),
+  ])]
     .filter((y) => Number.isFinite(y))
     .sort((a, b) => b - a);
   const visibleYears = selectedYears.length ? yearlyRows.filter((y) => selectedYears.includes(String(y))) : yearlyRows;
@@ -5274,7 +5531,6 @@ function StatisticsTab() {
     const inv = invById.get(tx.investmentId);
     const risk = toRiskBucket(inv?.risk);
     incomeByYearRisk[year] = incomeByYearRisk[year] || { low:0, medium:0, high:0 };
-    lossByYearRisk[year] = lossByYearRisk[year] || { low:0, medium:0, high:0 };
     incomeByYearStatus[statusYear] = incomeByYearStatus[statusYear] || Object.fromEntries(statuses.map((s)=>[s,0]));
 
     if (tx.type === "income" && tx.status !== "cancelled") {
@@ -5282,10 +5538,31 @@ function StatisticsTab() {
       if (incomeByYearStatus[statusYear][tx.status] === undefined) incomeByYearStatus[statusYear][tx.status] = 0;
       incomeByYearStatus[statusYear][tx.status] += toBaseAmount(db, parseFloat(tx.amount) || 0, portfolioCurrency(db, tx.portfolioId), primaryCurrency);
     }
+  });
 
-    if (tx.type === "expense" && tx.status !== "cancelled" && risk) {
-      lossByYearRisk[year][risk] += toBaseAmount(db, parseFloat(tx.amount) || 0, portfolioCurrency(db, tx.portfolioId), primaryCurrency);
-    }
+  visibleYears.forEach((year) => {
+    if (year > currentYear) return;
+    lossByYearRisk[year] = lossByYearRisk[year] || { low:0, medium:0, high:0 };
+    filteredInvestments.forEach((inv) => {
+      const risk = toRiskBucket(inv?.risk);
+      if (!risk) return;
+      const investmentStart = new Date(inv.startDate || inv.purchaseDate || inv.created_at || Date.now()).getFullYear();
+      const investmentEndRaw = inv.endDate ? new Date(inv.endDate).getFullYear() : currentYear;
+      const investmentEnd = Number.isFinite(investmentEndRaw) ? investmentEndRaw : currentYear;
+      if (!Number.isFinite(investmentStart) || year < investmentStart || year > investmentEnd) return;
+
+      const entriesForYear = priceHistory
+        .filter((entry) => entry.investmentId === inv.id && new Date(entry.timestamp || entry.created_at || Date.now()).getFullYear() === year)
+        .sort((a, b) => new Date(b.timestamp || b.created_at || 0) - new Date(a.timestamp || a.created_at || 0));
+      const latest = entriesForYear[0];
+      if (!latest && year < currentYear) return;
+      const baselinePerUnit = Number(inv.purchasePrice ?? 0);
+      const currentPerUnit = Number(latest?.currentPrice ?? inv.currentPrice ?? 0);
+      const qty = Number(inv.quantity) || 0;
+      const yearDelta = (currentPerUnit - baselinePerUnit) * qty;
+      if (!Number.isFinite(yearDelta) || yearDelta === 0) return;
+      lossByYearRisk[year][risk] += toBaseAmount(db, yearDelta, portfolioCurrency(db, inv.portfolioId), primaryCurrency);
+    });
   });
 
   const capitalRows = [
@@ -5314,10 +5591,14 @@ function StatisticsTab() {
   statusRows.push({ key:"status-total", isTotal:true, values:[t.totalLabel, ...statusTotals, statusTotals.reduce((sum, n) => sum + n, 0)] });
 
   const lossRows = visibleYears.map((year) => {
+    if (year > currentYear) {
+      return { key:`loss-${year}`, values:[String(year), "-", "-", "-", "-"] };
+    }
     const row = lossByYearRisk[year] || { low:0, medium:0, high:0 };
     return { key:`loss-${year}`, values:[String(year), row.low, row.medium, row.high, row.low + row.medium + row.high] };
   });
   const lossTotals = lossRows.reduce((acc, row) => {
+    if (typeof row.values[1] !== "number" || typeof row.values[2] !== "number" || typeof row.values[3] !== "number") return acc;
     acc[0] += row.values[1]; acc[1] += row.values[2]; acc[2] += row.values[3];
     return acc;
   }, [0, 0, 0]);
@@ -5589,6 +5870,7 @@ function StatisticsTab() {
       <AccordionSection title={t.lossAnalysisMatrix} icon={<ArrowDownRight size={14} color="#94a3b8" />}>
         <StatisticsMatrixTable
           currency={primaryCurrency}
+          colorizeNumeric
           headers={[t.yearLabel, t.lowLabel, t.mediumLabel, t.highLabel, t.totalLabel]}
           rows={lossRows}
         />
@@ -5863,6 +6145,12 @@ function MainApp() {
   const isMobile = useIsMobile();
 
   useEffect(() => {
+    document.title = RUNTIME_ENV && RUNTIME_ENV !== "production"
+      ? `Investaty - ${RUNTIME_ENV}`
+      : "Investaty";
+  }, []);
+
+  useEffect(() => {
     localStorage.setItem(TAB_STORAGE_KEY, activeTab);
   }, [activeTab]);
 
@@ -5919,6 +6207,19 @@ function MainApp() {
     setActiveTab("transactions");
   };
 
+  const goToTransactionsFromDashboardCashFlow = (filter) => {
+    setTxNavigationFilter({
+      fromDashboard: true,
+      transactionId: filter?.transactionId || "",
+      investmentId: filter?.investmentId || "",
+      investmentName: filter?.investmentName || "",
+      portfolioId: filter?.portfolioId || "",
+      stamp: Date.now(),
+    });
+    setSmartBackVisible(false);
+    setActiveTab("transactions");
+  };
+
   const handleSmartBack = () => {
     setActiveTab("investments");
     const saved = Number(localStorage.getItem("investments_scroll_top") || "0");
@@ -5935,10 +6236,10 @@ function MainApp() {
   };
 
   const tabs = {
-    dashboard:    <Dashboard onNavigateTransactionsByStatus={(filter) => { setTxNavigationFilter(filter); setActiveTab("transactions"); }} />,
+    dashboard:    <Dashboard onNavigateTransactionsByStatus={(filter) => { setTxNavigationFilter(filter); setActiveTab("transactions"); }} onNavigateTransactionsByInvestment={goToTransactionsFromDashboardCashFlow} />,
     portfolios:   <PortfoliosTab onQuickAddInvestment={quickAddInvestment} onViewInvestments={goToInvestmentsForPortfolio} />,
     investments:  <InvestmentsTab onQuickAddTransaction={quickAddTransaction} onViewTransactions={goToTransactionsForInvestment} modalPrefill={investmentPrefill} navigationFilter={investmentNavigationFilter} onModalPrefillConsumed={() => setInvestmentPrefill(null)} showPortfolioBack={showPortfolioBackInInvestments || sessionStorage.getItem("investments_from_portfolio_link_v1") === "1"} onPortfolioBack={handlePortfolioBackFromInvestments} />,
-    transactions: <TransactionsTab showSmartBack={smartBackVisible} onSmartBack={handleSmartBack} navigationFilter={txNavigationFilter} modalPrefill={transactionPrefill} />,
+    transactions: <TransactionsTab showSmartBack={smartBackVisible} onSmartBack={handleSmartBack} onBackToDashboard={() => setActiveTab("dashboard")} navigationFilter={txNavigationFilter} modalPrefill={transactionPrefill} />,
     statistics:   <StatisticsTab />,
     users:        canManageUsers ? <UserManagementTab /> : <Dashboard />,
     settings:     <SettingsTab />,
