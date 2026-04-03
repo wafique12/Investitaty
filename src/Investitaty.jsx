@@ -11,6 +11,7 @@ import {
 import { supabase, hasSupabaseConfig, hasSupabaseClient } from "./lib/supabaseClient";
 import BackupService from "./services/BackupService";
 import { DRIVE_DB_PATH, ensureDriveOk, getDriveAppFolders, setDriveUnauthorizedHandler } from "./services/DrivePaths";
+import pkg from "../package.json";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONFIG
@@ -38,6 +39,7 @@ const INACTIVITY_TIMEOUT_MS = 20 * 60 * 1000;
 const AUTH_DEBUG_PREFIX = "[AuthFlow]";
 const OWNER_PROTECTED_EMAIL = "wafique22@gmail.com";
 const ARCHIVED_FILTER = "__archived__";
+const RUNTIME_ENV = String(pkg?.environment || "").trim().toLowerCase();
 
 const normalizeRole = (role) => {
   const value = String(role || "").trim().toLowerCase();
@@ -5492,7 +5494,9 @@ function StatisticsTab() {
     }
   });
 
+  const currentYear = new Date().getFullYear();
   visibleYears.forEach((year) => {
+    if (year > currentYear) return;
     lossByYearRisk[year] = lossByYearRisk[year] || { low:0, medium:0, high:0 };
     filteredInvestments.forEach((inv) => {
       const risk = toRiskBucket(inv?.risk);
@@ -5503,13 +5507,10 @@ function StatisticsTab() {
       const entriesForYear = priceHistory
         .filter((entry) => entry.investmentId === inv.id && new Date(entry.timestamp || entry.created_at || Date.now()).getFullYear() === year)
         .sort((a, b) => new Date(b.timestamp || b.created_at || 0) - new Date(a.timestamp || a.created_at || 0));
-      const previousYearEntries = priceHistory
-        .filter((entry) => entry.investmentId === inv.id && new Date(entry.timestamp || entry.created_at || Date.now()).getFullYear() === year - 1)
-        .sort((a, b) => new Date(b.timestamp || b.created_at || 0) - new Date(a.timestamp || a.created_at || 0));
       const latest = entriesForYear[0];
-      const previousYearLatest = previousYearEntries[0];
-      const baselinePerUnit = Number(previousYearLatest?.currentPrice ?? inv.purchasePrice ?? 0);
-      const currentPerUnit = Number(latest?.currentPrice ?? inv.currentPrice ?? 0);
+      if (!latest) return;
+      const baselinePerUnit = Number(inv.purchasePrice ?? 0);
+      const currentPerUnit = Number(latest.currentPrice ?? 0);
       const qty = Number(inv.quantity) || 0;
       const yearDelta = (currentPerUnit - baselinePerUnit) * qty;
       if (!Number.isFinite(yearDelta) || yearDelta === 0) return;
@@ -5543,10 +5544,14 @@ function StatisticsTab() {
   statusRows.push({ key:"status-total", isTotal:true, values:[t.totalLabel, ...statusTotals, statusTotals.reduce((sum, n) => sum + n, 0)] });
 
   const lossRows = visibleYears.map((year) => {
+    if (year > currentYear) {
+      return { key:`loss-${year}`, values:[String(year), "-", "-", "-", "-"] };
+    }
     const row = lossByYearRisk[year] || { low:0, medium:0, high:0 };
     return { key:`loss-${year}`, values:[String(year), row.low, row.medium, row.high, row.low + row.medium + row.high] };
   });
   const lossTotals = lossRows.reduce((acc, row) => {
+    if (typeof row.values[1] !== "number" || typeof row.values[2] !== "number" || typeof row.values[3] !== "number") return acc;
     acc[0] += row.values[1]; acc[1] += row.values[2]; acc[2] += row.values[3];
     return acc;
   }, [0, 0, 0]);
@@ -6090,6 +6095,12 @@ function MainApp() {
   const [showPortfolioBackInInvestments, setShowPortfolioBackInInvestments] = useState(false);
   const mainRef = useRef(null);
   const isMobile = useIsMobile();
+
+  useEffect(() => {
+    document.title = RUNTIME_ENV && RUNTIME_ENV !== "production"
+      ? `Investaty - ${RUNTIME_ENV}`
+      : "Investaty";
+  }, []);
 
   useEffect(() => {
     localStorage.setItem(TAB_STORAGE_KEY, activeTab);
