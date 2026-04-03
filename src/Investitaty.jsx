@@ -134,7 +134,7 @@ const TRANSLATIONS = {
     investmentVolumeRiskMatrix: "Investment Volume vs Risk Matrix",
     annualProfitsByRiskLevel: "Annual Profits by Risk Level",
     annualProfitsByStatus: "Annual Profits by Transaction Status",
-    lossAnalysisMatrix: "Loss Analysis Matrix",
+    lossAnalysisMatrix: "Capital Profits/Loss Analysis Matrix",
     assetAllocationOverview: "Asset Allocation Overview",
     centralizedCategoryAnalytics: "Centralized Item/Category Analytics",
     fundingSourceBreakdown: "Funding Sources Distribution",
@@ -395,7 +395,7 @@ const TRANSLATIONS = {
     investmentVolumeRiskMatrix: "مصفوفة حجم الاستثمار مقابل المخاطرة",
     annualProfitsByRiskLevel: "الأرباح السنوية حسب المخاطرة",
     annualProfitsByStatus: "الأرباح السنوية حسب حالة المعاملة",
-    lossAnalysisMatrix: "مصفوفة تحليل الخسائر",
+    lossAnalysisMatrix: "مصفوفة تحليل أرباح/خسائر رأس المال",
     assetAllocationOverview: "نظرة توزيع الأصول",
     centralizedCategoryAnalytics: "تحليلات العناصر/الفئات المركزية",
     fundingSourceBreakdown: "توزيع مصادر التمويل",
@@ -3232,7 +3232,9 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   const [expandedRow, setExpandedRow] = useState(null);
   const [collapsedPortfolios, setCollapsedPortfolios] = useState({});
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyEditingRowId, setHistoryEditingRowId] = useState(null);
   const [historyDraft, setHistoryDraft] = useState({});
+  const [historyNotice, setHistoryNotice] = useState("");
   const [modalMode, setModalMode] = useState("create");
 
   const EMPTY = useMemo(() => ({ portfolioId:"",name:"",quantity:"",purchasePrice:"",currentPrice:"",inheritPrice:false,purchaseDate:"",startDate:"",endDate:"",investmentMethod:"",risk:"",funding:[{source:"",amount:""}],status:"Active",notes:"" }), []);
@@ -3293,7 +3295,9 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     setForm({ portfolioId:inv.portfolioId,name:inv.name,quantity:inv.quantity||"",purchasePrice:inv.purchasePrice||"",
       currentPrice:inv.currentPrice||"",inheritPrice:Boolean(inv.inheritPrice),purchaseDate:inv.purchaseDate||"",startDate:inv.startDate||"",endDate:inv.endDate||"",investmentMethod:inv.investmentMethod||"",risk:inv.risk||"",funding:(inv.funding&&inv.funding.length?inv.funding:[{source:inv.source||"",amount:""}]),status:inv.status||"Active",notes:inv.notes||"" });
     setEditItem(inv); setModalMode("view"); setShowModal(true);
+    setHistoryEditingRowId(null);
     setHistoryDraft({});
+    setHistoryNotice("");
   };
 
   const selectedInvestmentHistory = useMemo(() => {
@@ -3312,7 +3316,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
       return !Number.isNaN(itemDate.getTime()) && itemDate.getFullYear() === year;
     }).length;
     if (countInYear <= 1) {
-      window.alert("Cannot delete the last record for this year.");
+      setHistoryNotice("Cannot delete the last record for this year.");
       return;
     }
     hardDeleteItem("priceHistory", entry.id);
@@ -3366,7 +3370,9 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     setExpandedRow(null);
     setCollapsedPortfolios({});
     setShowHistoryModal(false);
+    setHistoryEditingRowId(null);
     setHistoryDraft({});
+    setHistoryNotice("");
     setModalMode("create");
     setFilterStartDate("");
     setFilterEndDate("");
@@ -3386,7 +3392,9 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     setShowHistoryModal(false);
     setEditItem(null);
     setModalMode("create");
+    setHistoryEditingRowId(null);
     setHistoryDraft({});
+    setHistoryNotice("");
     setForm(EMPTY);
     setFormError("");
     setInvalidFields({});
@@ -3754,7 +3762,15 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
           )}
           <div style={{ display:"flex",justifyContent:"flex-end",gap:"10px",marginTop:"8px" }}>
             {modalMode==="view" && (<>
-              <Btn variant="secondary" onClick={()=>setShowHistoryModal(true)} style={{ background:"#1e3a8a", borderColor:"#1d4ed8", color:"#dbeafe" }}>{t.viewPriceHistory || "View Price History"}</Btn>
+              <button
+                type="button"
+                onClick={()=>setShowHistoryModal(true)}
+                style={{ background:"#1e3a8a", border:"1px solid #1d4ed8", color:"#dbeafe", padding:"8px 12px", borderRadius:"8px", fontSize:"0.82rem", fontWeight:600, cursor:"pointer", transition:"background 0.15s ease" }}
+                onMouseEnter={(e)=>{ e.currentTarget.style.background = "#1d4ed8"; }}
+                onMouseLeave={(e)=>{ e.currentTarget.style.background = "#1e3a8a"; }}
+              >
+                {t.viewPriceHistory || "View Price History"}
+              </button>
               <Btn onClick={()=>setModalMode("edit")}>{t.editInModal}</Btn>
               <Btn variant="secondary" onClick={closeModal}>{t.returnLabel}</Btn>
             </>)}
@@ -3770,24 +3786,30 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
         </Modal>
       )}
       {showHistoryModal && editItem && (
-        <Modal title={t.priceHistoryLog || "Price History Log"} maxWidth="760px" onClose={() => { setShowHistoryModal(false); setHistoryDraft({}); }}>
-          <div style={{ fontSize:"0.8rem", color:T.textSecondary, marginBottom:"10px" }}>{editItem.name}</div>
-          <div style={{ maxHeight:"420px", overflowY:"auto", paddingRight:"2px" }}>
+        <Modal title={t.priceHistoryLog || "Price History Log"} maxWidth="760px" onClose={() => { setShowHistoryModal(false); setHistoryEditingRowId(null); setHistoryDraft({}); setHistoryNotice(""); }}>
+          <div style={{ fontSize:"0.9rem", color:T.textPrimary, fontWeight:700, marginBottom:"10px" }}>{editItem.name}</div>
+          {historyNotice && (
+            <div style={{ marginBottom:"10px", padding:"10px 12px", borderRadius:"8px", border:"1px solid rgba(245,158,11,0.4)", background:"rgba(245,158,11,0.12)", color:"#f59e0b", fontSize:"0.8rem" }}>
+              {historyNotice}
+            </div>
+          )}
+          <div style={{ maxHeight:"420px", overflowY:"auto", overflowX:"auto", paddingRight:"2px" }}>
             {selectedInvestmentHistory.length === 0 ? (
               <EmptyState text={t.noRecords} />
             ) : (
-              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.8rem" }}>
+              <table style={{ width:"100%", minWidth:"680px", borderCollapse:"collapse", fontSize:"0.8rem" }}>
                 <thead>
                   <tr style={{ background:T.bgApp }}>
-                    <th style={{ padding:"9px 10px", borderBottom:`1px solid ${T.border}`, color:T.textMuted, textAlign:isRTL ? "right" : "left" }}>{t.purchasePrice}</th>
-                    <th style={{ padding:"9px 10px", borderBottom:`1px solid ${T.border}`, color:T.textMuted, textAlign:isRTL ? "right" : "left" }}>{t.currentPrice}</th>
-                    <th style={{ padding:"9px 10px", borderBottom:`1px solid ${T.border}`, color:T.textMuted, textAlign:isRTL ? "right" : "left" }}>{t.date}</th>
+                    <th style={{ padding:"9px 10px", borderBottom:`1px solid ${T.border}`, color:T.textMuted, textAlign:isRTL ? "right" : "left", whiteSpace:"nowrap" }}>{t.purchasePrice}</th>
+                    <th style={{ padding:"9px 10px", borderBottom:`1px solid ${T.border}`, color:T.textMuted, textAlign:isRTL ? "right" : "left", whiteSpace:"nowrap" }}>{t.currentPrice}</th>
+                    <th style={{ padding:"9px 10px", borderBottom:`1px solid ${T.border}`, color:T.textMuted, textAlign:isRTL ? "right" : "left", whiteSpace:"nowrap" }}>{t.date}</th>
                     <th style={{ padding:"9px 10px", borderBottom:`1px solid ${T.border}`, color:T.textMuted, textAlign:"right" }}>{t.actions || "Actions"}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {selectedInvestmentHistory.map((entry, idx) => {
                     const ts = entry.timestamp || entry.created_at || "";
+                    const isEditing = historyEditingRowId === entry.id;
                     const rowDraft = historyDraft[entry.id] || {
                       purchasePrice: entry.purchasePrice ?? "",
                       currentPrice: entry.currentPrice ?? "",
@@ -3796,24 +3818,55 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                     return (
                       <tr key={entry.id} style={{ background:idx % 2 ? T.bgCard : "transparent" }}>
                         <td style={{ padding:"8px 10px", borderTop:`1px solid ${T.border}` }}>
-                          <Input type="number" value={rowDraft.purchasePrice} onChange={(e)=>setHistoryDraft((prev)=>({ ...prev, [entry.id]: { ...rowDraft, purchasePrice:e.target.value } }))} isRTL={isRTL} />
+                          {isEditing ? (
+                            <Input type="number" value={rowDraft.purchasePrice} onChange={(e)=>setHistoryDraft((prev)=>({ ...prev, [entry.id]: { ...rowDraft, purchasePrice:e.target.value } }))} isRTL={isRTL} />
+                          ) : (
+                            <span style={{ color:T.textPrimary, whiteSpace:"nowrap" }}>{rowDraft.purchasePrice || "0"}</span>
+                          )}
                         </td>
                         <td style={{ padding:"8px 10px", borderTop:`1px solid ${T.border}` }}>
-                          <Input type="number" value={rowDraft.currentPrice} onChange={(e)=>setHistoryDraft((prev)=>({ ...prev, [entry.id]: { ...rowDraft, currentPrice:e.target.value } }))} isRTL={isRTL} />
+                          {isEditing ? (
+                            <Input type="number" value={rowDraft.currentPrice} onChange={(e)=>setHistoryDraft((prev)=>({ ...prev, [entry.id]: { ...rowDraft, currentPrice:e.target.value } }))} isRTL={isRTL} />
+                          ) : (
+                            <span style={{ color:T.textPrimary, whiteSpace:"nowrap" }}>{rowDraft.currentPrice || "0"}</span>
+                          )}
                         </td>
                         <td style={{ padding:"8px 10px", borderTop:`1px solid ${T.border}` }}>
-                          <Input type="datetime-local" value={rowDraft.timestamp} onChange={(e)=>setHistoryDraft((prev)=>({ ...prev, [entry.id]: { ...rowDraft, timestamp:e.target.value } }))} isRTL={isRTL} />
+                          {isEditing ? (
+                            <Input type="datetime-local" value={rowDraft.timestamp} onChange={(e)=>setHistoryDraft((prev)=>({ ...prev, [entry.id]: { ...rowDraft, timestamp:e.target.value } }))} isRTL={isRTL} />
+                          ) : (
+                            <span style={{ color:T.textSecondary, whiteSpace:"nowrap" }}>{ts ? new Date(ts).toLocaleString() : "—"}</span>
+                          )}
                         </td>
                         <td style={{ padding:"8px 10px", borderTop:`1px solid ${T.border}`, textAlign:"right" }}>
                           <div style={{ display:"inline-flex", gap:"6px" }}>
-                            <Btn size="sm" onClick={() => {
-                              patchItem("priceHistory", entry.id, {
-                                purchasePrice: rowDraft.purchasePrice ?? "",
-                                currentPrice: rowDraft.currentPrice ?? "",
-                                timestamp: rowDraft.timestamp ? new Date(rowDraft.timestamp).toISOString() : entry.timestamp,
-                              });
-                            }}>{t.save}</Btn>
-                            <button type="button" onClick={() => removeHistoryEntry(entry)} style={{ border:"none", background:"transparent", color:T.negative, cursor:"pointer", display:"flex", padding:"4px" }}><Trash2 size={14}/></button>
+                            {!isEditing ? (
+                              <button
+                                type="button"
+                                data-icon-tooltip={t.edit}
+                                onClick={() => {
+                                  setHistoryNotice("");
+                                  setHistoryEditingRowId(entry.id);
+                                  setHistoryDraft((prev)=>({ ...prev, [entry.id]: rowDraft }));
+                                }}
+                                style={{ border:"none", background:"transparent", color:T.info, cursor:"pointer", display:"flex", padding:"4px" }}
+                              ><Edit3 size={14}/></button>
+                            ) : (
+                              <button
+                                type="button"
+                                data-icon-tooltip={t.save}
+                                onClick={() => {
+                                  patchItem("priceHistory", entry.id, {
+                                    purchasePrice: rowDraft.purchasePrice ?? "",
+                                    currentPrice: rowDraft.currentPrice ?? "",
+                                    timestamp: rowDraft.timestamp ? new Date(rowDraft.timestamp).toISOString() : entry.timestamp,
+                                  });
+                                  setHistoryEditingRowId(null);
+                                }}
+                                style={{ border:"none", background:"transparent", color:T.positive, cursor:"pointer", display:"flex", padding:"4px" }}
+                              ><Check size={14}/></button>
+                            )}
+                            <button type="button" data-icon-tooltip={t.deleteItem} onClick={() => removeHistoryEntry(entry)} style={{ border:"none", background:"transparent", color:T.negative, cursor:"pointer", display:"flex", padding:"4px" }}><Trash2 size={14}/></button>
                           </div>
                         </td>
                       </tr>
@@ -3824,7 +3877,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
             )}
           </div>
           <div style={{ display:"flex", justifyContent:"flex-end", marginTop:"10px" }}>
-            <Btn variant="secondary" onClick={() => { setShowHistoryModal(false); setHistoryDraft({}); }}>{t.close}</Btn>
+            <Btn variant="secondary" onClick={() => { setShowHistoryModal(false); setHistoryEditingRowId(null); setHistoryDraft({}); setHistoryNotice(""); }}>{t.close}</Btn>
           </div>
         </Modal>
       )}
@@ -3947,6 +4000,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const [pageSize, setPageSize] = useState(50);
   const [currentPage, setCurrentPage] = useState(1);
   const [goToPageInput, setGoToPageInput] = useState("1");
+  const autoOpenedTxRef = useRef("");
 
   const EMPTY = { portfolioId:"",investmentId:"",category:"",amount:"",date:"",dueDate:"",depositedAt:"",collectedAt:"",type:"income",status:"recorded",notes:"" };
   const [form, setForm] = useState(EMPTY);
@@ -4218,8 +4272,11 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
     setFilterEndDate(navigationFilter.endDate ? String(navigationFilter.endDate) : "");
     setFilterDateField(normalizedDateField);
     if (navigationFilter.transactionId) {
+      const navKey = `${navigationFilter.stamp || "nostamp"}:${navigationFilter.transactionId}`;
+      if (autoOpenedTxRef.current === navKey) return;
       const targetTx = allTx.find((tx) => String(tx.id) === String(navigationFilter.transactionId));
       if (targetTx) openView(targetTx);
+      autoOpenedTxRef.current = navKey;
     }
   }, [navigationFilter, allInvestments, allTx]);
 
@@ -5440,16 +5497,23 @@ function StatisticsTab() {
     filteredInvestments.forEach((inv) => {
       const risk = toRiskBucket(inv?.risk);
       if (!risk) return;
+      const investmentStart = new Date(inv.startDate || inv.purchaseDate || inv.created_at || Date.now()).getFullYear();
+      if (!Number.isFinite(investmentStart) || year < investmentStart) return;
+
       const entriesForYear = priceHistory
         .filter((entry) => entry.investmentId === inv.id && new Date(entry.timestamp || entry.created_at || Date.now()).getFullYear() === year)
         .sort((a, b) => new Date(b.timestamp || b.created_at || 0) - new Date(a.timestamp || a.created_at || 0));
+      const previousYearEntries = priceHistory
+        .filter((entry) => entry.investmentId === inv.id && new Date(entry.timestamp || entry.created_at || Date.now()).getFullYear() === year - 1)
+        .sort((a, b) => new Date(b.timestamp || b.created_at || 0) - new Date(a.timestamp || a.created_at || 0));
       const latest = entriesForYear[0];
-      const purchasePerUnit = Number(latest?.purchasePrice ?? inv.purchasePrice ?? 0);
+      const previousYearLatest = previousYearEntries[0];
+      const baselinePerUnit = Number(previousYearLatest?.currentPrice ?? inv.purchasePrice ?? 0);
       const currentPerUnit = Number(latest?.currentPrice ?? inv.currentPrice ?? 0);
       const qty = Number(inv.quantity) || 0;
-      const rawLoss = Math.max((purchasePerUnit - currentPerUnit) * qty, 0);
-      if (rawLoss <= 0) return;
-      lossByYearRisk[year][risk] += toBaseAmount(db, rawLoss, portfolioCurrency(db, inv.portfolioId), primaryCurrency);
+      const yearDelta = (currentPerUnit - baselinePerUnit) * qty;
+      if (!Number.isFinite(yearDelta) || yearDelta === 0) return;
+      lossByYearRisk[year][risk] += toBaseAmount(db, yearDelta, portfolioCurrency(db, inv.portfolioId), primaryCurrency);
     });
   });
 
