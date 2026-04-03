@@ -1694,6 +1694,34 @@ function AppProvider({ children }) {
         if (["cancelled", "paused", "closed"].includes(nextStatus)) {
           next.investments = (prev.investments || []).map((inv) => inv.portfolioId === id ? { ...inv, status: patch.status } : inv);
         }
+        const existingPortfolio = (prev.portfolios || []).find((item) => item.id === id);
+        const hasCurrentPricePatch = Object.prototype.hasOwnProperty.call(patch || {}, "current_price");
+        if (existingPortfolio && hasCurrentPricePatch) {
+          const prevPriceRaw = existingPortfolio.current_price;
+          const nextPriceRaw = patch.current_price;
+          const prevPriceNum = Number(prevPriceRaw);
+          const nextPriceNum = Number(nextPriceRaw);
+          const priceChanged = (Number.isFinite(prevPriceNum) && Number.isFinite(nextPriceNum))
+            ? prevPriceNum !== nextPriceNum
+            : String(prevPriceRaw ?? "") !== String(nextPriceRaw ?? "");
+
+          if (priceChanged) {
+            const timestamp = new Date().toISOString();
+            const syncedInvestments = (prev.investments || []).filter((inv) => inv.portfolioId === id && Boolean(inv.inheritPrice));
+            if (syncedInvestments.length) {
+              const syncedEntries = syncedInvestments.map((inv, idx) => ({
+                id: `${Date.now()}_${idx}_${Math.random().toString(36).slice(2)}`,
+                created_at: timestamp,
+                investmentId: inv.id,
+                investmentName: inv.name || "—",
+                purchasePrice: String(inv.purchasePrice ?? ""),
+                currentPrice: String(nextPriceRaw ?? ""),
+                timestamp,
+              }));
+              next.priceHistory = [...(prev.priceHistory || []), ...syncedEntries];
+            }
+          }
+        }
       }
       return next;
     });
@@ -4537,7 +4565,26 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
       </Card>
 
       {showModal && (
-        <Modal title={modalMode==="create"?t.addTransaction:`${t.view} ${t.transactions}`} onClose={closeTransactionModal}>
+        <Modal
+          title={(() => {
+            if (modalMode === "create") return t.addTransaction;
+            const modalInvestmentId = editItem?.investmentId || form.investmentId || filterInvestment || "";
+            const modalInvestmentName = allInvestments.find((inv) => inv.id === modalInvestmentId)?.name
+              || navigationFilter?.investmentName
+              || "";
+            return (
+              <span style={{ display:"inline-flex", alignItems:"baseline", gap:"8px", flexWrap:"wrap" }}>
+                <span>{`${t.view} ${t.transactions}`}</span>
+                {modalInvestmentName && (
+                  <span style={{ fontSize:"0.84em", color:T.textSecondary, fontWeight:500 }}>
+                    - {modalInvestmentName}
+                  </span>
+                )}
+              </span>
+            );
+          })()}
+          onClose={closeTransactionModal}
+        >
           {modalMode === "view" ? (
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"10px" }}>
               <ReadOnlyField label={t.transactionType} value={form.type} />
