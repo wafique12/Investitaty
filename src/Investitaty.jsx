@@ -2789,6 +2789,7 @@ function Dashboard({ onNavigateTransactionsByStatus, onNavigateTransactionsByInv
                       onClick={() => {
                         if (!investmentName) return;
                         onNavigateTransactionsByInvestment?.({
+                          transactionId: tx.id || "",
                           investmentId: tx.investmentId || "",
                           investmentName,
                           portfolioId: tx.portfolioId || "",
@@ -3231,7 +3232,6 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   const [expandedRow, setExpandedRow] = useState(null);
   const [collapsedPortfolios, setCollapsedPortfolios] = useState({});
   const [showHistoryModal, setShowHistoryModal] = useState(false);
-  const [editingHistoryId, setEditingHistoryId] = useState(null);
   const [historyDraft, setHistoryDraft] = useState({});
   const [modalMode, setModalMode] = useState("create");
 
@@ -3293,7 +3293,6 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     setForm({ portfolioId:inv.portfolioId,name:inv.name,quantity:inv.quantity||"",purchasePrice:inv.purchasePrice||"",
       currentPrice:inv.currentPrice||"",inheritPrice:Boolean(inv.inheritPrice),purchaseDate:inv.purchaseDate||"",startDate:inv.startDate||"",endDate:inv.endDate||"",investmentMethod:inv.investmentMethod||"",risk:inv.risk||"",funding:(inv.funding&&inv.funding.length?inv.funding:[{source:inv.source||"",amount:""}]),status:inv.status||"Active",notes:inv.notes||"" });
     setEditItem(inv); setModalMode("view"); setShowModal(true);
-    setEditingHistoryId(null);
     setHistoryDraft({});
   };
 
@@ -3317,10 +3316,11 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
       return;
     }
     hardDeleteItem("priceHistory", entry.id);
-    if (editingHistoryId === entry.id) {
-      setEditingHistoryId(null);
-      setHistoryDraft({});
-    }
+    setHistoryDraft((prev) => {
+      const next = { ...prev };
+      delete next[entry.id];
+      return next;
+    });
   };
 
   const updateFunding = (idx, key, value) => {
@@ -3366,7 +3366,6 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     setExpandedRow(null);
     setCollapsedPortfolios({});
     setShowHistoryModal(false);
-    setEditingHistoryId(null);
     setHistoryDraft({});
     setModalMode("create");
     setFilterStartDate("");
@@ -3387,7 +3386,6 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     setShowHistoryModal(false);
     setEditItem(null);
     setModalMode("create");
-    setEditingHistoryId(null);
     setHistoryDraft({});
     setForm(EMPTY);
     setFormError("");
@@ -3756,7 +3754,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
           )}
           <div style={{ display:"flex",justifyContent:"flex-end",gap:"10px",marginTop:"8px" }}>
             {modalMode==="view" && (<>
-              <Btn variant="secondary" onClick={()=>setShowHistoryModal(true)}>{t.viewPriceHistory || "View Price History"}</Btn>
+              <Btn variant="secondary" onClick={()=>setShowHistoryModal(true)} style={{ background:"#1e3a8a", borderColor:"#1d4ed8", color:"#dbeafe" }}>{t.viewPriceHistory || "View Price History"}</Btn>
               <Btn onClick={()=>setModalMode("edit")}>{t.editInModal}</Btn>
               <Btn variant="secondary" onClick={closeModal}>{t.returnLabel}</Btn>
             </>)}
@@ -3772,61 +3770,61 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
         </Modal>
       )}
       {showHistoryModal && editItem && (
-        <Modal title={t.priceHistoryLog || "Price History Log"} maxWidth="760px" onClose={() => { setShowHistoryModal(false); setEditingHistoryId(null); setHistoryDraft({}); }}>
+        <Modal title={t.priceHistoryLog || "Price History Log"} maxWidth="760px" onClose={() => { setShowHistoryModal(false); setHistoryDraft({}); }}>
           <div style={{ fontSize:"0.8rem", color:T.textSecondary, marginBottom:"10px" }}>{editItem.name}</div>
-          <div style={{ maxHeight:"420px", overflowY:"auto", paddingRight:"2px", display:"flex", flexDirection:"column", gap:"8px" }}>
+          <div style={{ maxHeight:"420px", overflowY:"auto", paddingRight:"2px" }}>
             {selectedInvestmentHistory.length === 0 ? (
               <EmptyState text={t.noRecords} />
-            ) : selectedInvestmentHistory.map((entry) => {
-              const isEditing = editingHistoryId === entry.id;
-              const ts = entry.timestamp || entry.created_at || "";
-              return (
-                <div key={entry.id} style={{ border:`1px solid ${T.border}`, borderRadius:"10px", padding:"10px 12px", background:T.bgCard }}>
-                  {isEditing ? (
-                    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))", gap:"8px", alignItems:"end" }}>
-                      <FormField label={t.purchasePrice}><Input type="number" value={historyDraft.purchasePrice ?? ""} onChange={(e)=>setHistoryDraft((prev)=>({ ...prev, purchasePrice:e.target.value }))} isRTL={isRTL} /></FormField>
-                      <FormField label={t.currentPrice}><Input type="number" value={historyDraft.currentPrice ?? ""} onChange={(e)=>setHistoryDraft((prev)=>({ ...prev, currentPrice:e.target.value }))} isRTL={isRTL} /></FormField>
-                      <FormField label={t.date}><Input type="datetime-local" value={historyDraft.timestamp ?? ""} onChange={(e)=>setHistoryDraft((prev)=>({ ...prev, timestamp:e.target.value }))} isRTL={isRTL} /></FormField>
-                      <div style={{ display:"flex", gap:"6px", justifyContent:"flex-end" }}>
-                        <Btn size="sm" onClick={() => {
-                          patchItem("priceHistory", entry.id, {
-                            purchasePrice: historyDraft.purchasePrice ?? "",
-                            currentPrice: historyDraft.currentPrice ?? "",
-                            timestamp: historyDraft.timestamp ? new Date(historyDraft.timestamp).toISOString() : entry.timestamp,
-                          });
-                          setEditingHistoryId(null);
-                          setHistoryDraft({});
-                        }}>{t.save}</Btn>
-                        <Btn size="sm" variant="secondary" onClick={() => { setEditingHistoryId(null); setHistoryDraft({}); }}>{t.cancel}</Btn>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"10px", flexWrap:"wrap" }}>
-                      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))", gap:"8px", flex:1, minWidth:"220px" }}>
-                        <ReadOnlyField label={t.purchasePrice} value={entry.purchasePrice} />
-                        <ReadOnlyField label={t.currentPrice} value={entry.currentPrice} />
-                        <ReadOnlyField label={t.date} value={ts ? new Date(ts).toLocaleString() : "—"} />
-                      </div>
-                      <div style={{ display:"flex", gap:"6px" }}>
-                        <button type="button" onClick={() => {
-                          const timestampValue = ts ? new Date(ts) : null;
-                          setEditingHistoryId(entry.id);
-                          setHistoryDraft({
-                            purchasePrice: entry.purchasePrice ?? "",
-                            currentPrice: entry.currentPrice ?? "",
-                            timestamp: timestampValue && !Number.isNaN(timestampValue.getTime()) ? timestampValue.toISOString().slice(0, 16) : "",
-                          });
-                        }} style={{ border:"none", background:"transparent", color:T.info, cursor:"pointer", display:"flex", padding:"4px" }}><Edit3 size={14}/></button>
-                        <button type="button" onClick={() => removeHistoryEntry(entry)} style={{ border:"none", background:"transparent", color:T.negative, cursor:"pointer", display:"flex", padding:"4px" }}><Trash2 size={14}/></button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            ) : (
+              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.8rem" }}>
+                <thead>
+                  <tr style={{ background:T.bgApp }}>
+                    <th style={{ padding:"9px 10px", borderBottom:`1px solid ${T.border}`, color:T.textMuted, textAlign:isRTL ? "right" : "left" }}>{t.purchasePrice}</th>
+                    <th style={{ padding:"9px 10px", borderBottom:`1px solid ${T.border}`, color:T.textMuted, textAlign:isRTL ? "right" : "left" }}>{t.currentPrice}</th>
+                    <th style={{ padding:"9px 10px", borderBottom:`1px solid ${T.border}`, color:T.textMuted, textAlign:isRTL ? "right" : "left" }}>{t.date}</th>
+                    <th style={{ padding:"9px 10px", borderBottom:`1px solid ${T.border}`, color:T.textMuted, textAlign:"right" }}>{t.actions || "Actions"}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedInvestmentHistory.map((entry, idx) => {
+                    const ts = entry.timestamp || entry.created_at || "";
+                    const rowDraft = historyDraft[entry.id] || {
+                      purchasePrice: entry.purchasePrice ?? "",
+                      currentPrice: entry.currentPrice ?? "",
+                      timestamp: ts ? new Date(ts).toISOString().slice(0, 16) : "",
+                    };
+                    return (
+                      <tr key={entry.id} style={{ background:idx % 2 ? T.bgCard : "transparent" }}>
+                        <td style={{ padding:"8px 10px", borderTop:`1px solid ${T.border}` }}>
+                          <Input type="number" value={rowDraft.purchasePrice} onChange={(e)=>setHistoryDraft((prev)=>({ ...prev, [entry.id]: { ...rowDraft, purchasePrice:e.target.value } }))} isRTL={isRTL} />
+                        </td>
+                        <td style={{ padding:"8px 10px", borderTop:`1px solid ${T.border}` }}>
+                          <Input type="number" value={rowDraft.currentPrice} onChange={(e)=>setHistoryDraft((prev)=>({ ...prev, [entry.id]: { ...rowDraft, currentPrice:e.target.value } }))} isRTL={isRTL} />
+                        </td>
+                        <td style={{ padding:"8px 10px", borderTop:`1px solid ${T.border}` }}>
+                          <Input type="datetime-local" value={rowDraft.timestamp} onChange={(e)=>setHistoryDraft((prev)=>({ ...prev, [entry.id]: { ...rowDraft, timestamp:e.target.value } }))} isRTL={isRTL} />
+                        </td>
+                        <td style={{ padding:"8px 10px", borderTop:`1px solid ${T.border}`, textAlign:"right" }}>
+                          <div style={{ display:"inline-flex", gap:"6px" }}>
+                            <Btn size="sm" onClick={() => {
+                              patchItem("priceHistory", entry.id, {
+                                purchasePrice: rowDraft.purchasePrice ?? "",
+                                currentPrice: rowDraft.currentPrice ?? "",
+                                timestamp: rowDraft.timestamp ? new Date(rowDraft.timestamp).toISOString() : entry.timestamp,
+                              });
+                            }}>{t.save}</Btn>
+                            <button type="button" onClick={() => removeHistoryEntry(entry)} style={{ border:"none", background:"transparent", color:T.negative, cursor:"pointer", display:"flex", padding:"4px" }}><Trash2 size={14}/></button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
           </div>
           <div style={{ display:"flex", justifyContent:"flex-end", marginTop:"10px" }}>
-            <Btn variant="secondary" onClick={() => { setShowHistoryModal(false); setEditingHistoryId(null); setHistoryDraft({}); }}>{t.close}</Btn>
+            <Btn variant="secondary" onClick={() => { setShowHistoryModal(false); setHistoryDraft({}); }}>{t.close}</Btn>
           </div>
         </Modal>
       )}
@@ -4219,7 +4217,11 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
     setFilterStartDate(navigationFilter.startDate ? String(navigationFilter.startDate) : "");
     setFilterEndDate(navigationFilter.endDate ? String(navigationFilter.endDate) : "");
     setFilterDateField(normalizedDateField);
-  }, [navigationFilter, allInvestments]);
+    if (navigationFilter.transactionId) {
+      const targetTx = allTx.find((tx) => String(tx.id) === String(navigationFilter.transactionId));
+      if (targetTx) openView(targetTx);
+    }
+  }, [navigationFilter, allInvestments, allTx]);
 
   useEffect(() => {
     if (!filterInvestment) return;
@@ -5366,6 +5368,7 @@ function StatisticsTab() {
 
   const investments = visible(db?.investments || []);
   const transactions = visible(db?.transactions || []);
+  const priceHistory = db?.priceHistory || [];
   const portfolios = visible(db?.portfolios || []);
   const primaryCurrency = selectedCountry?.baseCurrency || baseCurrencyCode(db);
   const investmentStatuses = db?.settings?.investmentStatuses?.length ? db.settings.investmentStatuses : ["Active", "Paused", "Closed"];
@@ -5388,7 +5391,13 @@ function StatisticsTab() {
   };
 
   const invById = new Map(filteredInvestments.map((i) => [i.id, i]));
-  const yearlyRows = [...new Set(filteredTransactions.map((tx) => new Date(tx.date || tx.created_at || Date.now()).getFullYear()))]
+  const yearlyRows = [...new Set([
+    ...filteredTransactions.map((tx) => new Date(tx.date || tx.created_at || Date.now()).getFullYear()),
+    ...priceHistory
+      .filter((entry) => filteredInvestmentIds.has(entry.investmentId))
+      .map((entry) => new Date(entry.timestamp || entry.created_at || Date.now()).getFullYear()),
+    ...filteredInvestments.map((inv) => new Date(inv.purchaseDate || inv.created_at || Date.now()).getFullYear()),
+  ])]
     .filter((y) => Number.isFinite(y))
     .sort((a, b) => b - a);
   const visibleYears = selectedYears.length ? yearlyRows.filter((y) => selectedYears.includes(String(y))) : yearlyRows;
@@ -5417,7 +5426,6 @@ function StatisticsTab() {
     const inv = invById.get(tx.investmentId);
     const risk = toRiskBucket(inv?.risk);
     incomeByYearRisk[year] = incomeByYearRisk[year] || { low:0, medium:0, high:0 };
-    lossByYearRisk[year] = lossByYearRisk[year] || { low:0, medium:0, high:0 };
     incomeByYearStatus[statusYear] = incomeByYearStatus[statusYear] || Object.fromEntries(statuses.map((s)=>[s,0]));
 
     if (tx.type === "income" && tx.status !== "cancelled") {
@@ -5425,10 +5433,24 @@ function StatisticsTab() {
       if (incomeByYearStatus[statusYear][tx.status] === undefined) incomeByYearStatus[statusYear][tx.status] = 0;
       incomeByYearStatus[statusYear][tx.status] += toBaseAmount(db, parseFloat(tx.amount) || 0, portfolioCurrency(db, tx.portfolioId), primaryCurrency);
     }
+  });
 
-    if (tx.type === "expense" && tx.status !== "cancelled" && risk) {
-      lossByYearRisk[year][risk] += toBaseAmount(db, parseFloat(tx.amount) || 0, portfolioCurrency(db, tx.portfolioId), primaryCurrency);
-    }
+  visibleYears.forEach((year) => {
+    lossByYearRisk[year] = lossByYearRisk[year] || { low:0, medium:0, high:0 };
+    filteredInvestments.forEach((inv) => {
+      const risk = toRiskBucket(inv?.risk);
+      if (!risk) return;
+      const entriesForYear = priceHistory
+        .filter((entry) => entry.investmentId === inv.id && new Date(entry.timestamp || entry.created_at || Date.now()).getFullYear() === year)
+        .sort((a, b) => new Date(b.timestamp || b.created_at || 0) - new Date(a.timestamp || a.created_at || 0));
+      const latest = entriesForYear[0];
+      const purchasePerUnit = Number(latest?.purchasePrice ?? inv.purchasePrice ?? 0);
+      const currentPerUnit = Number(latest?.currentPrice ?? inv.currentPrice ?? 0);
+      const qty = Number(inv.quantity) || 0;
+      const rawLoss = Math.max((purchasePerUnit - currentPerUnit) * qty, 0);
+      if (rawLoss <= 0) return;
+      lossByYearRisk[year][risk] += toBaseAmount(db, rawLoss, portfolioCurrency(db, inv.portfolioId), primaryCurrency);
+    });
   });
 
   const capitalRows = [
@@ -6064,6 +6086,7 @@ function MainApp() {
 
   const goToTransactionsFromDashboardCashFlow = (filter) => {
     setTxNavigationFilter({
+      transactionId: filter?.transactionId || "",
       investmentId: filter?.investmentId || "",
       investmentName: filter?.investmentName || "",
       portfolioId: filter?.portfolioId || "",
