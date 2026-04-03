@@ -3982,7 +3982,7 @@ function InvestmentDetailExpanded({ inv, txs, db }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // TRANSACTIONS TAB
 // ═══════════════════════════════════════════════════════════════════════════════
-function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmartBack }) {
+function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmartBack, onBackToDashboard }) {
 
   const { db, addItem, archiveItem, hardDeleteItem, patchItem, t, isRTL, font } = useApp();
   const [showModal, setShowModal] = useState(false);
@@ -4003,6 +4003,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const [currentPage, setCurrentPage] = useState(1);
   const [goToPageInput, setGoToPageInput] = useState("1");
   const autoOpenedTxRef = useRef("");
+  const [viewOpenedFromDashboard, setViewOpenedFromDashboard] = useState(false);
 
   const EMPTY = { portfolioId:"",investmentId:"",category:"",amount:"",date:"",dueDate:"",depositedAt:"",collectedAt:"",type:"income",status:"recorded",notes:"" };
   const [form, setForm] = useState(EMPTY);
@@ -4218,7 +4219,16 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const openView = (tx) => {
     setForm({ portfolioId:tx.portfolioId||"",investmentId:tx.investmentId||"",category:tx.category||"",
       amount:tx.amount||"",date:tx.date||"",dueDate:tx.dueDate||tx.due_date||"",depositedAt:tx.depositedAt||tx.deposited_at||"",collectedAt:tx.collectedAt||tx.collected_at||"",type:tx.type||"income",status:tx.status||"recorded",notes:tx.notes||"" });
+    setViewOpenedFromDashboard(false);
     setEditItem(tx); setModalMode("view"); setFormError(""); setInvalidFields({}); setShowModal(true);
+  };
+  const closeTransactionModal = () => {
+    setShowModal(false);
+    setEditItem(null);
+    setModalMode("create");
+    setFormError("");
+    setInvalidFields({});
+    setViewOpenedFromDashboard(false);
   };
 
   const totalInc = txIncome(filtered);
@@ -4277,7 +4287,10 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
       const navKey = `${navigationFilter.stamp || "nostamp"}:${navigationFilter.transactionId}`;
       if (autoOpenedTxRef.current === navKey) return;
       const targetTx = allTx.find((tx) => String(tx.id) === String(navigationFilter.transactionId));
-      if (targetTx) openView(targetTx);
+      if (targetTx) {
+        openView(targetTx);
+        setViewOpenedFromDashboard(Boolean(navigationFilter.fromDashboard));
+      }
       autoOpenedTxRef.current = navKey;
     }
   }, [navigationFilter, allInvestments, allTx]);
@@ -4514,7 +4527,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
       </Card>
 
       {showModal && (
-        <Modal title={modalMode==="create"?t.addTransaction:`${t.view} ${t.transactions}`} onClose={()=>{setShowModal(false);setEditItem(null);setModalMode("create");setFormError("");setInvalidFields({});}}>
+        <Modal title={modalMode==="create"?t.addTransaction:`${t.view} ${t.transactions}`} onClose={closeTransactionModal}>
           {modalMode === "view" ? (
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"10px" }}>
               <ReadOnlyField label={t.transactionType} value={form.type} />
@@ -4587,14 +4600,21 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
           <div style={{ display:"flex",justifyContent:"flex-end",gap:"10px",marginTop:"8px" }}>
             {modalMode==="view" && (<>
               <Btn onClick={()=>setModalMode("edit")}>{t.editInModal}</Btn>
-              <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");setFormError("");setInvalidFields({});}}>{t.returnLabel}</Btn>
+              <Btn variant="secondary" onClick={() => {
+                if (viewOpenedFromDashboard) {
+                  closeTransactionModal();
+                  onBackToDashboard?.();
+                  return;
+                }
+                closeTransactionModal();
+              }}>{t.returnLabel}</Btn>
             </>)}
             {modalMode==="edit" && (<>
               <Btn onClick={handleSave}>{t.save}</Btn>
               <Btn variant="secondary" onClick={()=>{ setForm({ portfolioId:editItem.portfolioId||"",investmentId:editItem.investmentId||"",category:editItem.category||"",amount:editItem.amount||"",date:editItem.date||"",dueDate:editItem.dueDate||editItem.due_date||"",depositedAt:editItem.depositedAt||editItem.deposited_at||"",collectedAt:editItem.collectedAt||editItem.collected_at||"",type:editItem.type||"income",status:editItem.status||"recorded",notes:editItem.notes||"" }); setFormError(""); setInvalidFields({}); setModalMode("view"); }}>{t.cancel}</Btn>
             </>)}
             {modalMode==="create" && (<>
-              <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");setFormError("");setInvalidFields({});}}>{t.cancel}</Btn>
+              <Btn variant="secondary" onClick={closeTransactionModal}>{t.cancel}</Btn>
               <Btn onClick={handleSave}>{t.save}</Btn>
             </>)}
           </div>
@@ -5341,7 +5361,7 @@ function FundingLegendGrid({ rows, currency = "USD", textColor = "#dbeafe", valu
   );
 }
 
-function StatisticsMatrixTable({ title, headers, rows, currency = "USD" }) {
+function StatisticsMatrixTable({ title, headers, rows, currency = "USD", colorizeNumeric = false }) {
   const { isRTL } = useApp();
   return (
     <div style={{ overflowX:"auto" }}>
@@ -5358,11 +5378,16 @@ function StatisticsMatrixTable({ title, headers, rows, currency = "USD" }) {
             const isTotal = row.isTotal;
             return (
               <tr key={row.key || idx} style={{ background:isTotal?"rgba(16,185,129,0.16)":(idx % 2 ? "rgba(148,163,184,0.07)" : "transparent") }}>
-                {row.values.map((cell, ci) => (
-                  <td key={`${row.key||idx}-${ci}`} style={{ padding:"10px 12px", borderTop:"1px solid rgba(148,163,184,0.16)", color:isTotal?"#f8fafc":"#cbd5e1", fontWeight:isTotal?700:500, whiteSpace:"nowrap", textAlign:isRTL?"right":"left" }}>
+                {row.values.map((cell, ci) => {
+                  const isValueColumn = ci > 0;
+                  const tone = colorizeNumeric && isValueColumn && typeof cell === "number"
+                    ? (cell > 0 ? "#22c55e" : cell < 0 ? "#ef4444" : "#f8fafc")
+                    : (isTotal ? "#f8fafc" : "#cbd5e1");
+                  return (
+                  <td key={`${row.key||idx}-${ci}`} style={{ padding:"10px 12px", borderTop:"1px solid rgba(148,163,184,0.16)", color:tone, fontWeight:isTotal?700:500, whiteSpace:"nowrap", textAlign:isRTL?"right":"left" }}>
                     {typeof cell === "number" ? fmtMoney(cell, { currency }) : cell}
                   </td>
-                ))}
+                );})}
               </tr>
             );
           })}
@@ -5835,6 +5860,7 @@ function StatisticsTab() {
       <AccordionSection title={t.lossAnalysisMatrix} icon={<ArrowDownRight size={14} color="#94a3b8" />}>
         <StatisticsMatrixTable
           currency={primaryCurrency}
+          colorizeNumeric
           headers={[t.yearLabel, t.lowLabel, t.mediumLabel, t.highLabel, t.totalLabel]}
           rows={lossRows}
         />
@@ -6173,6 +6199,7 @@ function MainApp() {
 
   const goToTransactionsFromDashboardCashFlow = (filter) => {
     setTxNavigationFilter({
+      fromDashboard: true,
       transactionId: filter?.transactionId || "",
       investmentId: filter?.investmentId || "",
       investmentName: filter?.investmentName || "",
@@ -6202,7 +6229,7 @@ function MainApp() {
     dashboard:    <Dashboard onNavigateTransactionsByStatus={(filter) => { setTxNavigationFilter(filter); setActiveTab("transactions"); }} onNavigateTransactionsByInvestment={goToTransactionsFromDashboardCashFlow} />,
     portfolios:   <PortfoliosTab onQuickAddInvestment={quickAddInvestment} onViewInvestments={goToInvestmentsForPortfolio} />,
     investments:  <InvestmentsTab onQuickAddTransaction={quickAddTransaction} onViewTransactions={goToTransactionsForInvestment} modalPrefill={investmentPrefill} navigationFilter={investmentNavigationFilter} onModalPrefillConsumed={() => setInvestmentPrefill(null)} showPortfolioBack={showPortfolioBackInInvestments || sessionStorage.getItem("investments_from_portfolio_link_v1") === "1"} onPortfolioBack={handlePortfolioBackFromInvestments} />,
-    transactions: <TransactionsTab showSmartBack={smartBackVisible} onSmartBack={handleSmartBack} navigationFilter={txNavigationFilter} modalPrefill={transactionPrefill} />,
+    transactions: <TransactionsTab showSmartBack={smartBackVisible} onSmartBack={handleSmartBack} onBackToDashboard={() => setActiveTab("dashboard")} navigationFilter={txNavigationFilter} modalPrefill={transactionPrefill} />,
     statistics:   <StatisticsTab />,
     users:        canManageUsers ? <UserManagementTab /> : <Dashboard />,
     settings:     <SettingsTab />,
