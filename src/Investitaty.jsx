@@ -3327,7 +3327,13 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
       patchItem("investments",editItem.id,payload);
       if (purchaseChanged || currentChanged) createPriceHistoryEntry(editItem, payload.purchasePrice, payload.currentPrice);
     }
-    else { addItem("investments",payload); }
+    else {
+      const createdInvestment = addItem("investments", payload);
+      const initialCurrentPrice = payload.inheritPrice
+        ? String(portfolioCurrentPrice(db, payload.portfolioId))
+        : payload.currentPrice;
+      createPriceHistoryEntry(createdInvestment, payload.purchasePrice, initialCurrentPrice);
+    }
     setInvalidFields({});
     setForm(EMPTY); closeModal();
   };
