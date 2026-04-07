@@ -323,6 +323,11 @@ const TRANSLATIONS = {
     backupRestoreSuccess: "Backup restored successfully.",
     backupNoDate: "No backup yet",
     backupNoItems: "No backups available.",
+    backupPreview: "Preview backup",
+    backupPreviewBanner: "Preview mode",
+    backupPreviewApply: "Apply",
+    backupPreviewCancel: "Cancel",
+    backupPreviewActive: "Previewing",
     sessionExpiredSecurity: "Session expired for your security",
     syncFailed: "Sync failed. Changes may not be saved.",
     days: "d",
@@ -584,6 +589,11 @@ const TRANSLATIONS = {
     backupRestoreSuccess: "تمت استعادة النسخة الاحتياطية بنجاح.",
     backupNoDate: "لا توجد نسخة احتياطية بعد",
     backupNoItems: "لا توجد نسخ احتياطية متاحة.",
+    backupPreview: "معاينة النسخة",
+    backupPreviewBanner: "وضع المعاينة",
+    backupPreviewApply: "تطبيق",
+    backupPreviewCancel: "إلغاء",
+    backupPreviewActive: "تتم المعاينة",
     sessionExpiredSecurity: "انتهت الجلسة حفاظًا على أمانك",
     syncFailed: "فشلت المزامنة. ربما لم تُحفظ التغييرات.",
     days: "يوم",
@@ -1183,6 +1193,8 @@ function AppProvider({ children }) {
   const [rawDb, setRawDb] = useState(null);
   const [selectedCountryName, setSelectedCountryName] = useState(() => localStorage.getItem(SELECTED_COUNTRY_STORAGE_KEY) || null);
   const [fileId, setFileId] = useState(null);
+  const [primaryFileId, setPrimaryFileId] = useState(null);
+  const [previewState, setPreviewState] = useState({ active: false, backup: null });
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState(null);
   const [dbLoading, setDbLoading] = useState(false);
@@ -1205,6 +1217,8 @@ function AppProvider({ children }) {
     }
     setRawDb(null);
     setFileId(null);
+    setPrimaryFileId(null);
+    setPreviewState({ active: false, backup: null });
     setSyncError(null);
     setDbLoading(false);
     setGatekeeperError(null);
@@ -1233,7 +1247,7 @@ function AppProvider({ children }) {
     if (!auth.token) return [];
     const folderId = await BackupService.findOrCreateBackupFolder(auth.token);
     const files = await BackupService.listBackups(auth.token, folderId);
-    setBackupFiles(files.slice(0, BackupService.MAX_BACKUPS));
+    setBackupFiles(files);
     const localMetaDate = BackupService.getStoredMeta()?.lastBackupAt || null;
     const driveLatest = files[0]?.createdTime || null;
     setLastBackupAt(localMetaDate || driveLatest);
@@ -1241,7 +1255,7 @@ function AppProvider({ children }) {
   }, [auth.token]);
 
   const triggerBackup = useCallback(async ({ isAuto = false } = {}) => {
-    if (!auth.token || !rawDb || backupBusy) return null;
+    if (!auth.token || !rawDb || backupBusy || previewState.active) return null;
     setBackupBusy(true);
     try {
       const result = await BackupService.createBackup(auth.token, rawDb);
@@ -1255,21 +1269,64 @@ function AppProvider({ children }) {
     } finally {
       setBackupBusy(false);
     }
-  }, [auth.token, rawDb, backupBusy]);
+  }, [auth.token, rawDb, backupBusy, previewState.active]);
 
   const restoreBackup = useCallback(async (backup) => {
-    if (!auth.token || !fileId || !backup?.id) return false;
+    if (!auth.token || !primaryFileId || !backup?.id) return false;
     try {
       const snapshot = await BackupService.downloadBackup(auth.token, backup.id);
       const migrated = migrateSchema(snapshot);
       setRawDb(migrated);
-      await saveDB(auth.token, fileId, migrated);
+      await saveDB(auth.token, primaryFileId, migrated);
+      setFileId(primaryFileId);
+      setPreviewState({ active: false, backup: null });
       return true;
     } catch (error) {
       setSyncError(`Restore failed: ${error?.message || "Unknown error"}`);
       return false;
     }
-  }, [auth.token, fileId]);
+  }, [auth.token, primaryFileId]);
+
+  const enterBackupPreview = useCallback(async (backup) => {
+    if (!auth.token || !backup?.id) return false;
+    try {
+      const snapshot = await BackupService.downloadBackup(auth.token, backup.id);
+      const migrated = migrateSchema(snapshot);
+      setRawDb(migrated);
+      setFileId(backup.id);
+      setPreviewState({ active: true, backup });
+      return true;
+    } catch (error) {
+      setSyncError(`Preview failed: ${error?.message || "Unknown error"}`);
+      return false;
+    }
+  }, [auth.token]);
+
+  const cancelBackupPreview = useCallback(async () => {
+    if (!auth.token || !primaryFileId) return false;
+    try {
+      const fileRes = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${primaryFileId}?alt=media`,
+        { headers: { Authorization: `Bearer ${auth.token}` } },
+      );
+      await ensureDriveOk(fileRes, "Unable to reload primary database file");
+      const data = await fileRes.json();
+      const migrated = migrateSchema(data);
+      setRawDb(migrated);
+      setFileId(primaryFileId);
+      setPreviewState({ active: false, backup: null });
+      return true;
+    } catch (error) {
+      setSyncError(`Preview cancel failed: ${error?.message || "Unknown error"}`);
+      return false;
+    }
+  }, [auth.token, primaryFileId]);
+
+  const applyBackupPreview = useCallback(async () => {
+    if (!previewState.active || !previewState.backup) return false;
+    const ok = await restoreBackup(previewState.backup);
+    return ok;
+  }, [previewState.active, previewState.backup, restoreBackup]);
 
   const t = TRANSLATIONS[lang];
   const isRTL = lang === "ar";
@@ -1351,6 +1408,8 @@ function AppProvider({ children }) {
     try {
       const { fileId: fid, data } = await findOrCreateDB(auth.token);
       setFileId(fid);
+      setPrimaryFileId(fid);
+      setPreviewState({ active: false, backup: null });
       setRawDb(data);
       try { await fetchBackups(); } catch (_) {}
       return true;
@@ -1511,6 +1570,8 @@ function AppProvider({ children }) {
         if (controller.signal.aborted) return;
         if (dbLoadingWatchdogRef.current) clearTimeout(dbLoadingWatchdogRef.current);
         setFileId(fid);
+        setPrimaryFileId(fid);
+        setPreviewState({ active: false, backup: null });
         setRawDb(data);
         setDbLoading(false);
       })
@@ -1528,7 +1589,7 @@ function AppProvider({ children }) {
   }, [auth.user?.id, auth.token, auth.authLoading, isBlocked, userSyncDone, clearLocalSessionState]);
 
   useEffect(() => {
-    if (!auth.token || !rawDb || isBlocked || !userSyncDone) return;
+    if (!auth.token || !rawDb || isBlocked || !userSyncDone || previewState.active) return;
     let cancelled = false;
     const run = async () => {
       try {
@@ -1547,7 +1608,7 @@ function AppProvider({ children }) {
     };
     run();
     return () => { cancelled = true; };
-  }, [auth.token, rawDb, isBlocked, userSyncDone, fetchBackups, triggerBackup]);
+  }, [auth.token, rawDb, isBlocked, userSyncDone, previewState.active, fetchBackups, triggerBackup]);
 
   useEffect(() => {
     if (!auth.user?.id || !auth.token) return;
@@ -1843,6 +1904,7 @@ function AppProvider({ children }) {
     usersConfig, usersConfigReady, currentRole, isBlocked, hasPermission,
     updateUserEntry, deleteUserEntry, gatekeeperError, userSyncDone,
     backupFiles, lastBackupAt, backupBusy, triggerBackup, restoreBackup, fetchBackups, manualSync,
+    previewState, enterBackupPreview, cancelBackupPreview, applyBackupPreview,
   }), [
     auth, db, rawDb, fileId, syncing, syncError, dbLoading,
     updateDb, softDelete, archiveItem, unarchiveItem, hardDeleteItem, patchItem, addItem,
@@ -1851,6 +1913,7 @@ function AppProvider({ children }) {
     usersConfig, usersConfigReady, currentRole, isBlocked, hasPermission,
     updateUserEntry, deleteUserEntry, gatekeeperError, userSyncDone,
     backupFiles, lastBackupAt, backupBusy, triggerBackup, restoreBackup, fetchBackups, manualSync,
+    previewState, enterBackupPreview, cancelBackupPreview, applyBackupPreview,
   ]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
@@ -2527,7 +2590,7 @@ const statusColor = (status) => {
   const s = String(status||"").toLowerCase();
   if (s.includes("active") || s.includes("record") || s.includes("completed") || s.includes("نشط") || s.includes("مسجل")) return T.positive;
   if (s.includes("pending") || s.includes("schedule") || s.includes("paused") || s.includes("مجدول") || s.includes("معلق")) return T.warning;
-  if (s.includes("cancel") || s.includes("closed") || s.includes("ملغ") || s.includes("مغلق")) return T.negative;
+  if (s.includes("cancel") || s.includes("early close") || s.includes("closed") || s.includes("ملغ") || s.includes("مغلق")) return T.negative;
   return T.textMuted;
 };
 
@@ -2636,6 +2699,7 @@ function Dashboard({ onNavigateTransactionsByStatus, onNavigateTransactionsByInv
   portfolios.forEach((portfolio) => {
     const typeKey = portfolio.type || t.unassignedType;
     const portfolioTotal = inv_of_portfolio(safeDb, portfolio.id)
+      .filter(isActiveInvestment)
       .reduce((sum, inv) => sum + toBaseAmount(safeDb, curVal(inv, db), portfolio.currency || "USD", baseCurrency), 0);
     if (portfolioTotal > 0) {
       allocationByType[typeKey] = (allocationByType[typeKey] || 0) + portfolioTotal;
@@ -4058,6 +4122,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const [currentPage, setCurrentPage] = useState(1);
   const [goToPageInput, setGoToPageInput] = useState("1");
   const autoOpenedTxRef = useRef("");
+  const appliedNavigationRef = useRef("");
   const [viewOpenedFromDashboard, setViewOpenedFromDashboard] = useState(false);
 
   const EMPTY = { portfolioId:"",investmentId:"",category:"",amount:"",date:"",dueDate:"",depositedAt:"",collectedAt:"",type:"income",status:"recorded",notes:"" };
@@ -4320,6 +4385,13 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
 
   useEffect(() => {
     if (!navigationFilter || typeof navigationFilter !== "object") return;
+
+    const navigationKey = navigationFilter.stamp
+      ? String(navigationFilter.stamp)
+      : `${navigationFilter.transactionId || ""}:${navigationFilter.portfolioId || ""}:${navigationFilter.investmentId || ""}:${navigationFilter.status || ""}`;
+    if (appliedNavigationRef.current === navigationKey) return;
+
+    appliedNavigationRef.current = navigationKey;
     const normalizedStatus = ["collected", "deposited", "scheduled", ARCHIVED_FILTER].includes(navigationFilter.status)
       ? navigationFilter.status
       : "";
@@ -4327,26 +4399,30 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
       ? navigationFilter.dateField
       : "";
 
-    if (navigationFilter.portfolioId) setFilterPortfolio(String(navigationFilter.portfolioId));
+    setFilterPortfolio(navigationFilter.portfolioId ? String(navigationFilter.portfolioId) : "");
     if (navigationFilter.investmentId) {
       setFilterInvestment(String(navigationFilter.investmentId));
     } else if (navigationFilter.investmentName) {
       const matchByName = allInvestments.find((inv) => inv.name === String(navigationFilter.investmentName));
       setFilterInvestment(matchByName?.id || "");
+    } else {
+      setFilterInvestment("");
     }
     setFilterStatus(normalizedStatus);
     setFilterStartDate(navigationFilter.startDate ? String(navigationFilter.startDate) : "");
     setFilterEndDate(navigationFilter.endDate ? String(navigationFilter.endDate) : "");
     setFilterDateField(normalizedDateField);
+
     if (navigationFilter.transactionId) {
       const navKey = `${navigationFilter.stamp || "nostamp"}:${navigationFilter.transactionId}`;
-      if (autoOpenedTxRef.current === navKey) return;
-      const targetTx = allTx.find((tx) => String(tx.id) === String(navigationFilter.transactionId));
-      if (targetTx) {
-        openView(targetTx);
-        setViewOpenedFromDashboard(Boolean(navigationFilter.fromDashboard));
+      if (autoOpenedTxRef.current !== navKey) {
+        const targetTx = allTx.find((tx) => String(tx.id) === String(navigationFilter.transactionId));
+        if (targetTx) {
+          openView(targetTx);
+          setViewOpenedFromDashboard(Boolean(navigationFilter.fromDashboard));
+        }
+        autoOpenedTxRef.current = navKey;
       }
-      autoOpenedTxRef.current = navKey;
     }
   }, [navigationFilter, allInvestments, allTx]);
 
@@ -4774,7 +4850,10 @@ function TxActionMenu({ tx, onClose, anchorEl }) {
 // SETTINGS TAB — Lookup Categories
 // ═══════════════════════════════════════════════════════════════════════════════
 function SettingsTab() {
-  const { db, updateDb, t, isRTL, font, backupFiles, lastBackupAt, backupBusy, triggerBackup, restoreBackup, fetchBackups, selectedCountry, setSelectedCountry } = useApp();
+  const {
+    db, updateDb, t, isRTL, font, backupFiles, lastBackupAt, backupBusy, triggerBackup, restoreBackup, fetchBackups,
+    selectedCountry, setSelectedCountry, previewState, enterBackupPreview,
+  } = useApp();
   const [newItems, setNewItems] = useState({});
   const [editingItems, setEditingItems] = useState({});
   const [currencyError, setCurrencyError] = useState("");
@@ -5174,21 +5253,26 @@ function SettingsTab() {
               <h4 style={{ margin:0,fontSize:"0.82rem",fontWeight:600,color:T.textPrimary }}>{t.backupTitle}</h4>
               <div style={{ fontSize:"0.74rem",color:T.textMuted,marginTop:"2px" }}>{t.backupInfo}: <strong style={{ color:T.textSecondary }}>{shownDate}</strong></div>
             </div>
-            <Btn onClick={handleManualBackup} disabled={backupBusy} icon={<RefreshCw size={14} />}>{t.backupNow}</Btn>
+            <Btn onClick={handleManualBackup} disabled={backupBusy || previewState.active} icon={<RefreshCw size={14} />}>{t.backupNow}</Btn>
           </div>
           <div style={{ display:"grid",gap:"8px" }}>
             {backupFiles.length === 0 && (
               <div style={{ fontSize:"0.74rem",color:T.textMuted,fontStyle:"italic" }}>{t.backupNoItems}</div>
             )}
-            {backupFiles.slice(0, 5).map((backup) => (
+            {backupFiles.map((backup) => (
               <div key={backup.id} style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:"8px",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:"9px",background:T.bgApp }}>
                 <div style={{ display:"flex",flexDirection:"column",gap:"2px",minWidth:0 }}>
                   <span style={{ fontSize:"0.78rem",color:T.textPrimary,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{backup.name}</span>
                   <span style={{ fontSize:"0.72rem",color:T.textMuted }}>{new Date(backup.createdTime).toLocaleString()}</span>
                 </div>
-                <button data-icon-tooltip="Restore" onClick={() => setRestoreCandidate(backup)} style={{ border:"none",background:"none",cursor:"pointer",color:T.emerald,display:"flex",padding:"3px",borderRadius:"6px" }}>
-                  <RotateCcw size={14} />
-                </button>
+                <div style={{ display:"flex", alignItems:"center", gap:"4px" }}>
+                  <button data-icon-tooltip={t.backupPreview} onClick={() => enterBackupPreview(backup)} style={{ border:"none",background:"none",cursor:"pointer",color:T.info,display:"flex",padding:"3px",borderRadius:"6px" }}>
+                    <Eye size={14} />
+                  </button>
+                  <button data-icon-tooltip="Restore" onClick={() => setRestoreCandidate(backup)} style={{ border:"none",background:"none",cursor:"pointer",color:T.emerald,display:"flex",padding:"3px",borderRadius:"6px" }}>
+                    <RotateCcw size={14} />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -6194,7 +6278,7 @@ function UserManagementTab() {
 // MAIN APP SHELL
 // ═══════════════════════════════════════════════════════════════════════════════
 function MainApp() {
-  const { syncError, t, isRTL, font, hasPermission, currentRole } = useApp();
+  const { syncError, t, isRTL, font, hasPermission, currentRole, previewState, cancelBackupPreview, applyBackupPreview } = useApp();
   const [sessionNotice, setSessionNotice] = useState(false);
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem(TAB_STORAGE_KEY) || "dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -6312,9 +6396,40 @@ function MainApp() {
   const desktopSidebarWidth = sidebarOpen ? 220 : 72;
 
   return (
-    <div style={{ display:"flex",height:"100vh",background:T.bgApp,fontFamily:font,overflow:"hidden" }} dir={isRTL?"rtl":"ltr"}>
+    <div style={{
+      display:"flex",
+      height:"100vh",
+      background:T.bgApp,
+      fontFamily:font,
+      overflow:"hidden",
+      border: previewState.active ? "4px solid #f97316" : "none",
+      boxSizing:"border-box",
+    }} dir={isRTL?"rtl":"ltr"}>
       <FontLoader/>
       <GlobalTooltipHost/>
+      {previewState.active && (
+        <div style={{
+          position:"fixed",
+          top:"10px",
+          left:"50%",
+          transform:"translateX(-50%)",
+          zIndex:20000,
+          display:"flex",
+          alignItems:"center",
+          gap:"8px",
+          background:"rgba(15,23,42,0.95)",
+          border:"1px solid rgba(249,115,22,0.7)",
+          borderRadius:"999px",
+          padding:"8px 12px",
+          boxShadow:"0 10px 30px rgba(15,23,42,0.35)",
+        }}>
+          <span style={{ fontSize:"0.76rem", color:"#fed7aa", fontWeight:700, letterSpacing:"0.03em" }}>
+            {t.backupPreviewBanner}: {previewState.backup?.name || t.backupPreviewActive}
+          </span>
+          <Btn size="sm" onClick={applyBackupPreview}>{t.backupPreviewApply}</Btn>
+          <Btn size="sm" variant="secondary" onClick={cancelBackupPreview}>{t.backupPreviewCancel}</Btn>
+        </div>
+      )}
       <style>{`
         @keyframes modalIn { from{opacity:0;transform:scale(0.96)} to{opacity:1;transform:scale(1)} }
         @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }

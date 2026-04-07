@@ -6,6 +6,8 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recha
 // Groups active investments by type and shows % allocation.
 // ──────────────────────────────────────────────────────────────────────────────
 
+const isActiveInvestment = (inv) => String(inv?.status || "").trim().toLowerCase() === "active";
+
 const COLORS = [
   "#63cab7", "#7ec8e3", "#b8a9e8", "#f0c27a",
   "#a8e6cf", "#e8a598", "#9fcfb2", "#c8b8e8",
@@ -95,7 +97,7 @@ export default function AssetAllocationChart({ db }) {
   const data = useMemo(() => {
     if (!db) return [];
 
-    const active = (db.investments || []).filter((inv) => inv.status !== "Closed");
+    const active = (db.investments || []).filter(isActiveInvestment);
 
     const groups = {};
     active.forEach((inv) => {
