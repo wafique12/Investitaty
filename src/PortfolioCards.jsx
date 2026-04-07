@@ -5,6 +5,8 @@ import { useMemo } from "react";
 // scrollable row of cards, each showing the portfolio's aggregate value.
 // ──────────────────────────────────────────────────────────────────────────────
 
+const isActiveInvestment = (inv) => String(inv?.status || "").trim().toLowerCase() === "active";
+
 // Accent palette – one colour per portfolio type (cycles if more than 8)
 const PALETTE = [
   { line: "#63cab7", glow: "rgba(99,202,183,0.12)", text: "#63cab7" },
@@ -168,9 +170,7 @@ export default function PortfolioCards({ db }) {
   const portfolios = useMemo(() => {
     if (!db) return [];
 
-    const activeInvestments = (db.investments || []).filter(
-      (inv) => inv.status !== "Closed"
-    );
+    const activeInvestments = (db.investments || []).filter(isActiveInvestment);
 
     // Group by type
     const groups = {};

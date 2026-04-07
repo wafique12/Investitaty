@@ -75,7 +75,19 @@ async function createBackup(token, db) {
   const created = await createRes.json();
 
   const backups = await listBackups(token, folderId);
-  const toDelete = backups.slice(MAX_BACKUPS);
+  const currentYear = new Date().getFullYear();
+  const yearlyHistoricalProtected = new Set();
+  const capturedYears = new Set();
+  backups.forEach((item) => {
+    const backupDate = parseBackupDate(item.name);
+    if (!backupDate) return;
+    const year = Number(backupDate.slice(0, 4));
+    if (!Number.isFinite(year) || year >= currentYear || capturedYears.has(year)) return;
+    yearlyHistoricalProtected.add(item.id);
+    capturedYears.add(year);
+  });
+  const regularKeepIds = new Set(backups.slice(0, MAX_BACKUPS).map((item) => item.id));
+  const toDelete = backups.filter((item) => !regularKeepIds.has(item.id) && !yearlyHistoricalProtected.has(item.id));
   await Promise.all(toDelete.map(async (item) => {
     const delRes = await fetch(`https://www.googleapis.com/drive/v3/files/${item.id}`, {
       method: "DELETE",
@@ -87,7 +99,7 @@ async function createBackup(token, db) {
   const now = new Date().toISOString();
   setStoredMeta({ lastBackupAt: now, lastBackupName: backupName });
 
-  return { file: created, lastBackupAt: now, backups: (await listBackups(token, folderId)).slice(0, MAX_BACKUPS) };
+  return { file: created, lastBackupAt: now, backups: await listBackups(token, folderId) };
 }
 
 async function downloadBackup(token, fileId) {
