@@ -2527,7 +2527,7 @@ const statusColor = (status) => {
   const s = String(status||"").toLowerCase();
   if (s.includes("active") || s.includes("record") || s.includes("completed") || s.includes("نشط") || s.includes("مسجل")) return T.positive;
   if (s.includes("pending") || s.includes("schedule") || s.includes("paused") || s.includes("مجدول") || s.includes("معلق")) return T.warning;
-  if (s.includes("cancel") || s.includes("closed") || s.includes("ملغ") || s.includes("مغلق")) return T.negative;
+  if (s.includes("cancel") || s.includes("early close") || s.includes("closed") || s.includes("ملغ") || s.includes("مغلق")) return T.negative;
   return T.textMuted;
 };
 
@@ -2636,6 +2636,7 @@ function Dashboard({ onNavigateTransactionsByStatus, onNavigateTransactionsByInv
   portfolios.forEach((portfolio) => {
     const typeKey = portfolio.type || t.unassignedType;
     const portfolioTotal = inv_of_portfolio(safeDb, portfolio.id)
+      .filter(isActiveInvestment)
       .reduce((sum, inv) => sum + toBaseAmount(safeDb, curVal(inv, db), portfolio.currency || "USD", baseCurrency), 0);
     if (portfolioTotal > 0) {
       allocationByType[typeKey] = (allocationByType[typeKey] || 0) + portfolioTotal;
@@ -4058,6 +4059,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const [currentPage, setCurrentPage] = useState(1);
   const [goToPageInput, setGoToPageInput] = useState("1");
   const autoOpenedTxRef = useRef("");
+  const appliedNavigationRef = useRef("");
   const [viewOpenedFromDashboard, setViewOpenedFromDashboard] = useState(false);
 
   const EMPTY = { portfolioId:"",investmentId:"",category:"",amount:"",date:"",dueDate:"",depositedAt:"",collectedAt:"",type:"income",status:"recorded",notes:"" };
@@ -4320,6 +4322,13 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
 
   useEffect(() => {
     if (!navigationFilter || typeof navigationFilter !== "object") return;
+
+    const navigationKey = navigationFilter.stamp
+      ? String(navigationFilter.stamp)
+      : `${navigationFilter.transactionId || ""}:${navigationFilter.portfolioId || ""}:${navigationFilter.investmentId || ""}:${navigationFilter.status || ""}`;
+    if (appliedNavigationRef.current === navigationKey) return;
+
+    appliedNavigationRef.current = navigationKey;
     const normalizedStatus = ["collected", "deposited", "scheduled", ARCHIVED_FILTER].includes(navigationFilter.status)
       ? navigationFilter.status
       : "";
@@ -4327,26 +4336,30 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
       ? navigationFilter.dateField
       : "";
 
-    if (navigationFilter.portfolioId) setFilterPortfolio(String(navigationFilter.portfolioId));
+    setFilterPortfolio(navigationFilter.portfolioId ? String(navigationFilter.portfolioId) : "");
     if (navigationFilter.investmentId) {
       setFilterInvestment(String(navigationFilter.investmentId));
     } else if (navigationFilter.investmentName) {
       const matchByName = allInvestments.find((inv) => inv.name === String(navigationFilter.investmentName));
       setFilterInvestment(matchByName?.id || "");
+    } else {
+      setFilterInvestment("");
     }
     setFilterStatus(normalizedStatus);
     setFilterStartDate(navigationFilter.startDate ? String(navigationFilter.startDate) : "");
     setFilterEndDate(navigationFilter.endDate ? String(navigationFilter.endDate) : "");
     setFilterDateField(normalizedDateField);
+
     if (navigationFilter.transactionId) {
       const navKey = `${navigationFilter.stamp || "nostamp"}:${navigationFilter.transactionId}`;
-      if (autoOpenedTxRef.current === navKey) return;
-      const targetTx = allTx.find((tx) => String(tx.id) === String(navigationFilter.transactionId));
-      if (targetTx) {
-        openView(targetTx);
-        setViewOpenedFromDashboard(Boolean(navigationFilter.fromDashboard));
+      if (autoOpenedTxRef.current !== navKey) {
+        const targetTx = allTx.find((tx) => String(tx.id) === String(navigationFilter.transactionId));
+        if (targetTx) {
+          openView(targetTx);
+          setViewOpenedFromDashboard(Boolean(navigationFilter.fromDashboard));
+        }
+        autoOpenedTxRef.current = navKey;
       }
-      autoOpenedTxRef.current = navKey;
     }
   }, [navigationFilter, allInvestments, allTx]);
 

@@ -7,6 +7,8 @@ import { useMemo } from "react";
 //   • Total Net Profit = Σ dividends.amount + Σ (currentPrice - purchasePrice) * quantity
 // ──────────────────────────────────────────────────────────────────────────────
 
+const isActiveInvestment = (inv) => String(inv?.status || "").trim().toLowerCase() === "active";
+
 function AnimatedNumber({ value, prefix = "", suffix = "", decimals = 2 }) {
   const formatted = Number(value).toLocaleString("en-US", {
     minimumFractionDigits: decimals,
@@ -122,9 +124,7 @@ export default function KPIHeader({ db }) {
   const kpis = useMemo(() => {
     if (!db) return { portfolioValue: 0, totalCost: 0, dividendIncome: 0, capitalGains: 0, netProfit: 0, activeCount: 0 };
 
-    const activeInvestments = (db.investments || []).filter(
-      (inv) => inv.status !== "Closed"
-    );
+    const activeInvestments = (db.investments || []).filter(isActiveInvestment);
 
     // Portfolio Value = Σ quantity * currentPrice (fields added by user)
     const portfolioValue = activeInvestments.reduce((sum, inv) => {
