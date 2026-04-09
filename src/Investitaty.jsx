@@ -223,6 +223,8 @@ const TRANSLATIONS = {
     category: "Category",
     amount: "Amount",
     date: "Date",
+    collectedDate: "Collected Date",
+    depositedDate: "Deposited Date",
     transactionType: "Type",
     income: "Income",
     expense: "Expense",
@@ -489,6 +491,8 @@ const TRANSLATIONS = {
     category: "الفئة",
     amount: "المبلغ",
     date: "التاريخ",
+    collectedDate: "تاريخ التحصيل",
+    depositedDate: "تاريخ الإيداع",
     transactionType: "النوع",
     income: "دخل",
     expense: "مصروف",
@@ -4540,7 +4544,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
             <table style={{ width:"100%",minWidth:"920px",borderCollapse:"collapse",fontSize:"0.85rem" }}>
               <thead>
                 <tr style={{ background:T.bgApp }}>
-                  {[t.date,t.category,t.portfolio,t.investment,t.amount,t.transactionType,t.status,t.smartStatusLabel,""].map((h,i)=>(
+                  {[t.date,t.collectedDate,t.depositedDate,t.category,t.portfolio,t.investment,t.amount,t.transactionType,t.status,t.smartStatusLabel,""].map((h,i)=>(
                     <th key={i} style={{ padding:"10px 14px",textAlign:isRTL?"right":"left",fontSize:"0.7rem",fontWeight:600,color:T.textMuted,borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap" }}>{h}</th>
                   ))}
                 </tr>
@@ -4557,6 +4561,8 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
                       onMouseLeave={e=>e.currentTarget.style.background="transparent"}
                     >
                       <td style={{ padding:"11px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{tx.date||"—"}</td>
+                      <td style={{ padding:"11px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{formatDateDisplay(tx.collectedAt || tx.collected_at) || "—"}</td>
+                      <td style={{ padding:"11px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{formatDateDisplay(tx.depositedAt || tx.deposited_at) || "—"}</td>
                       <td style={{ padding:"11px 14px",fontWeight:500,color:T.textPrimary,textAlign:isRTL?"right":"left" }}>{tx.category||"—"}</td>
                       <td style={{ padding:"11px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{ptf?.name||"—"}</td>
                       <td style={{ padding:"11px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{inv?.name||"—"}</td>
