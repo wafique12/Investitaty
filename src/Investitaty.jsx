@@ -168,14 +168,14 @@ const TRANSLATIONS = {
     riskMedium: "Medium",
     riskHigh: "High",
     riskSpeculative: "Speculative",
-    investmentStatuses: "Investment Statuses",
+    investmentStatuses: "All Inv. Statuses",
     transactionStatuses: "Transaction Statuses",
     collapseSidebar: "Toggle sidebar",
     pinSidebar: "Pin sidebar",
     unpinSidebar: "Auto-hide sidebar",
     addInvestmentAction: "Add investment",
     addTransactionAction: "Add transaction",
-    filterByInvestment: "Filter by Investment",
+    filterByInvestment: "All Investments",
     view: "View",
     returnLabel: "Back",
     smartBackToInvestments: "Return to Investments",
@@ -185,7 +185,7 @@ const TRANSLATIONS = {
     editInModal: "Edit",
     deleteItem: "Delete",
     archivedFilter: "Archived",
-    smartStatusLabel: "Smart Status",
+    smartStatusLabel: "All Smart Status",
     smartStatusUpcoming: "Upcoming",
     smartStatusLate: "Late",
     smartStatusDefaulted: "Defaulted",
@@ -194,6 +194,7 @@ const TRANSLATIONS = {
     smartStatusOverdue: "Overdue",
     smartStatusSearchPlaceholder: "Filter by smart status",
     transactionDateRange: "Transaction Date Range",
+    investmentDateRange: "Investment Date Range",
     clearDateRange: "Clear",
     allLabel: "All",
     allStatuses: "All statuses",
@@ -437,14 +438,14 @@ const TRANSLATIONS = {
     riskMedium: "متوسط",
     riskHigh: "مرتفع",
     riskSpeculative: "مضاربي",
-    investmentStatuses: "حالات الاستثمار",
+    investmentStatuses: "كل حالات الاستثمار",
     transactionStatuses: "حالات المعاملة",
     collapseSidebar: "تبديل الشريط الجانبي",
     pinSidebar: "تثبيت الشريط الجانبي",
     unpinSidebar: "إخفاء تلقائي للشريط الجانبي",
     addInvestmentAction: "إضافة استثمار",
     addTransactionAction: "إضافة معاملة",
-    filterByInvestment: "تصفية حسب الاستثمار",
+    filterByInvestment: "كل الاستثمارات",
     view: "عرض",
     returnLabel: "عودة",
     smartBackToInvestments: "العودة إلى الاستثمارات",
@@ -454,7 +455,7 @@ const TRANSLATIONS = {
     editInModal: "تعديل",
     deleteItem: "حذف",
     archivedFilter: "المؤرشفة",
-    smartStatusLabel: "الحالة الذكية",
+    smartStatusLabel: "كل الحالات الذكية",
     smartStatusUpcoming: "قادمة",
     smartStatusLate: "متأخرة",
     smartStatusDefaulted: "متعثرة",
@@ -463,6 +464,7 @@ const TRANSLATIONS = {
     smartStatusOverdue: "متأخرة",
     smartStatusSearchPlaceholder: "تصفية حسب الحالة الذكية",
     transactionDateRange: "نطاق تاريخ المعاملة",
+    investmentDateRange: "نطاق تاريخ الاستثمار",
     clearDateRange: "مسح",
     allLabel: "الكل",
     allStatuses: "كل الحالات",
@@ -3479,6 +3481,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   const [filterDateField, setFilterDateField] = useState("start");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterPortfolio, setFilterPortfolio] = useState("");
+  const [filterInvestmentMethod, setFilterInvestmentMethod] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [formError, setFormError] = useState("");
@@ -3506,6 +3509,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     setFilterDateField("start");
     setFilterStatus("");
     setFilterPortfolio("");
+    setFilterInvestmentMethod("");
     setSearchOpen(false);
     setSearchTerm("");
     setForm(EMPTY);
@@ -3539,13 +3543,14 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     setFilterDateField(saved.filterDateField || "start");
     setFilterStatus(saved.filterStatus || "");
     setFilterPortfolio(saved.filterPortfolio || "");
+    setFilterInvestmentMethod(saved.filterInvestmentMethod || "");
     setSearchTerm(saved.searchTerm || "");
     setSearchOpen(Boolean(saved.searchTerm));
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("investments_filters_v1", JSON.stringify({ filterStartDate, filterEndDate, filterDateField, filterStatus, filterPortfolio, searchTerm }));
-  }, [filterStartDate, filterEndDate, filterDateField, filterStatus, filterPortfolio, searchTerm]);
+    localStorage.setItem("investments_filters_v1", JSON.stringify({ filterStartDate, filterEndDate, filterDateField, filterStatus, filterPortfolio, filterInvestmentMethod, searchTerm }));
+  }, [filterStartDate, filterEndDate, filterDateField, filterStatus, filterPortfolio, filterInvestmentMethod, searchTerm]);
 
 
   useEffect(() => {
@@ -3588,8 +3593,9 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     const toMatch = !toDate || (targetDate && targetDate < toDate);
     const statusMatch = !filterStatus || (filterStatus === ARCHIVED_FILTER ? Boolean(inv.is_hidden) : (!inv.is_hidden && inv.status === filterStatus));
     const portfolioMatch = !filterPortfolio || inv.portfolioId === filterPortfolio;
+    const methodMatch = !filterInvestmentMethod || (inv.investmentMethod || "") === filterInvestmentMethod;
     const searchMatch = !searchTerm.trim() || normalizedTitle.includes(searchTerm.toLowerCase().trim());
-    return fromMatch && toMatch && statusMatch && portfolioMatch && searchMatch && (filterStatus===ARCHIVED_FILTER ? true : !inv.is_hidden);
+    return fromMatch && toMatch && statusMatch && portfolioMatch && methodMatch && searchMatch && (filterStatus===ARCHIVED_FILTER ? true : !inv.is_hidden);
   });
 
   return (
@@ -3659,6 +3665,13 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
           variant="lightFilter"
           isRTL={isRTL}
         />
+        <Select
+          value={filterInvestmentMethod}
+          onChange={e=>setFilterInvestmentMethod(e.target.value)}
+          options={[{ value:"", label:t.investmentMethod }, ...methodOpts]}
+          isRTL={isRTL}
+          style={{ ...filterInputCss(isRTL), flex:"0 0 auto", width:"fit-content", minWidth:"165px", maxWidth:"210px" }}
+        />
         <div>
           <DateRangeFilter
             startDate={filterStartDate}
@@ -3666,7 +3679,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
             onChange={(start, end) => { setFilterStartDate(start); setFilterEndDate(end); }}
             onClear={() => { setFilterStartDate(""); setFilterEndDate(""); }}
             isRTL={isRTL}
-            label={t.transactionDateRange}
+            label={t.investmentDateRange || t.transactionDateRange}
             clearLabel={t.clearDateRange}
             panelTop={(
               <div style={{ display:"flex", alignItems:"center", gap:"14px", minHeight:"20px", justifyContent:isRTL?"flex-end":"flex-start" }}>
@@ -3798,11 +3811,21 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
       }
 
       {showModal && (
-        <Modal title={modalMode==="create" ? t.addInvestment : `${t.view} ${t.investment}`} maxWidth="860px" onClose={closeModal}>
+        <Modal title={
+          modalMode==="create"
+            ? t.addInvestment
+            : modalMode==="view"
+              ? (
+                <span style={{ display:"inline-flex", alignItems:"baseline", gap:"6px", flexWrap:"wrap" }}>
+                  <span>{`${t.view} ${t.investment} -`}</span>
+                  <span style={{ fontWeight:500, color:T.textSecondary }}>{form.name || "—"}</span>
+                </span>
+              )
+              : `${t.view} ${t.investment}`
+        } maxWidth="860px" onClose={closeModal}>
           {modalMode === "view" ? (
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"10px" }}>
               <ReadOnlyField label={t.portfolio} value={portfolios.find((p)=>p.id===form.portfolioId)?.name} />
-              <ReadOnlyField label={t.name} value={form.name} />
               <ReadOnlyField label={t.quantity} value={form.quantity} />
               <ReadOnlyField label={t.purchasePrice} value={form.purchasePrice} />
               <ReadOnlyField label={t.currentPrice} value={form.inheritPrice ? portfolioCurrentPrice(db, form.portfolioId) : form.currentPrice} />
@@ -4119,13 +4142,14 @@ function InvestmentDetailExpanded({ inv, txs, db }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmartBack, onBackToDashboard }) {
 
-  const { db, addItem, archiveItem, hardDeleteItem, patchItem, t, isRTL, font } = useApp();
+  const { db, addItem, archiveItem, hardDeleteItem, patchItem, t, isRTL, font, selectedCountry } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [modalMode, setModalMode] = useState("create");
   const [filterPortfolio, setFilterPortfolio] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterInvestment, setFilterInvestment] = useState("");
+  const [filterInvestmentMethod, setFilterInvestmentMethod] = useState("");
   const [filterSmartStatus, setFilterSmartStatus] = useState("");
   const [filterStartDate, setFilterStartDate] = useState("");
   const [filterEndDate, setFilterEndDate] = useState("");
@@ -4157,6 +4181,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
     setFilterPortfolio("");
     setFilterStatus("");
     setFilterInvestment("");
+    setFilterInvestmentMethod("");
     setFilterSmartStatus("");
     setFilterStartDate("");
     setFilterEndDate("");
@@ -4169,6 +4194,8 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
 
   const portfolios = visible(db?.portfolios||[]);
   const allInvestments = visible(db?.investments||[]);
+  const investmentMethodOpts = (db?.settings?.investmentMethods || []).map((method) => ({ value:method, label:method }));
+  const investmentMethodById = new Map(allInvestments.map((inv) => [inv.id, inv.investmentMethod || ""]));
   const investmentsForFilter = filterPortfolio
     ? allInvestments.filter((inv) => inv.portfolioId === filterPortfolio)
     : allInvestments;
@@ -4238,6 +4265,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
       return tx.status === filterStatus;
     })();
     const investmentMatch = !filterInvestment || tx.investmentId===filterInvestment;
+    const methodMatch = !filterInvestmentMethod || (investmentMethodById.get(tx.investmentId) || "") === filterInvestmentMethod;
     const smartStatus = getTransactionsSmartStatus(tx);
     const smartStatusMatch = !filterSmartStatus || smartStatus === filterSmartStatus;
     const contextDateValue = filterDateField === "collectedAt"
@@ -4254,7 +4282,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
     const parsedEndDate = toDateOnly(filterEndDate);
     const startMatch = !parsedStartDate || (parsedTxDate && parsedTxDate >= parsedStartDate);
     const endMatch = !parsedEndDate || (parsedTxDate && parsedTxDate < parsedEndDate);
-    return portfolioMatch && statusMatch && investmentMatch && smartStatusMatch && startMatch && endMatch;
+    return portfolioMatch && statusMatch && investmentMatch && methodMatch && smartStatusMatch && startMatch && endMatch;
   });
   const sorted = [...filtered].sort((a,b)=>new Date(b.date||b.created_at||0)-new Date(a.date||a.created_at||0));
   const totalRecords = sorted.length;
@@ -4369,6 +4397,20 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
 
   const totalInc = txIncome(filtered);
   const totalExp = txExpense(filtered);
+  const headerCurrency = selectedCountry?.baseCurrency || baseCurrencyCode(db);
+  const formatHeaderAmount = useCallback((value) => {
+    const absValue = Math.abs(Number(value) || 0);
+    const locale = isRTL ? "ar-SA" : "en-US";
+    const formattedParts = new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency: headerCurrency || "USD",
+      currencyDisplay: "narrowSymbol",
+    }).formatToParts(absValue);
+    return formattedParts.map((part) => {
+      if (part.type === "currency" && String(headerCurrency || "").toUpperCase() === "SAR") return "﷼";
+      return part.value;
+    }).join("");
+  }, [headerCurrency, isRTL]);
 
   const typeOpts = [{value:"income",label:t.income},{value:"expense",label:t.expense}];
   const statusFilterOptions = [
@@ -4450,7 +4492,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [filterPortfolio, filterStatus, filterInvestment, filterSmartStatus, filterStartDate, filterEndDate, pageSize]);
+  }, [filterPortfolio, filterStatus, filterInvestment, filterInvestmentMethod, filterSmartStatus, filterStartDate, filterEndDate, pageSize]);
 
   useEffect(() => {
     setGoToPageInput(String(safePage));
@@ -4485,11 +4527,11 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
       <div style={{ display:"flex",gap:"12px",alignItems:"center",marginBottom:"12px",flexWrap:"wrap" }}>
         <div style={{ padding:"8px 16px",background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:"8px",fontSize:"0.82rem",fontWeight:500 }}>
           <span style={{ color:T.textMuted,marginRight:"6px" }}>{t.totalIncome}:</span>
-          <span style={{ color:T.positive }}>+{fmtMoney(totalInc,{currency:"USD"})}</span>
+          <span style={{ color:T.positive }}>+{formatHeaderAmount(totalInc)}</span>
         </div>
         <div style={{ padding:"8px 16px",background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:"8px",fontSize:"0.82rem",fontWeight:500 }}>
           <span style={{ color:T.textMuted,marginRight:"6px" }}>Expenses:</span>
-          <span style={{ color:T.negative }}>-{fmtMoney(totalExp,{currency:"USD"})}</span>
+          <span style={{ color:T.negative }}>-{formatHeaderAmount(totalExp)}</span>
         </div>
       </div>
       <div style={{ ...filterBarCss, marginBottom:"20px" }}>
@@ -4536,6 +4578,13 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
           minWidth="220px"
           variant="lightFilter"
           isRTL={isRTL}
+        />
+        <Select
+          value={filterInvestmentMethod}
+          onChange={(e)=>setFilterInvestmentMethod(e.target.value)}
+          options={[{ value:"", label:t.investmentMethod }, ...investmentMethodOpts]}
+          isRTL={isRTL}
+          style={{ ...filterInputCss(isRTL), flex:"0 0 auto", width:"fit-content", minWidth:"165px", maxWidth:"210px" }}
         />
         <DateRangeFilter
           startDate={filterStartDate}
@@ -5644,6 +5693,7 @@ function StatisticsTab() {
   const [selectedInvestmentStatus, setSelectedInvestmentStatus] = useState("");
   const [selectedPortfolioId, setSelectedPortfolioId] = useState("");
   const [selectedInvestmentId, setSelectedInvestmentId] = useState("");
+  const [selectedInvestmentMethod, setSelectedInvestmentMethod] = useState("");
   const [fundingInvestmentsModal, setFundingInvestmentsModal] = useState(null);
   const [fundingLegendExpanded, setFundingLegendExpanded] = useState(false);
   const [hiddenFundingSources, setHiddenFundingSources] = useState(() => new Set());
@@ -5654,11 +5704,13 @@ function StatisticsTab() {
   const portfolios = visible(db?.portfolios || []);
   const primaryCurrency = selectedCountry?.baseCurrency || baseCurrencyCode(db);
   const investmentStatuses = db?.settings?.investmentStatuses?.length ? db.settings.investmentStatuses : ["Active", "Paused", "Closed"];
+  const investmentMethodOpts = (db?.settings?.investmentMethods || []).map((method) => ({ value:method, label:method }));
 
   const filteredInvestments = investments.filter((inv) => {
     if (selectedInvestmentStatus && inv.status !== selectedInvestmentStatus) return false;
     if (selectedPortfolioId && inv.portfolioId !== selectedPortfolioId) return false;
     if (selectedInvestmentId && inv.id !== selectedInvestmentId) return false;
+    if (selectedInvestmentMethod && (inv.investmentMethod || "") !== selectedInvestmentMethod) return false;
     return true;
   });
   const filteredInvestmentIds = new Set(filteredInvestments.map((inv) => inv.id));
@@ -5895,6 +5947,22 @@ function StatisticsTab() {
             />
           </div>
           <div>
+            <label style={{ display:"block", marginBottom:"6px", fontSize:"0.74rem", color:"#94a3b8" }}>{t.investment}</label>
+            <SearchableSingleSelect
+              options={investments
+                .filter((inv) => !selectedPortfolioId || inv.portfolioId === selectedPortfolioId)
+                .map((inv)=>({ value:inv.id, label:inv.name }))}
+              value={selectedInvestmentId}
+              onChange={setSelectedInvestmentId}
+              placeholder={t.filterByInvestment}
+              searchPlaceholder={t.filterByInvestment}
+              font={font}
+              minWidth="220px"
+              variant="statsFilter"
+              isRTL={isRTL}
+            />
+          </div>
+          <div>
             <label style={{ display:"block", marginBottom:"6px", fontSize:"0.74rem", color:"#94a3b8" }}>{t.portfolio}</label>
             <SearchableSingleSelect
               options={portfolios.map((portfolio)=>({ value:portfolio.id, label:portfolio.name }))}
@@ -5915,15 +5983,13 @@ function StatisticsTab() {
             />
           </div>
           <div>
-            <label style={{ display:"block", marginBottom:"6px", fontSize:"0.74rem", color:"#94a3b8" }}>{t.investment}</label>
+            <label style={{ display:"block", marginBottom:"6px", fontSize:"0.74rem", color:"#94a3b8" }}>{t.investmentMethod}</label>
             <SearchableSingleSelect
-              options={investments
-                .filter((inv) => !selectedPortfolioId || inv.portfolioId === selectedPortfolioId)
-                .map((inv)=>({ value:inv.id, label:inv.name }))}
-              value={selectedInvestmentId}
-              onChange={setSelectedInvestmentId}
-              placeholder={t.filterByInvestment}
-              searchPlaceholder={t.filterByInvestment}
+              options={investmentMethodOpts}
+              value={selectedInvestmentMethod}
+              onChange={setSelectedInvestmentMethod}
+              placeholder={t.investmentMethod}
+              searchPlaceholder={t.investmentMethod}
               font={font}
               minWidth="220px"
               variant="statsFilter"
