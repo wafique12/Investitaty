@@ -29,6 +29,7 @@ const AUTH_STORAGE_KEY = "investitaty_auth_v1";
 const AUTH_CONSENT_STORAGE_KEY = "investitaty_auth_consent_v1";
 const AUTH_LOGIN_DAY_KEY = "investitaty_auth_login_day_v1";
 const TAB_STORAGE_KEY = "investitaty_active_tab_v1";
+const POST_LOGIN_REDIRECT_KEY = "investitaty_post_login_redirect_v1";
 const SESSION_EXPIRED_NOTICE_KEY = "investitaty_session_expired_notice_v1";
 const SESSION_EXPIRED_MESSAGE_KEY = "investitaty_session_expired_message_v1";
 const PORTFOLIOS_COLLAPSE_STORAGE_KEY = "investitaty_portfolios_collapsed_v1";
@@ -923,6 +924,7 @@ function useGoogleAuth(lang = "en") {
     localStorage.removeItem(AUTH_LOGIN_DAY_KEY);
     localStorage.removeItem(SESSION_EXPIRED_NOTICE_KEY);
     localStorage.removeItem(SESSION_EXPIRED_MESSAGE_KEY);
+    sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
   }, []);
 
   const validateToken = useCallback(async (tokenToValidate) => {
@@ -1121,6 +1123,7 @@ function useGoogleAuth(lang = "en") {
             setUser(normalizedUser);
             setToken(accessToken);
             localStorage.setItem(AUTH_LOGIN_DAY_KEY, new Date().toISOString().slice(0, 10));
+            sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, "dashboard");
           } catch (err) {
             authLog("User profile fetch failed; trying token payload fallback", err);
             const payload = decodeJwtPayload(response.id_token);
@@ -1134,6 +1137,7 @@ function useGoogleAuth(lang = "en") {
               setUser(fallbackUser);
               setToken(accessToken);
               localStorage.setItem(AUTH_LOGIN_DAY_KEY, new Date().toISOString().slice(0, 10));
+              sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, "dashboard");
               authLog("Fallback profile created from id_token", fallbackUser);
             } else {
               setAuthError("Signed in but could not fetch profile. Check API key / redirect origin / popup policies.");
@@ -1163,6 +1167,7 @@ function useGoogleAuth(lang = "en") {
     localStorage.removeItem(AUTH_STORAGE_KEY);
     localStorage.removeItem(AUTH_CONSENT_STORAGE_KEY);
     localStorage.removeItem(AUTH_LOGIN_DAY_KEY);
+    sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
     setHasGrantedConsent(false);
     setUser(null); setToken(null); setAuthError(null); tokenClientRef.current = null;
   }, [authLog, token]);
@@ -2633,11 +2638,16 @@ function Dashboard({ onNavigateTransactionsByStatus, onNavigateTransactionsByInv
 
   const currentYear = new Date().getFullYear();
   const currentYearStart = `${currentYear}-01-01`;
-  const getAnnualIncomeDate = (tx) => tx?.dueDate || tx?.due_date || tx?.date || tx?.created_at || null;
   const getStrictIncomeStatus = (tx) => {
     const normalized = String(tx?.status || "").trim().toLowerCase();
     if (normalized === "collected") return "collected";
     if (normalized === "deposited") return "deposited";
+    return null;
+  };
+  const getAnnualIncomeDate = (tx) => {
+    const strictStatus = getStrictIncomeStatus(tx);
+    if (strictStatus === "collected") return tx?.collectedAt || tx?.collected_at || null;
+    if (strictStatus === "deposited") return tx?.depositedAt || tx?.deposited_at || null;
     return null;
   };
   const isCurrentYearAnnualIncomeRecord = (tx) => {
@@ -6286,7 +6296,11 @@ function UserManagementTab() {
 function MainApp() {
   const { syncError, t, isRTL, font, hasPermission, currentRole, previewState, cancelBackupPreview, applyBackupPreview } = useApp();
   const [sessionNotice, setSessionNotice] = useState(false);
-  const [activeTab, setActiveTab] = useState(() => localStorage.getItem(TAB_STORAGE_KEY) || "dashboard");
+  const [activeTab, setActiveTab] = useState(() => {
+    const postLoginTarget = sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY);
+    if (postLoginTarget) return postLoginTarget;
+    return localStorage.getItem(TAB_STORAGE_KEY) || "dashboard";
+  });
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [investmentPrefill, setInvestmentPrefill] = useState(null);
@@ -6302,6 +6316,13 @@ function MainApp() {
     document.title = RUNTIME_ENV && RUNTIME_ENV !== "production"
       ? `Investaty - ${RUNTIME_ENV}`
       : "Investaty";
+  }, []);
+
+  useEffect(() => {
+    const postLoginTarget = sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY);
+    if (!postLoginTarget) return;
+    setActiveTab(postLoginTarget);
+    sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
   }, []);
 
   useEffect(() => {
