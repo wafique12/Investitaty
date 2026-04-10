@@ -224,8 +224,8 @@ const TRANSLATIONS = {
     category: "Category",
     amount: "Amount",
     date: "Date",
-    collectedDate: "Collected Date",
     depositedDate: "Deposited Date",
+    collectedDate: "Collected Date",
     transactionType: "Type",
     income: "Income",
     expense: "Expense",
@@ -4556,7 +4556,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
             <table style={{ width:"100%",minWidth:"920px",borderCollapse:"collapse",fontSize:"0.85rem" }}>
               <thead>
                 <tr style={{ background:T.bgApp }}>
-                  {[t.date,t.collectedDate,t.depositedDate,t.category,t.portfolio,t.investment,t.amount,t.transactionType,t.status,t.smartStatusLabel,""].map((h,i)=>(
+                  {[t.date,t.category,t.portfolio,t.investment,t.amount,t.transactionType,t.status,t.smartStatusLabel,t.depositedDate,t.collectedDate,""].map((h,i)=>(
                     <th key={i} style={{ padding:"10px 14px",textAlign:isRTL?"right":"left",fontSize:"0.7rem",fontWeight:600,color:T.textMuted,borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap" }}>{h}</th>
                   ))}
                 </tr>
@@ -4573,8 +4573,6 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
                       onMouseLeave={e=>e.currentTarget.style.background="transparent"}
                     >
                       <td style={{ padding:"11px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{tx.date||"—"}</td>
-                      <td style={{ padding:"11px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{formatDateDisplay(tx.collectedAt || tx.collected_at) || "—"}</td>
-                      <td style={{ padding:"11px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{formatDateDisplay(tx.depositedAt || tx.deposited_at) || "—"}</td>
                       <td style={{ padding:"11px 14px",fontWeight:500,color:T.textPrimary,textAlign:isRTL?"right":"left" }}>{tx.category||"—"}</td>
                       <td style={{ padding:"11px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{ptf?.name||"—"}</td>
                       <td style={{ padding:"11px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{inv?.name||"—"}</td>
@@ -4607,6 +4605,8 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
                         })()}
                       </td>
                       <td style={{ padding:"11px 14px",textAlign:isRTL?"right":"left" }}>{txSmartStatus ? <Chip color={smartStatusColor(txSmartStatus)}>{smartStatusLabel(txSmartStatus)}</Chip> : "—"}</td>
+                      <td style={{ padding:"11px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{formatDateDisplay(tx.depositedAt || tx.deposited_at) || "—"}</td>
+                      <td style={{ padding:"11px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{formatDateDisplay(tx.collectedAt || tx.collected_at) || "—"}</td>
                       <td style={{ padding:"11px 10px",position:"relative" }} onClick={e=>e.stopPropagation()}>
                         <div style={{ display:"flex",gap:"3px",justifyContent:"flex-end" }}>
                           <button data-icon-tooltip={t.viewDetails} onClick={()=>openView(tx)} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"5px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.info} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><Eye size={13}/></button>
