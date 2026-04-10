@@ -242,6 +242,7 @@ const TRANSLATIONS = {
     close: "Close",
     edit: "Edit",
     archive: "Archive",
+    markDeposited: "Mark as Deposited",
     markCollected: "Mark as Collected",
     markScheduled: "Mark as Scheduled",
     cancelItem: "Cancel",
@@ -510,6 +511,7 @@ const TRANSLATIONS = {
     close: "إغلاق",
     edit: "تعديل",
     archive: "أرشفة",
+    markDeposited: "تحديد كمودَع",
     markCollected: "تحديد كمحصّل",
     markScheduled: "تحديد كمجدول",
     cancelItem: "إلغاء",
@@ -4827,11 +4829,33 @@ function TxActionMenu({ tx, onClose, anchorEl }) {
     document.addEventListener("mousedown",h); return ()=>document.removeEventListener("mousedown",h);
   }, [onClose]);
   const statuses = db?.settings?.transactionStatuses || ["recorded","scheduled","cancelled"];
-  const doneStatus = statuses.find(s=>String(s).toLowerCase().includes("record")) || statuses[0];
   const queuedStatus = statuses.find(s=>String(s).toLowerCase().includes("schedule")) || statuses[1] || statuses[0];
+  const normalizedStatus = String(tx?.status || "").trim().toLowerCase();
+  const todayDate = new Date().toISOString().slice(0, 10);
   const actions = [
-    { label:t.markCollected, icon:<Check size={13}/>, color:T.positive, show:tx.status!==doneStatus, action:()=>{ if (!txId) return onClose(); patchItem("transactions",txId,{status:doneStatus,collected_at:new Date().toISOString(),collectedAt:new Date().toISOString()}); onClose(); } },
-    { label:t.markScheduled, icon:<RefreshCw size={13}/>, color:T.warning, show:tx.status===doneStatus, action:()=>{ if (!txId) return onClose(); patchItem("transactions",txId,{status:queuedStatus}); onClose(); } },
+    {
+      label: t.markDeposited || "Mark as Deposited",
+      icon: <Wallet size={13}/>,
+      color: T.info,
+      show: normalizedStatus !== "deposited",
+      action: () => {
+        if (!txId) return onClose();
+        patchItem("transactions", txId, { status:"Deposited", deposited_at:todayDate, depositedAt:todayDate });
+        onClose();
+      },
+    },
+    {
+      label: t.markCollected,
+      icon: <CheckCircle2 size={13}/>,
+      color: T.positive,
+      show: normalizedStatus !== "collected",
+      action: () => {
+        if (!txId) return onClose();
+        patchItem("transactions", txId, { status:"Collected", collected_at:todayDate, collectedAt:todayDate });
+        onClose();
+      },
+    },
+    { label:t.markScheduled, icon:<RefreshCw size={13}/>, color:T.warning, show:normalizedStatus === "collected" || normalizedStatus === "deposited", action:()=>{ if (!txId) return onClose(); patchItem("transactions",txId,{status:queuedStatus}); onClose(); } },
     { label:tx.is_hidden ? t.unarchive : t.archive, icon:tx.is_hidden ? <Eye size={13}/> : <EyeOff size={13}/>, color:T.warning, show:true, action:()=>{ if (!txId) return onClose(); tx.is_hidden ? unarchiveItem("transactions",txId) : archiveItem("transactions",txId); onClose(); } },
     { label:t.deleteItem, icon:<Trash2 size={13}/>, color:T.negative, show:true, action:()=>{ if (!txId) return onClose(); if(window.confirm(t.deleteCascadeWarning)) hardDeleteItem("transactions",txId); onClose(); } },
   ].filter(a=>a.show);
