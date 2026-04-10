@@ -194,6 +194,7 @@ const TRANSLATIONS = {
     smartStatusOverdue: "Overdue",
     smartStatusSearchPlaceholder: "Filter by smart status",
     transactionDateRange: "Transaction Date Range",
+    investmentDateRange: "Investment Date Range",
     clearDateRange: "Clear",
     allLabel: "All",
     allStatuses: "All statuses",
@@ -463,6 +464,7 @@ const TRANSLATIONS = {
     smartStatusOverdue: "متأخرة",
     smartStatusSearchPlaceholder: "تصفية حسب الحالة الذكية",
     transactionDateRange: "نطاق تاريخ المعاملة",
+    investmentDateRange: "نطاق تاريخ الاستثمار",
     clearDateRange: "مسح",
     allLabel: "الكل",
     allStatuses: "كل الحالات",
@@ -3479,6 +3481,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   const [filterDateField, setFilterDateField] = useState("start");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterPortfolio, setFilterPortfolio] = useState("");
+  const [filterInvestmentMethod, setFilterInvestmentMethod] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [formError, setFormError] = useState("");
@@ -3506,6 +3509,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     setFilterDateField("start");
     setFilterStatus("");
     setFilterPortfolio("");
+    setFilterInvestmentMethod("");
     setSearchOpen(false);
     setSearchTerm("");
     setForm(EMPTY);
@@ -3539,13 +3543,14 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     setFilterDateField(saved.filterDateField || "start");
     setFilterStatus(saved.filterStatus || "");
     setFilterPortfolio(saved.filterPortfolio || "");
+    setFilterInvestmentMethod(saved.filterInvestmentMethod || "");
     setSearchTerm(saved.searchTerm || "");
     setSearchOpen(Boolean(saved.searchTerm));
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("investments_filters_v1", JSON.stringify({ filterStartDate, filterEndDate, filterDateField, filterStatus, filterPortfolio, searchTerm }));
-  }, [filterStartDate, filterEndDate, filterDateField, filterStatus, filterPortfolio, searchTerm]);
+    localStorage.setItem("investments_filters_v1", JSON.stringify({ filterStartDate, filterEndDate, filterDateField, filterStatus, filterPortfolio, filterInvestmentMethod, searchTerm }));
+  }, [filterStartDate, filterEndDate, filterDateField, filterStatus, filterPortfolio, filterInvestmentMethod, searchTerm]);
 
 
   useEffect(() => {
@@ -3588,8 +3593,9 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     const toMatch = !toDate || (targetDate && targetDate < toDate);
     const statusMatch = !filterStatus || (filterStatus === ARCHIVED_FILTER ? Boolean(inv.is_hidden) : (!inv.is_hidden && inv.status === filterStatus));
     const portfolioMatch = !filterPortfolio || inv.portfolioId === filterPortfolio;
+    const methodMatch = !filterInvestmentMethod || (inv.investmentMethod || "") === filterInvestmentMethod;
     const searchMatch = !searchTerm.trim() || normalizedTitle.includes(searchTerm.toLowerCase().trim());
-    return fromMatch && toMatch && statusMatch && portfolioMatch && searchMatch && (filterStatus===ARCHIVED_FILTER ? true : !inv.is_hidden);
+    return fromMatch && toMatch && statusMatch && portfolioMatch && methodMatch && searchMatch && (filterStatus===ARCHIVED_FILTER ? true : !inv.is_hidden);
   });
 
   return (
@@ -3659,6 +3665,13 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
           variant="lightFilter"
           isRTL={isRTL}
         />
+        <Select
+          value={filterInvestmentMethod}
+          onChange={e=>setFilterInvestmentMethod(e.target.value)}
+          options={[{ value:"", label:t.investmentMethod }, ...methodOpts]}
+          isRTL={isRTL}
+          style={{ ...filterInputCss(isRTL), flex:"0 0 auto", width:"fit-content", minWidth:"165px", maxWidth:"210px" }}
+        />
         <div>
           <DateRangeFilter
             startDate={filterStartDate}
@@ -3666,7 +3679,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
             onChange={(start, end) => { setFilterStartDate(start); setFilterEndDate(end); }}
             onClear={() => { setFilterStartDate(""); setFilterEndDate(""); }}
             isRTL={isRTL}
-            label={t.transactionDateRange}
+            label={t.investmentDateRange || t.transactionDateRange}
             clearLabel={t.clearDateRange}
             panelTop={(
               <div style={{ display:"flex", alignItems:"center", gap:"14px", minHeight:"20px", justifyContent:isRTL?"flex-end":"flex-start" }}>
@@ -3798,11 +3811,21 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
       }
 
       {showModal && (
-        <Modal title={modalMode==="create" ? t.addInvestment : `${t.view} ${t.investment}`} maxWidth="860px" onClose={closeModal}>
+        <Modal title={
+          modalMode==="create"
+            ? t.addInvestment
+            : modalMode==="view"
+              ? (
+                <span style={{ display:"inline-flex", alignItems:"baseline", gap:"6px", flexWrap:"wrap" }}>
+                  <span>{`${t.view} ${t.investment} -`}</span>
+                  <span style={{ fontWeight:500, color:T.textSecondary }}>{form.name || "—"}</span>
+                </span>
+              )
+              : `${t.view} ${t.investment}`
+        } maxWidth="860px" onClose={closeModal}>
           {modalMode === "view" ? (
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"10px" }}>
               <ReadOnlyField label={t.portfolio} value={portfolios.find((p)=>p.id===form.portfolioId)?.name} />
-              <ReadOnlyField label={t.name} value={form.name} />
               <ReadOnlyField label={t.quantity} value={form.quantity} />
               <ReadOnlyField label={t.purchasePrice} value={form.purchasePrice} />
               <ReadOnlyField label={t.currentPrice} value={form.inheritPrice ? portfolioCurrentPrice(db, form.portfolioId) : form.currentPrice} />
