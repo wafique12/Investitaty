@@ -4142,7 +4142,7 @@ function InvestmentDetailExpanded({ inv, txs, db }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmartBack, onBackToDashboard }) {
 
-  const { db, addItem, archiveItem, hardDeleteItem, patchItem, t, isRTL, font } = useApp();
+  const { db, addItem, archiveItem, hardDeleteItem, patchItem, t, isRTL, font, selectedCountry } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [modalMode, setModalMode] = useState("create");
@@ -4397,6 +4397,20 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
 
   const totalInc = txIncome(filtered);
   const totalExp = txExpense(filtered);
+  const headerCurrency = selectedCountry?.baseCurrency || baseCurrencyCode(db);
+  const formatHeaderAmount = useCallback((value) => {
+    const absValue = Math.abs(Number(value) || 0);
+    const locale = isRTL ? "ar-SA" : "en-US";
+    const formattedParts = new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency: headerCurrency || "USD",
+      currencyDisplay: "narrowSymbol",
+    }).formatToParts(absValue);
+    return formattedParts.map((part) => {
+      if (part.type === "currency" && String(headerCurrency || "").toUpperCase() === "SAR") return "﷼";
+      return part.value;
+    }).join("");
+  }, [headerCurrency, isRTL]);
 
   const typeOpts = [{value:"income",label:t.income},{value:"expense",label:t.expense}];
   const statusFilterOptions = [
@@ -4513,11 +4527,11 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
       <div style={{ display:"flex",gap:"12px",alignItems:"center",marginBottom:"12px",flexWrap:"wrap" }}>
         <div style={{ padding:"8px 16px",background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:"8px",fontSize:"0.82rem",fontWeight:500 }}>
           <span style={{ color:T.textMuted,marginRight:"6px" }}>{t.totalIncome}:</span>
-          <span style={{ color:T.positive }}>+{fmtMoney(totalInc,{currency:"USD"})}</span>
+          <span style={{ color:T.positive }}>+{formatHeaderAmount(totalInc)}</span>
         </div>
         <div style={{ padding:"8px 16px",background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:"8px",fontSize:"0.82rem",fontWeight:500 }}>
           <span style={{ color:T.textMuted,marginRight:"6px" }}>Expenses:</span>
-          <span style={{ color:T.negative }}>-{fmtMoney(totalExp,{currency:"USD"})}</span>
+          <span style={{ color:T.negative }}>-{formatHeaderAmount(totalExp)}</span>
         </div>
       </div>
       <div style={{ ...filterBarCss, marginBottom:"20px" }}>
