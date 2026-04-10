@@ -5970,12 +5970,16 @@ function StatisticsTab() {
           </div>
           <div>
             <label style={{ display:"block", marginBottom:"6px", fontSize:"0.74rem", color:"#94a3b8" }}>{t.investmentMethod}</label>
-            <Select
+            <SearchableSingleSelect
+              options={investmentMethodOpts}
               value={selectedInvestmentMethod}
-              onChange={(e)=>setSelectedInvestmentMethod(e.target.value)}
-              options={[{ value:"", label:t.investmentMethod }, ...investmentMethodOpts]}
+              onChange={setSelectedInvestmentMethod}
+              placeholder={t.investmentMethod}
+              searchPlaceholder={t.investmentMethod}
+              font={font}
+              minWidth="220px"
+              variant="statsFilter"
               isRTL={isRTL}
-              style={{ ...filterInputCss(isRTL), minWidth:"220px" }}
             />
           </div>
         </div>
