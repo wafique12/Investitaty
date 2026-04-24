@@ -4250,8 +4250,12 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
 
   const ModeToggle = ({ value, onChange }) => (
     <div style={{ display:"inline-flex", gap:"6px", alignItems:"center" }}>
-      <button type="button" onClick={() => onChange("fixed")} disabled={readOnly} style={toggleBtn(value === "fixed")} data-app-tooltip="Use exact target price">FIXED</button>
-      <button type="button" onClick={() => onChange("percentage")} disabled={readOnly} style={toggleBtn(value === "percentage")} data-app-tooltip="Calculate target from purchase price">PERCENTAGE</button>
+      <button type="button" onClick={() => onChange("fixed")} disabled={readOnly} style={{ ...toggleBtn(value === "fixed"), minWidth:"46px", padding:"7px 8px" }} data-icon-tooltip="Fixed price">
+        <DollarSign size={13} />
+      </button>
+      <button type="button" onClick={() => onChange("percentage")} disabled={readOnly} style={{ ...toggleBtn(value === "percentage"), minWidth:"46px", padding:"7px 8px" }} data-icon-tooltip="Percentage from purchase price">
+        <span style={{ fontSize:"0.85rem", fontWeight:700 }}>%</span>
+      </button>
     </div>
   );
 
@@ -4280,11 +4284,11 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
             <div style={{ color:T.textSecondary, fontSize:"0.8rem", fontWeight:600 }}>Level 1</div>
           </div>
           <div>
-            <div style={{ fontSize:"0.72rem", color:T.textMuted, marginBottom:"4px" }}>Calculation Type</div>
+            <div style={{ fontSize:"0.72rem", color:T.textMuted, marginBottom:"4px" }}>Type</div>
             {readOnly ? <div style={{ minHeight:"38px", border:"1px solid #dbe3ee", borderRadius:"8px", background:"#f8fafc", display:"flex", alignItems:"center", padding:"0 10px", fontWeight:600 }}>{form[fromKey].mode.toUpperCase()}</div> : <ModeToggle value={form[fromKey].mode} onChange={(next) => { updateCore(fromKey, "mode", next); updateCore(toKey, "mode", next); }} />}
           </div>
-          {readOnly ? <StaticField label="From Target" value={fmtMoney(fromVal, { currency, decimals:2 })} /> : <FormField label="From Target"><Input value={form[fromKey].value} onChange={(e)=>updateCore(fromKey, "value", e.target.value)} type="number" isRTL={isRTL} style={{ background:"#fff" }} /></FormField>}
-          {readOnly ? <StaticField label="To Target" value={fmtMoney(toVal, { currency, decimals:2 })} /> : <FormField label="To Target"><Input value={form[toKey].value} onChange={(e)=>updateCore(toKey, "value", e.target.value)} type="number" isRTL={isRTL} style={{ background:"#fff" }} /></FormField>}
+          {readOnly ? <StaticField label="From" value={fmtMoney(fromVal, { currency, decimals:2 })} /> : <FormField label="From"><Input value={form[fromKey].value} onChange={(e)=>updateCore(fromKey, "value", e.target.value)} type="number" isRTL={isRTL} style={{ background:"#fff" }} /></FormField>}
+          {readOnly ? <StaticField label="To" value={fmtMoney(toVal, { currency, decimals:2 })} /> : <FormField label="To"><Input value={form[toKey].value} onChange={(e)=>updateCore(toKey, "value", e.target.value)} type="number" isRTL={isRTL} style={{ background:"#fff" }} /></FormField>}
           <StaticField label="Calculated Range" value={`${fmtMoney(fromVal, { currency, decimals:2 })} - ${fmtMoney(toVal, { currency, decimals:2 })}`} color={color} />
         </div>
       </div>
@@ -4292,11 +4296,12 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
   };
 
   return (
-    <Modal title={`${mode === "view" ? "View Trading Plan" : "Create Trading Plan"} · ${investment?.name || "AAPL"}`} onClose={onClose} maxWidth="1280px">
+    <Modal title={`Trade Plan Details - ${investment?.name || "Apple Inc. (AAPL)"}`} onClose={onClose} maxWidth="1280px">
       {!investment?.tradingPlan && mode === "view" && !isEditing ? (
         <EmptyState text={t.noPlanSaved} />
       ) : (
         <div style={{ display:"grid", gap:"14px", background:"#ffffff", border:"1px solid #e2e8f0", borderRadius:"14px", padding:"14px" }}>
+          <div style={{ fontSize:"0.95rem", color:T.textSecondary, fontWeight:500 }}>TRADE PLAN: <span style={{ color:"#16a34a", fontWeight:700 }}>{investment?.name || "AAPL"}</span></div>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(4, minmax(0,1fr))", gap:"10px" }}>
             {[
               { label:"Current Price", value:fmtMoney(currentPrice, { currency, decimals:2 }), color:"#0284c7" },
@@ -4323,11 +4328,11 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
                     <div style={{ color:T.textSecondary, fontSize:"0.8rem", fontWeight:600 }}>Level 1</div>
                   </div>
                   <div>
-                    <div style={{ fontSize:"0.72rem", color:T.textMuted, marginBottom:"4px" }}>Calculation Type</div>
+                    <div style={{ fontSize:"0.72rem", color:T.textMuted, marginBottom:"4px" }}>Type</div>
                     {readOnly ? <div style={{ minHeight:"38px", border:"1px solid #dbe3ee", borderRadius:"8px", background:"#f8fafc", display:"flex", alignItems:"center", padding:"0 10px", fontWeight:600 }}>{form.stopLoss.mode.toUpperCase()}</div> : <ModeToggle value={form.stopLoss.mode} onChange={(next)=>updateCore("stopLoss", "mode", next)} />}
                   </div>
-                  {readOnly ? <StaticField label="Trigger Value" value={fmtMoney(computedPrice(form.stopLoss.mode, form.stopLoss.value, "down"), { currency, decimals:2 })} color="#dc2626" /> : <FormField label="Trigger Value"><Input type="number" value={form.stopLoss.value} onChange={(e)=>updateCore("stopLoss", "value", e.target.value)} isRTL={isRTL} style={{ background:"#fff" }} /></FormField>}
-                  <StaticField label="Risk Indicator" value={fmtMoney(computedPrice(form.stopLoss.mode, form.stopLoss.value, "down"), { currency, decimals:2 })} color="#dc2626" />
+                  {readOnly ? <StaticField label="Trigger" value={fmtMoney(computedPrice(form.stopLoss.mode, form.stopLoss.value, "down"), { currency, decimals:2 })} color="#dc2626" /> : <FormField label="Trigger"><Input type="number" value={form.stopLoss.value} onChange={(e)=>updateCore("stopLoss", "value", e.target.value)} isRTL={isRTL} style={{ background:"#fff" }} /></FormField>}
+                  <StaticField label="%" value={fmtMoney(computedPrice(form.stopLoss.mode, form.stopLoss.value, "down"), { currency, decimals:2 })} color="#dc2626" />
                 </div>
               </div>
               <div style={{ border:"1px solid #e2e8f0", borderRadius:"10px", padding:"10px", color:"#16a34a", fontWeight:700, fontSize:"0.82rem" }} data-app-tooltip="Support range result">{supportRange}</div>
