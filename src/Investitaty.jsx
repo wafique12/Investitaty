@@ -4206,9 +4206,12 @@ function StockAnalysisTab() {
 }
 
 function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
-  const { t, isRTL } = useApp();
-  const fmtSar = (val) => `${Number(val || 0).toLocaleString("en-US", { minimumFractionDigits:2, maximumFractionDigits:2 })} ﷼`;
-  const purchasePrice = Number(investment?.purchasePrice) || 165;
+  const displayCurrency = "SAR";
+  const purchasePrice = Number(investment?.purchasePrice) || 0;
+  const currentPrice = Number(investment?.currentPrice) || purchasePrice || 0;
+  const quantity = Number(investment?.quantity) || 0;
+  const totalValue = currentPrice * quantity;
+  const roiPct = purchasePrice > 0 ? ((currentPrice - purchasePrice) / purchasePrice) * 100 : 0;
 
   const [form, setForm] = useState(() => {
     const seeded = normalizeTradingPlan(investment?.tradingPlan || {}, purchasePrice);
@@ -4216,10 +4219,8 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
     return {
       ...seeded,
       supportFrom: { mode:"percentage", value:"3" },
-      supportTo: { mode:"percentage", value:"5" },
-      stopLoss: { mode:"percentage", value:"8" },
-      resistanceFrom: { mode:"percentage", value:"6" },
-      resistanceTo: { mode:"percentage", value:"9" },
+      resistanceFrom: { mode:"percentage", value:"8" },
+      stopLoss: { mode:"percentage", value:"5" },
       dcaLevels: [
         { mode:"percentage", value:"2", shares:"20", executed:false },
         { mode:"percentage", value:"4", shares:"30", executed:false },
@@ -4231,121 +4232,120 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
     };
   });
 
-  const [isEditing, setIsEditing] = useState(mode !== "view" || !investment?.tradingPlan);
+  const [isEditing, setIsEditing] = useState(mode !== "view");
   const readOnly = !isEditing;
+
+  const fmtSar = (val) => `${Number(val || 0).toLocaleString("en-US", { minimumFractionDigits:2, maximumFractionDigits:2 })} ﷼`;
+  const computedPrice = (modeType, value, direction) => computePlanPrice(purchasePrice, modeType, value, direction);
   const updateCore = (key, field, value) => setForm((prev) => ({ ...prev, [key]: { ...prev[key], [field]: value } }));
   const updateList = (listKey, idx, field, value) => setForm((prev) => ({ ...prev, [listKey]: prev[listKey].map((row, i) => i === idx ? { ...row, [field]: value } : row) }));
   const removeRow = (listKey, idx) => setForm((prev) => ({ ...prev, [listKey]: prev[listKey].filter((_, i) => i !== idx) }));
-  const computedPrice = (modeType, value, direction) => computePlanPrice(purchasePrice, modeType, value, direction);
-
-  const toggleBtn = (active) => ({ border:"none", padding:"6px 8px", background:active?"#dbeafe":"#ffffff", color:active?"#1d4ed8":"#64748b", cursor:readOnly?"not-allowed":"pointer", minWidth:"30px", display:"inline-flex", justifyContent:"center", alignItems:"center" });
 
   const ModeToggle = ({ value, onChange }) => (
-    <div style={{ display:"inline-flex", gap:0, border:"1px solid #cbd5e1", borderRadius:"999px", overflow:"hidden" }}>
-      <button type="button" onClick={() => onChange("fixed")} disabled={readOnly} style={toggleBtn(value === "fixed")} data-icon-tooltip="Fixed Price"><DollarSign size={12} /></button>
-      <button type="button" onClick={() => onChange("percentage")} disabled={readOnly} style={toggleBtn(value === "percentage")} data-icon-tooltip="Percentage"><span style={{ fontSize:"0.85rem", fontWeight:700 }}>%</span></button>
+    <div style={{ position:"relative", display:"inline-grid", gridTemplateColumns:"1fr 1fr", width:"74px", border:"1px solid #bfdbfe", borderRadius:"999px", overflow:"hidden", background:"#fff" }}>
+      <div style={{ position:"absolute", top:0, bottom:0, width:"50%", right:value === "fixed" ? "50%" : 0, background:"#3b82f6", transition:"right 0.15s ease" }} />
+      <button type="button" disabled={readOnly} onClick={() => onChange("fixed")} data-icon-tooltip="سعر ثابت" style={{ position:"relative", zIndex:1, border:"none", background:"transparent", color:value === "fixed" ? "#fff" : "#64748b", height:"26px", cursor:readOnly?"default":"pointer", display:"inline-flex", alignItems:"center", justifyContent:"center" }}><DollarSign size={12}/></button>
+      <button type="button" disabled={readOnly} onClick={() => onChange("percentage")} data-icon-tooltip="نسبة مئوية" style={{ position:"relative", zIndex:1, border:"none", background:"transparent", color:value === "percentage" ? "#fff" : "#64748b", height:"26px", cursor:readOnly?"default":"pointer", display:"inline-flex", alignItems:"center", justifyContent:"center" }}><span style={{fontWeight:700}}>%</span></button>
     </div>
   );
 
-  const ExecToggle = ({ value, onChange }) => (
-    <div style={{ display:"inline-flex", gap:"3px" }}>
-      <button type="button" onClick={() => onChange(true)} disabled={readOnly} data-icon-tooltip="Executed" style={{ width:"24px", height:"24px", border:"1px solid #cbd5e1", borderRadius:"999px", background:value?"#dcfce7":"#fff", color:value?"#16a34a":"#94a3b8", display:"inline-flex", alignItems:"center", justifyContent:"center", cursor:readOnly?"not-allowed":"pointer" }}><CheckCircle2 size={12} /></button>
-      <button type="button" onClick={() => onChange(false)} disabled={readOnly} data-icon-tooltip="Not Executed" style={{ width:"24px", height:"24px", border:"1px solid #cbd5e1", borderRadius:"999px", background:!value?"#eef2ff":"#fff", color:"#64748b", display:"inline-flex", alignItems:"center", justifyContent:"center", cursor:readOnly?"not-allowed":"pointer" }}><CalendarClock size={12} /></button>
-    </div>
-  );
-
-  const InlineZoneRow = ({ title, fromKey, toKey, direction, valueColor }) => {
-    const fromCalc = computedPrice(form[fromKey].mode, form[fromKey].value, direction);
-    const toCalc = computedPrice(form[toKey].mode, form[toKey].value, direction);
+  const ZoneRow = ({ label, keyName, direction }) => {
+    const calc = computedPrice(form[keyName].mode, form[keyName].value, direction);
     return (
-      <div style={{ border:"1px solid #e2e8f0", borderRadius:"10px", padding:"10px", background:"#fff" }}>
-        <div style={{ fontSize:"0.78rem", fontWeight:600, color:T.textSecondary, marginBottom:"8px" }}>{title}</div>
-        <div style={{ display:"flex", gap:"6px", alignItems:"center", flexWrap:"nowrap", whiteSpace:"nowrap" }}>
-          {readOnly ? <span style={{ color:T.textMuted, fontSize:"0.78rem" }}>{form[fromKey].mode.toUpperCase()}</span> : <ModeToggle value={form[fromKey].mode} onChange={(next) => { updateCore(fromKey, "mode", next); updateCore(toKey, "mode", next); }} />}
-          <span style={{ fontSize:"0.76rem", color:T.textMuted }}>From</span>
-          {readOnly ? <span style={{ fontSize:"0.82rem", color:T.textPrimary, minWidth:"78px" }}>{fmtSar(fromCalc)}</span> : <Input type="number" value={form[fromKey].value} onChange={(e)=>updateCore(fromKey, "value", e.target.value)} isRTL={isRTL} style={{ maxWidth:"84px", background:"#fff" }} />}
-          <span style={{ fontSize:"0.76rem", color:T.textMuted }}>To</span>
-          {readOnly ? <span style={{ fontSize:"0.82rem", color:T.textPrimary, minWidth:"78px" }}>{fmtSar(toCalc)}</span> : <Input type="number" value={form[toKey].value} onChange={(e)=>updateCore(toKey, "value", e.target.value)} isRTL={isRTL} style={{ maxWidth:"84px", background:"#fff" }} />}
-          <span style={{ fontSize:"0.82rem", fontWeight:700, color:valueColor }}>{fmtSar(fromCalc)} → {fmtSar(toCalc)}</span>
-        </div>
+      <div style={{ display:"grid", gridTemplateColumns:"86px 80px 1fr 120px", gap:"6px", alignItems:"center", marginBottom:"6px" }}>
+        <span style={{ fontSize:"0.78rem", color:"#334155", fontWeight:600 }}>{label}</span>
+        {readOnly ? <span style={{ fontSize:"0.74rem", color:"#64748b" }}>{form[keyName].mode === "fixed" ? "$" : "%"}</span> : <ModeToggle value={form[keyName].mode} onChange={(next)=>updateCore(keyName, "mode", next)} />}
+        {readOnly ? <span style={{ fontSize:"0.82rem", color:"#111827" }}>{String(form[keyName].value || "0")}</span> : <input type="number" value={form[keyName].value} onChange={(e)=>updateCore(keyName, "value", e.target.value)} style={{ width:"100%", height:"30px", border:"1px solid #dbe3ee", borderRadius:"8px", padding:"0 8px", background:"#fff", textAlign:"right" }} />}
+        <span style={{ fontSize:"0.8rem", fontWeight:700, color:direction === "down" && keyName === "stopLoss" ? "#dc2626" : "#16a34a", whiteSpace:"nowrap" }}>{fmtSar(calc)}</span>
       </div>
     );
   };
 
-  const stopLossCalc = computedPrice(form.stopLoss.mode, form.stopLoss.value, "down");
+  const RowExec = ({ value, onChange }) => (
+    <div style={{ display:"inline-flex", gap:"3px" }}>
+      <button type="button" onClick={()=>onChange(true)} disabled={readOnly} data-icon-tooltip="تم التنفيذ" style={{ width:"22px", height:"22px", border:"1px solid #cbd5e1", borderRadius:"999px", background:value?"#dcfce7":"#fff", color:value?"#16a34a":"#94a3b8", display:"inline-flex", alignItems:"center", justifyContent:"center" }}><CheckCircle2 size={11}/></button>
+      <button type="button" onClick={()=>onChange(false)} disabled={readOnly} data-icon-tooltip="غير منفذ" style={{ width:"22px", height:"22px", border:"1px solid #cbd5e1", borderRadius:"999px", background:!value?"#eef2ff":"#fff", color:"#64748b", display:"inline-flex", alignItems:"center", justifyContent:"center" }}><CalendarClock size={11}/></button>
+    </div>
+  );
 
   return (
-    <Modal title={`Trading Plan - ${investment?.name || "AAPL"}`} onClose={onClose} maxWidth="1180px">
-      <div style={{ background:"#ffffff", border:"1px solid #e2e8f0", borderRadius:"14px", padding:"14px", display:"grid", gap:"12px" }}>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
-          <div style={{ border:"1px solid #e2e8f0", borderRadius:"12px", padding:"12px", display:"grid", gap:"10px" }}>
-            <SectionHeader title="Technical Zones" />
-            <InlineZoneRow title="Support" fromKey="supportFrom" toKey="supportTo" direction="down" valueColor="#16a34a" />
-            <InlineZoneRow title="Resistance" fromKey="resistanceFrom" toKey="resistanceTo" direction="up" valueColor="#16a34a" />
-            <div style={{ border:"1px solid #e2e8f0", borderRadius:"10px", padding:"10px" }}>
-              <div style={{ fontSize:"0.78rem", fontWeight:600, color:T.textSecondary, marginBottom:"8px" }}>Stop Loss</div>
-              <div style={{ display:"flex", gap:"6px", alignItems:"center", flexWrap:"nowrap", whiteSpace:"nowrap" }}>
-                {readOnly ? <span style={{ color:T.textMuted, fontSize:"0.78rem" }}>{form.stopLoss.mode.toUpperCase()}</span> : <ModeToggle value={form.stopLoss.mode} onChange={(next)=>updateCore("stopLoss", "mode", next)} />}
-                <span style={{ fontSize:"0.76rem", color:T.textMuted }}>From</span>
-                {readOnly ? <span style={{ fontSize:"0.82rem", color:T.textPrimary }}>{fmtSar(stopLossCalc)}</span> : <Input type="number" value={form.stopLoss.value} onChange={(e)=>updateCore("stopLoss", "value", e.target.value)} isRTL={isRTL} style={{ maxWidth:"84px", background:"#fff" }} />}
-                <span style={{ fontSize:"0.82rem", fontWeight:700, color:"#dc2626" }}>{fmtSar(stopLossCalc)}</span>
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display:"grid", gap:"10px" }}>
-            <div style={{ border:"1px solid #e2e8f0", borderRadius:"12px", padding:"12px" }}>
-              <SectionHeader title="Accumulation Plan (DCA)" />
-              <div style={{ display:"grid", gap:"6px" }}>
-                {form.dcaLevels.map((row, idx) => {
-                  const price = computedPrice(row.mode, row.value, "down");
-                  const amount = price * (Number(row.shares) || 0);
-                  return (
-                    <div key={`dca-${idx}`} style={{ display:"grid", gridTemplateColumns:"68px 70px 1fr 1fr 1fr auto auto", gap:"6px", alignItems:"center", padding:"5px 0", borderBottom:"1px solid #f1f5f9" }}>
-                      <span style={{ fontSize:"0.78rem", color:T.textSecondary }}>{`Level ${idx + 1}`}</span>
-                      {readOnly ? <span style={{ fontSize:"0.78rem", color:T.textMuted }}>{row.mode.toUpperCase()}</span> : <ModeToggle value={row.mode} onChange={(next)=>updateList("dcaLevels", idx, "mode", next)} />}
-                      {readOnly ? <span style={{ fontSize:"0.82rem" }}>{fmtSar(price)}</span> : <Input type="number" value={row.value} onChange={(e)=>updateList("dcaLevels", idx, "value", e.target.value)} isRTL={isRTL} placeholder="Target" style={{ background:"#fff" }} />}
-                      {readOnly ? <span style={{ fontSize:"0.82rem", color:T.textPrimary }}>{row.shares || 0}</span> : <Input type="number" value={row.shares || ""} onChange={(e)=>updateList("dcaLevels", idx, "shares", e.target.value)} isRTL={isRTL} placeholder="Shares" style={{ background:"#fff" }} />}
-                      <span style={{ fontSize:"0.82rem", color:"#16a34a", fontWeight:600 }}>{fmtSar(amount)}</span>
-                      <ExecToggle value={Boolean(row.executed)} onChange={(next)=>updateList("dcaLevels", idx, "executed", next)} />
-                      {!readOnly && <button type="button" data-icon-tooltip="Delete row" onClick={() => removeRow("dcaLevels", idx)} style={{ border:"none", background:"transparent", color:"#ef4444", cursor:"pointer", display:"inline-flex" }}><Trash2 size={14} /></button>}
-                    </div>
-                  );
-                })}
-              </div>
-              {!readOnly && <button type="button" onClick={() => setForm((prev) => ({ ...prev, dcaLevels:[...prev.dcaLevels, { mode:"fixed", value:"", shares:"", executed:false }] }))} style={{ marginTop:"8px", border:"1px solid #cbd5e1", background:"#fff", color:T.textSecondary, borderRadius:"8px", padding:"6px 10px", cursor:"pointer", fontSize:"0.78rem", display:"inline-flex", alignItems:"center", gap:"5px" }}><Plus size={12}/> Level</button>}
-            </div>
-
-            <div style={{ border:"1px solid #e2e8f0", borderRadius:"12px", padding:"12px" }}>
-              <SectionHeader title="Exit Strategy" />
-              <div style={{ display:"grid", gap:"6px" }}>
-                {form.takeProfitTargets.map((row, idx) => {
-                  const price = computedPrice(row.mode, row.value, "up");
-                  return (
-                    <div key={`tp-${idx}`} style={{ display:"grid", gridTemplateColumns:"68px 70px 1fr 1fr 1fr auto auto", gap:"6px", alignItems:"center", padding:"5px 0", borderBottom:"1px solid #f1f5f9" }}>
-                      <span style={{ fontSize:"0.78rem", color:T.textSecondary }}>{`Target ${idx + 1}`}</span>
-                      {readOnly ? <span style={{ fontSize:"0.78rem", color:T.textMuted }}>{row.mode.toUpperCase()}</span> : <ModeToggle value={row.mode} onChange={(next)=>updateList("takeProfitTargets", idx, "mode", next)} />}
-                      {readOnly ? <span style={{ fontSize:"0.82rem" }}>{fmtSar(price)}</span> : <Input type="number" value={row.value} onChange={(e)=>updateList("takeProfitTargets", idx, "value", e.target.value)} isRTL={isRTL} placeholder="Target" style={{ background:"#fff" }} />}
-                      {readOnly ? <span style={{ fontSize:"0.82rem", color:T.textPrimary }}>{`${row.allocation || 0}%`}</span> : <Input type="number" value={row.allocation || ""} onChange={(e)=>updateList("takeProfitTargets", idx, "allocation", e.target.value)} isRTL={isRTL} placeholder="Quantity %" style={{ background:"#fff" }} />}
-                      <span style={{ fontSize:"0.82rem", color:"#16a34a", fontWeight:600 }}>{fmtSar(price)}</span>
-                      <ExecToggle value={Boolean(row.executed)} onChange={(next)=>updateList("takeProfitTargets", idx, "executed", next)} />
-                      {!readOnly && <button type="button" data-icon-tooltip="Delete row" onClick={() => removeRow("takeProfitTargets", idx)} style={{ border:"none", background:"transparent", color:"#ef4444", cursor:"pointer", display:"inline-flex" }}><Trash2 size={14} /></button>}
-                    </div>
-                  );
-                })}
-              </div>
-              {!readOnly && <button type="button" onClick={() => setForm((prev) => ({ ...prev, takeProfitTargets:[...prev.takeProfitTargets, { mode:"fixed", value:"", allocation:"", executed:false }] }))} style={{ marginTop:"8px", border:"1px solid #cbd5e1", background:"#fff", color:T.textSecondary, borderRadius:"8px", padding:"6px 10px", cursor:"pointer", fontSize:"0.78rem", display:"inline-flex", alignItems:"center", gap:"5px" }}><Plus size={12}/> Target</button>}
-            </div>
+    <Modal title={null} onClose={onClose} maxWidth="1160px">
+      <div dir="rtl" style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:"12px", overflow:"hidden", maxHeight:"82vh", display:"flex", flexDirection:"column" }}>
+        <div style={{ position:"sticky", top:0, zIndex:5, background:"#fff", borderBottom:"1px solid #e2e8f0", boxShadow:"0 2px 8px rgba(15,23,42,0.05)", padding:"10px 14px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <div style={{ fontSize:"0.95rem", fontWeight:700, color:"#0f172a" }}>{`خطة التداول - ${investment?.name || "السهم"}`}</div>
+          <div style={{ display:"inline-flex", gap:"8px" }}>
+            {readOnly ? (
+              <button type="button" onClick={()=>setIsEditing(true)} style={{ border:"none", background:"#2563eb", color:"#fff", borderRadius:"8px", padding:"6px 10px", fontSize:"0.78rem", fontWeight:700, cursor:"pointer" }}>تعديل الخطة</button>
+            ) : (
+              <button type="button" onClick={()=>onSave?.(form)} style={{ border:"none", background:"#2563eb", color:"#fff", borderRadius:"8px", padding:"6px 10px", fontSize:"0.78rem", fontWeight:700, cursor:"pointer" }}>حفظ الخطة</button>
+            )}
+            <button type="button" onClick={onClose} style={{ border:"1px solid #cbd5e1", background:"#fff", color:"#475569", borderRadius:"8px", padding:"6px 10px", fontSize:"0.78rem", cursor:"pointer" }}>إلغاء</button>
           </div>
         </div>
 
-        <div style={{ display:"flex", justifyContent:"flex-end", gap:"8px" }}>
-          <button type="button" data-icon-tooltip={t.close} onClick={onClose} style={{ width:"38px", height:"38px", borderRadius:"10px", border:"1px solid #cbd5e1", background:"#fff", color:"#1f2937", cursor:"pointer", display:"inline-flex", alignItems:"center", justifyContent:"center" }}><X size={16} /></button>
-          {readOnly ? (
-            <Btn variant="secondary" onClick={() => setIsEditing(true)}>Edit Plan</Btn>
-          ) : (
-            <button type="button" onClick={() => onSave?.(form)} style={{ border:"none", borderRadius:"10px", background:"#2563eb", color:"#fff", fontWeight:700, letterSpacing:"0.03em", padding:"0 18px", minHeight:"38px", cursor:"pointer" }}>Save Plan</button>
-          )}
+        <div style={{ background:"#f8fafc", borderBottom:"1px solid #e2e8f0", padding:"8px 14px", display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"8px" }}>
+          {[
+            { k:"السعر الحالي", v:fmtSar(currentPrice) },
+            { k:"سعر الشراء", v:fmtSar(purchasePrice) },
+            { k:"القيمة الإجمالية", v:fmtSar(totalValue) },
+            { k:"ROI", v:`${roiPct >= 0 ? "+" : ""}${roiPct.toFixed(2)}%`, c: roiPct >= 0 ? "#16a34a" : "#dc2626" },
+          ].map((item, i) => (
+            <div key={item.k} style={{ borderLeft:i<3?"1px solid #e2e8f0":"none", paddingInlineStart:"8px" }}>
+              <div style={{ fontSize:"0.68rem", color:"#64748b" }}>{item.k}</div>
+              <div style={{ fontSize:"0.82rem", fontWeight:700, color:item.c || "#111827" }}>{item.v}</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ overflowY:"auto", padding:"12px 14px" }}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
+            <div style={{ border:"1px solid #e2e8f0", borderRadius:"10px", padding:"10px" }}>
+              <div style={{ fontSize:"0.82rem", fontWeight:700, marginBottom:"8px", color:"#1e293b" }}>الدعم</div>
+              <ZoneRow label="الدعم" keyName="supportFrom" direction="down" />
+              <div style={{ fontSize:"0.82rem", fontWeight:700, marginBottom:"8px", color:"#1e293b", marginTop:"10px" }}>المقاومة</div>
+              <ZoneRow label="المقاومة" keyName="resistanceFrom" direction="up" />
+              <div style={{ fontSize:"0.82rem", fontWeight:700, marginBottom:"8px", color:"#1e293b", marginTop:"10px" }}>وقف الخسارة</div>
+              <ZoneRow label="وقف" keyName="stopLoss" direction="down" />
+            </div>
+
+            <div style={{ display:"grid", gap:"10px" }}>
+              <div style={{ border:"1px solid #e2e8f0", borderRadius:"10px", padding:"10px" }}>
+                <div style={{ fontSize:"0.82rem", fontWeight:700, marginBottom:"8px", color:"#1e293b" }}>خطة التجميع (DCA)</div>
+                {form.dcaLevels.map((row, idx) => {
+                  const calc = computedPrice(row.mode, row.value, "down");
+                  return (
+                    <div key={`dca-${idx}`} style={{ display:"grid", gridTemplateColumns:"56px 80px 1fr 106px auto auto", gap:"6px", alignItems:"center", padding:"5px 0", borderBottom:"1px solid #f1f5f9" }}>
+                      <span style={{ fontSize:"0.76rem", color:"#334155" }}>{`م${idx+1}`}</span>
+                      {readOnly ? <span style={{ fontSize:"0.74rem", color:"#64748b" }}>{row.mode === "fixed" ? "$" : "%"}</span> : <ModeToggle value={row.mode} onChange={(next)=>updateList("dcaLevels", idx, "mode", next)} />}
+                      {readOnly ? <span style={{ fontSize:"0.82rem" }}>{String(row.value || 0)}</span> : <input type="number" value={row.value} onChange={(e)=>updateList("dcaLevels", idx, "value", e.target.value)} style={{ width:"100%", height:"28px", border:"1px solid #dbe3ee", borderRadius:"8px", padding:"0 8px", background:"#fff", textAlign:"right" }} />}
+                      <span style={{ fontSize:"0.8rem", color:"#16a34a", fontWeight:700 }}>{fmtSar(calc)}</span>
+                      <RowExec value={Boolean(row.executed)} onChange={(next)=>updateList("dcaLevels", idx, "executed", next)} />
+                      {!readOnly && <button type="button" onClick={()=>removeRow("dcaLevels", idx)} style={{ border:"none", background:"transparent", color:"#ef4444", display:"inline-flex", cursor:"pointer" }}><Trash2 size={13}/></button>}
+                    </div>
+                  );
+                })}
+                {!readOnly && <button type="button" onClick={() => setForm((prev)=>({ ...prev, dcaLevels:[...prev.dcaLevels, { mode:"fixed", value:"", shares:"", executed:false }] }))} style={{ marginTop:"8px", border:"1px solid #cbd5e1", background:"#fff", borderRadius:"8px", padding:"5px 8px", fontSize:"0.75rem", color:"#475569", display:"inline-flex", gap:"4px", alignItems:"center" }}><Plus size={11}/> مستوى</button>}
+              </div>
+
+              <div style={{ border:"1px solid #e2e8f0", borderRadius:"10px", padding:"10px" }}>
+                <div style={{ fontSize:"0.82rem", fontWeight:700, marginBottom:"8px", color:"#1e293b" }}>أهداف التخارج</div>
+                {form.takeProfitTargets.map((row, idx) => {
+                  const calc = computedPrice(row.mode, row.value, "up");
+                  return (
+                    <div key={`tp-${idx}`} style={{ display:"grid", gridTemplateColumns:"56px 80px 1fr 106px auto auto", gap:"6px", alignItems:"center", padding:"5px 0", borderBottom:"1px solid #f1f5f9" }}>
+                      <span style={{ fontSize:"0.76rem", color:"#334155" }}>{`ه${idx+1}`}</span>
+                      {readOnly ? <span style={{ fontSize:"0.74rem", color:"#64748b" }}>{row.mode === "fixed" ? "$" : "%"}</span> : <ModeToggle value={row.mode} onChange={(next)=>updateList("takeProfitTargets", idx, "mode", next)} />}
+                      {readOnly ? <span style={{ fontSize:"0.82rem" }}>{String(row.value || 0)}</span> : <input type="number" value={row.value} onChange={(e)=>updateList("takeProfitTargets", idx, "value", e.target.value)} style={{ width:"100%", height:"28px", border:"1px solid #dbe3ee", borderRadius:"8px", padding:"0 8px", background:"#fff", textAlign:"right" }} />}
+                      <span style={{ fontSize:"0.8rem", color:"#16a34a", fontWeight:700 }}>{fmtSar(calc)}</span>
+                      <RowExec value={Boolean(row.executed)} onChange={(next)=>updateList("takeProfitTargets", idx, "executed", next)} />
+                      {!readOnly && <button type="button" onClick={()=>removeRow("takeProfitTargets", idx)} style={{ border:"none", background:"transparent", color:"#ef4444", display:"inline-flex", cursor:"pointer" }}><Trash2 size={13}/></button>}
+                    </div>
+                  );
+                })}
+                {!readOnly && <button type="button" onClick={() => setForm((prev)=>({ ...prev, takeProfitTargets:[...prev.takeProfitTargets, { mode:"fixed", value:"", allocation:"", executed:false }] }))} style={{ marginTop:"8px", border:"1px solid #cbd5e1", background:"#fff", borderRadius:"8px", padding:"5px 8px", fontSize:"0.75rem", color:"#475569", display:"inline-flex", gap:"4px", alignItems:"center" }}><Plus size={11}/> هدف</button>}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </Modal>
