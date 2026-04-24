@@ -2534,8 +2534,8 @@ const normalizeTradingPlan = (plan = {}, purchasePrice = 0) => {
     stopLoss,
     resistanceFrom,
     resistanceTo,
-    dcaLevels: dcaLevels.map((row) => ({ mode:row?.mode || "fixed", value:String(row?.value ?? ""), allocation:String(row?.allocation ?? ""), notes:row?.notes || "" })),
-    takeProfitTargets: takeProfitTargets.map((row) => ({ mode:row?.mode || "fixed", value:String(row?.value ?? ""), allocation:String(row?.allocation ?? ""), notes:row?.notes || "" })),
+    dcaLevels: dcaLevels.map((row) => ({ mode:row?.mode || "fixed", value:String(row?.value ?? ""), allocation:String(row?.allocation ?? ""), shares:String(row?.shares ?? ""), executed:Boolean(row?.executed), notes:row?.notes || "" })),
+    takeProfitTargets: takeProfitTargets.map((row) => ({ mode:row?.mode || "fixed", value:String(row?.value ?? ""), allocation:String(row?.allocation ?? ""), shares:String(row?.shares ?? ""), executed:Boolean(row?.executed), notes:row?.notes || "" })),
     notes: plan?.notes || "",
     purchasePrice: Number(purchasePrice) || 0,
   };
@@ -4213,7 +4213,7 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
   const quantity = Number(investment?.quantity) || 100;
   const currentValue = currentPrice * quantity;
   const totalRoi = purchasePrice > 0 ? ((currentPrice - purchasePrice) / purchasePrice) * 100 : 0;
-  const readOnly = mode === "view";
+
   const [form, setForm] = useState(() => {
     const seeded = normalizeTradingPlan(investment?.tradingPlan || {}, purchasePrice);
     if (investment?.tradingPlan) return seeded;
@@ -4225,142 +4225,207 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
       resistanceFrom: { mode:"percentage", value:"6" },
       resistanceTo: { mode:"percentage", value:"9" },
       dcaLevels: [
-        { mode:"percentage", value:"2", shares:"20", allocation:"", notes:"" },
-        { mode:"percentage", value:"4", shares:"30", allocation:"", notes:"" },
-        { mode:"percentage", value:"6", shares:"50", allocation:"", notes:"" },
+        { mode:"percentage", value:"2", shares:"20", allocation:"", executed:false, notes:"" },
+        { mode:"percentage", value:"4", shares:"30", allocation:"", executed:false, notes:"" },
+        { mode:"percentage", value:"6", shares:"50", allocation:"", executed:false, notes:"" },
       ],
       takeProfitTargets: [
-        { mode:"percentage", value:"8", allocation:"30", notes:"" },
-        { mode:"percentage", value:"12", allocation:"35", notes:"" },
-        { mode:"percentage", value:"16", allocation:"35", notes:"" },
+        { mode:"percentage", value:"8", allocation:"30", shares:"", executed:false, notes:"" },
+        { mode:"percentage", value:"12", allocation:"35", shares:"", executed:false, notes:"" },
+        { mode:"percentage", value:"16", allocation:"35", shares:"", executed:false, notes:"" },
       ],
     };
   });
+
+  const [isEditing, setIsEditing] = useState(mode !== "view" || !investment?.tradingPlan);
   const updateCore = (key, field, value) => setForm((prev) => ({ ...prev, [key]: { ...prev[key], [field]: value } }));
   const updateList = (listKey, idx, field, value) => setForm((prev) => ({ ...prev, [listKey]: prev[listKey].map((row, i) => i === idx ? { ...row, [field]: value } : row) }));
   const computedPrice = (modeType, value, direction) => computePlanPrice(purchasePrice, modeType, value, direction);
-  const cardBg = "#1f2937";
-  const cardBorder = "1px solid rgba(148,163,184,0.22)";
-  const inputBg = "#111827";
-  const toggleBtn = (active) => ({ border:"1px solid rgba(148,163,184,0.34)", borderRadius:"8px", padding:"6px 10px", background:active?"#2563eb":"#111827", color:active?"#fff":"#94a3b8", cursor:readOnly?"not-allowed":"pointer", fontSize:"0.7rem", fontWeight:600 });
   const sumDcaShares = form.dcaLevels.reduce((sum, row) => sum + (Number(row.shares) || 0), 0);
   const sumDcaAmount = form.dcaLevels.reduce((sum, row) => sum + ((Number(row.shares) || 0) * computedPrice(row.mode, row.value, "down")), 0);
   const supportRange = `${fmtMoney(computedPrice(form.supportFrom.mode, form.supportFrom.value, "down"), { currency, decimals:2 })} - ${fmtMoney(computedPrice(form.supportTo.mode, form.supportTo.value, "down"), { currency, decimals:2 })}`;
 
+  const readOnly = !isEditing;
+  const toggleBtn = (active) => ({ border:"1px solid #cbd5e1", borderRadius:"8px", padding:"7px 11px", background:active?"#16a34a":"#ffffff", color:active?"#ffffff":"#64748b", cursor:readOnly?"not-allowed":"pointer", fontSize:"0.7rem", fontWeight:700, minWidth:"98px" });
+
   const ModeToggle = ({ value, onChange }) => (
     <div style={{ display:"inline-flex", gap:"6px", alignItems:"center" }}>
-      <button type="button" onClick={() => onChange("fixed")} disabled={readOnly} style={toggleBtn(value === "fixed")}>FIXED</button>
-      <button type="button" onClick={() => onChange("percentage")} disabled={readOnly} style={toggleBtn(value === "percentage")}>PERCENTAGE</button>
-    </div>
-  );
-  const WidePlanRow = ({ label, keyName, direction, color }) => (
-    <div style={{ display:"grid", gridTemplateColumns:"180px 230px 1fr", gap:"10px", alignItems:"center", background:inputBg, border:cardBorder, borderRadius:"10px", padding:"10px" }}>
-      <div style={{ color:"#e5e7eb", fontSize:"0.82rem", fontWeight:600 }} data-app-tooltip={label}>{label}</div>
-      <div style={{ display:"flex", alignItems:"center", gap:"8px", flexWrap:"wrap" }}>
-        <ModeToggle value={form[keyName].mode} onChange={(next) => updateCore(keyName, "mode", next)} />
-        <Input value={form[keyName].value} onChange={(e)=>updateCore(keyName, "value", e.target.value)} isRTL={isRTL} type="number" readOnly={readOnly} style={{ background:inputBg, color:"#f8fafc", border:"1px solid rgba(148,163,184,0.35)", maxWidth:"110px" }} />
-      </div>
-      <div style={{ color, fontWeight:700, fontSize:"0.8rem" }}>
-        {fmtMoney(computedPrice(form[keyName].mode, form[keyName].value, direction), { currency, decimals:2 })}
-      </div>
+      <button type="button" onClick={() => onChange("fixed")} disabled={readOnly} style={toggleBtn(value === "fixed")} data-app-tooltip="Use exact target price">FIXED</button>
+      <button type="button" onClick={() => onChange("percentage")} disabled={readOnly} style={toggleBtn(value === "percentage")} data-app-tooltip="Calculate target from purchase price">PERCENTAGE</button>
     </div>
   );
 
+  const ExecutionToggle = ({ value, onChange }) => (
+    <div style={{ display:"inline-flex", gap:"4px", border:"1px solid #d1d5db", borderRadius:"999px", padding:"2px", background:value?"#dcfce7":"#f8fafc" }}>
+      <button type="button" disabled={readOnly} onClick={() => onChange(true)} data-icon-tooltip="Executed: order has been completed" style={{ border:"none", background:value?"#16a34a":"transparent", color:value?"#fff":"#16a34a", borderRadius:"999px", width:"26px", height:"26px", display:"inline-flex", alignItems:"center", justifyContent:"center", cursor:readOnly?"not-allowed":"pointer" }}><CheckCircle2 size={14} /></button>
+      <button type="button" disabled={readOnly} onClick={() => onChange(false)} data-icon-tooltip="Not executed yet" style={{ border:"none", background:!value?"#e2e8f0":"transparent", color:"#64748b", borderRadius:"999px", width:"26px", height:"26px", display:"inline-flex", alignItems:"center", justifyContent:"center", cursor:readOnly?"not-allowed":"pointer" }}><CalendarClock size={13} /></button>
+    </div>
+  );
+
+  const StaticField = ({ label, value, color = T.textPrimary }) => (
+    <div>
+      <div style={{ fontSize:"0.72rem", color:T.textMuted, marginBottom:"4px" }}>{label}</div>
+      <div style={{ minHeight:"38px", border:"1px solid #dbe3ee", borderRadius:"8px", background:"#f8fafc", display:"flex", alignItems:"center", padding:"0 10px", color, fontSize:"0.82rem", fontWeight:600 }}>{value || "—"}</div>
+    </div>
+  );
+
+  const ZoneRow = ({ title, fromKey, toKey, color }) => {
+    const fromVal = computedPrice(form[fromKey].mode, form[fromKey].value, fromKey.includes("resistance") ? "up" : "down");
+    const toVal = computedPrice(form[toKey].mode, form[toKey].value, toKey.includes("resistance") ? "up" : "down");
+    return (
+      <div style={{ border:"1px solid #e2e8f0", borderRadius:"10px", padding:"10px" }}>
+        <div style={{ display:"grid", gridTemplateColumns:"140px 220px 1fr 1fr 1fr", gap:"10px", alignItems:"end" }}>
+          <div>
+            <div style={{ fontSize:"0.72rem", color:T.textMuted, marginBottom:"4px" }}>{title}</div>
+            <div style={{ color:T.textSecondary, fontSize:"0.8rem", fontWeight:600 }}>Level 1</div>
+          </div>
+          <div>
+            <div style={{ fontSize:"0.72rem", color:T.textMuted, marginBottom:"4px" }}>Calculation Type</div>
+            {readOnly ? <div style={{ minHeight:"38px", border:"1px solid #dbe3ee", borderRadius:"8px", background:"#f8fafc", display:"flex", alignItems:"center", padding:"0 10px", fontWeight:600 }}>{form[fromKey].mode.toUpperCase()}</div> : <ModeToggle value={form[fromKey].mode} onChange={(next) => { updateCore(fromKey, "mode", next); updateCore(toKey, "mode", next); }} />}
+          </div>
+          {readOnly ? <StaticField label="From Target" value={fmtMoney(fromVal, { currency, decimals:2 })} /> : <FormField label="From Target"><Input value={form[fromKey].value} onChange={(e)=>updateCore(fromKey, "value", e.target.value)} type="number" isRTL={isRTL} style={{ background:"#fff" }} /></FormField>}
+          {readOnly ? <StaticField label="To Target" value={fmtMoney(toVal, { currency, decimals:2 })} /> : <FormField label="To Target"><Input value={form[toKey].value} onChange={(e)=>updateCore(toKey, "value", e.target.value)} type="number" isRTL={isRTL} style={{ background:"#fff" }} /></FormField>}
+          <StaticField label="Calculated Range" value={`${fmtMoney(fromVal, { currency, decimals:2 })} - ${fmtMoney(toVal, { currency, decimals:2 })}`} color={color} />
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <Modal title={`${readOnly ? "View/Edit Plan" : "Create Plan"} · ${investment?.name || "AAPL"}`} onClose={onClose} maxWidth="1240px">
-      {!investment?.tradingPlan && readOnly ? (
+    <Modal title={`${mode === "view" ? "View Trading Plan" : "Create Trading Plan"} · ${investment?.name || "AAPL"}`} onClose={onClose} maxWidth="1280px">
+      {!investment?.tradingPlan && mode === "view" && !isEditing ? (
         <EmptyState text={t.noPlanSaved} />
       ) : (
-        <div style={{ display:"grid", gap:"14px", background:"#0b1220", border:"1px solid rgba(148,163,184,0.2)", borderRadius:"14px", padding:"14px" }}>
+        <div style={{ display:"grid", gap:"14px", background:"#ffffff", border:"1px solid #e2e8f0", borderRadius:"14px", padding:"14px" }}>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(4, minmax(0,1fr))", gap:"10px" }}>
             {[
-              { label:"Current Price", value:fmtMoney(currentPrice, { currency, decimals:2 }), color:"#38bdf8" },
-              { label:"Purchase Price", value:fmtMoney(purchasePrice, { currency, decimals:2 }), color:"#f8fafc" },
-              { label:"Current Value", value:fmtMoney(currentValue, { currency, decimals:2 }), color:"#a78bfa" },
-              { label:"Total ROI", value:`${totalRoi >= 0 ? "+" : ""}${totalRoi.toFixed(2)}%`, color:totalRoi >= 0 ? "#22c55e" : "#ef4444" },
+              { label:"Current Price", value:fmtMoney(currentPrice, { currency, decimals:2 }), color:"#0284c7" },
+              { label:"Purchase Price", value:fmtMoney(purchasePrice, { currency, decimals:2 }), color:"#0f172a" },
+              { label:"Current Value", value:fmtMoney(currentValue, { currency, decimals:2 }), color:"#4f46e5" },
+              { label:"Total ROI", value:`${totalRoi >= 0 ? "+" : ""}${totalRoi.toFixed(2)}%`, color:totalRoi >= 0 ? "#16a34a" : "#dc2626" },
             ].map((card) => (
-              <div key={card.label} style={{ background:cardBg, border:cardBorder, borderRadius:"12px", padding:"14px" }}>
-                <div style={{ color:"#94a3b8", fontSize:"0.75rem" }}>{card.label}</div>
+              <div key={card.label} style={{ background:"#ffffff", border:"1px solid #e2e8f0", borderRadius:"12px", padding:"14px" }}>
+                <div style={{ color:T.textMuted, fontSize:"0.75rem" }}>{card.label}</div>
                 <div style={{ color:card.color, fontSize:"1.12rem", fontWeight:700, marginTop:"5px" }}>{card.value}</div>
               </div>
             ))}
           </div>
+
           <div style={{ display:"grid", gridTemplateColumns:"1.1fr 1fr", gap:"12px", alignItems:"start" }}>
-            <div style={{ background:cardBg, border:cardBorder, borderRadius:"12px", padding:"12px", display:"grid", gap:"10px" }}>
-              <SectionHeader title="Technical Zones & Stop Loss" />
-              <WidePlanRow label="Support Zone" keyName="supportFrom" direction="down" color="#22c55e" />
-              <WidePlanRow label="Support Zone (To)" keyName="supportTo" direction="down" color="#22c55e" />
-              <WidePlanRow label="Resistance Zone" keyName="resistanceFrom" direction="up" color="#22c55e" />
-              <WidePlanRow label="Resistance Zone (To)" keyName="resistanceTo" direction="up" color="#22c55e" />
-              <WidePlanRow label="Stop Loss" keyName="stopLoss" direction="down" color="#ef4444" />
-              <div style={{ background:"#111827", border:cardBorder, borderRadius:"10px", padding:"10px", color:"#22c55e", fontWeight:700, fontSize:"0.82rem" }} data-app-tooltip="Support range result">
-                {supportRange}
+            <div style={{ border:"1px solid #e2e8f0", borderRadius:"12px", padding:"12px", display:"grid", gap:"10px" }}>
+              <SectionHeader title="Technical Zones" />
+              <ZoneRow title="Support Zone" fromKey="supportFrom" toKey="supportTo" color="#16a34a" />
+              <ZoneRow title="Resistance Zone" fromKey="resistanceFrom" toKey="resistanceTo" color="#16a34a" />
+              <div style={{ border:"1px solid #e2e8f0", borderRadius:"10px", padding:"10px" }}>
+                <div style={{ display:"grid", gridTemplateColumns:"140px 220px 1fr 1fr", gap:"10px", alignItems:"end" }}>
+                  <div>
+                    <div style={{ fontSize:"0.72rem", color:T.textMuted, marginBottom:"4px" }}>Stop Loss</div>
+                    <div style={{ color:T.textSecondary, fontSize:"0.8rem", fontWeight:600 }}>Level 1</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize:"0.72rem", color:T.textMuted, marginBottom:"4px" }}>Calculation Type</div>
+                    {readOnly ? <div style={{ minHeight:"38px", border:"1px solid #dbe3ee", borderRadius:"8px", background:"#f8fafc", display:"flex", alignItems:"center", padding:"0 10px", fontWeight:600 }}>{form.stopLoss.mode.toUpperCase()}</div> : <ModeToggle value={form.stopLoss.mode} onChange={(next)=>updateCore("stopLoss", "mode", next)} />}
+                  </div>
+                  {readOnly ? <StaticField label="Trigger Value" value={fmtMoney(computedPrice(form.stopLoss.mode, form.stopLoss.value, "down"), { currency, decimals:2 })} color="#dc2626" /> : <FormField label="Trigger Value"><Input type="number" value={form.stopLoss.value} onChange={(e)=>updateCore("stopLoss", "value", e.target.value)} isRTL={isRTL} style={{ background:"#fff" }} /></FormField>}
+                  <StaticField label="Risk Indicator" value={fmtMoney(computedPrice(form.stopLoss.mode, form.stopLoss.value, "down"), { currency, decimals:2 })} color="#dc2626" />
+                </div>
               </div>
+              <div style={{ border:"1px solid #e2e8f0", borderRadius:"10px", padding:"10px", color:"#16a34a", fontWeight:700, fontSize:"0.82rem" }} data-app-tooltip="Support range result">{supportRange}</div>
             </div>
+
             <div style={{ display:"grid", gap:"10px" }}>
-              <div style={{ background:cardBg, border:cardBorder, borderRadius:"12px", padding:"12px" }}>
-                <SectionHeader title="Accumulation Plan (DCA)" action={!readOnly ? <button data-icon-tooltip="Add DCA level" onClick={() => setForm((prev) => ({ ...prev, dcaLevels:[...prev.dcaLevels, { mode:"fixed", value:"", shares:"", allocation:"", notes:"" }] }))} style={{ border:"none", width:"24px", height:"24px", borderRadius:"7px", background:"#2563eb", color:"#fff", cursor:"pointer", display:"inline-flex", alignItems:"center", justifyContent:"center" }}>+</button> : null} />
+              <div style={{ border:"1px solid #e2e8f0", borderRadius:"12px", padding:"12px" }}>
+                <SectionHeader title="Accumulation Plan (DCA)" action={!readOnly ? <button data-icon-tooltip="Add DCA level" onClick={() => setForm((prev) => ({ ...prev, dcaLevels:[...prev.dcaLevels, { mode:"fixed", value:"", shares:"", allocation:"", executed:false, notes:"" }] }))} style={{ border:"none", width:"26px", height:"26px", borderRadius:"7px", background:"#2563eb", color:"#fff", cursor:"pointer" }}>+</button> : null} />
                 <div style={{ display:"grid", gap:"8px" }}>
                   {form.dcaLevels.map((level, idx) => {
                     const levelPrice = computedPrice(level.mode, level.value, "down");
                     const shares = Number(level.shares) || 0;
                     const amount = levelPrice * shares;
                     return (
-                      <div key={`dca-${idx}`} style={{ display:"grid", gridTemplateColumns:"72px 1fr 90px 120px auto", gap:"8px", alignItems:"center" }}>
-                        <span style={{ color:"#cbd5e1", fontSize:"0.76rem" }}>{`Level ${idx + 1}`}</span>
-                        <div style={{ display:"flex", gap:"6px", alignItems:"center", flexWrap:"wrap" }}>
-                          <ModeToggle value={level.mode} onChange={(next) => updateList("dcaLevels", idx, "mode", next)} />
-                          <Input type="number" value={level.value} onChange={(e)=>updateList("dcaLevels", idx, "value", e.target.value)} isRTL={isRTL} readOnly={readOnly} style={{ background:inputBg, color:"#fff", border:"1px solid rgba(148,163,184,0.35)", maxWidth:"100px" }} />
+                      <div key={`dca-${idx}`} style={{ border:"1px solid #e2e8f0", borderRadius:"10px", padding:"10px", background:level.executed?"#f0fdf4":"#fff" }}>
+                        <div style={{ display:"grid", gridTemplateColumns:"72px 220px 1fr 1fr 1fr auto", gap:"8px", alignItems:"end" }}>
+                          <div>
+                            <div style={{ fontSize:"0.72rem", color:T.textMuted, marginBottom:"4px" }}>Level</div>
+                            <div style={{ color:T.textSecondary, fontSize:"0.8rem", fontWeight:600 }}>{`Level ${idx + 1}`}</div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize:"0.72rem", color:T.textMuted, marginBottom:"4px" }}>Type</div>
+                            {readOnly ? <div style={{ minHeight:"38px", border:"1px solid #dbe3ee", borderRadius:"8px", background:"#f8fafc", display:"flex", alignItems:"center", padding:"0 10px", fontWeight:600 }}>{level.mode.toUpperCase()}</div> : <ModeToggle value={level.mode} onChange={(next)=>updateList("dcaLevels", idx, "mode", next)} />}
+                          </div>
+                          {readOnly ? <StaticField label="Target Price" value={fmtMoney(levelPrice, { currency, decimals:2 })} /> : <FormField label="Target Price"><Input type="number" value={level.value} onChange={(e)=>updateList("dcaLevels", idx, "value", e.target.value)} isRTL={isRTL} style={{ background:"#fff" }} /></FormField>}
+                          {readOnly ? <StaticField label="Shares" value={shares} /> : <FormField label="Shares"><Input type="number" value={level.shares || ""} onChange={(e)=>updateList("dcaLevels", idx, "shares", e.target.value)} isRTL={isRTL} style={{ background:"#fff" }} /></FormField>}
+                          <StaticField label="Amount" value={fmtMoney(amount, { currency, decimals:2 })} color="#16a34a" />
+                          <ExecutionToggle value={Boolean(level.executed)} onChange={(next)=>updateList("dcaLevels", idx, "executed", next)} />
                         </div>
-                        <Input type="number" value={level.shares || ""} onChange={(e)=>updateList("dcaLevels", idx, "shares", e.target.value)} isRTL={isRTL} readOnly={readOnly} style={{ background:inputBg, color:"#fff", border:"1px solid rgba(148,163,184,0.35)" }} />
-                        <Input value={fmtMoney(amount, { currency, decimals:2 })} isRTL={isRTL} readOnly style={{ background:inputBg, color:"#a7f3d0", border:"1px solid rgba(34,197,94,0.35)" }} />
-                        {!readOnly && <button type="button" onClick={() => setForm((prev) => ({ ...prev, dcaLevels:prev.dcaLevels.filter((_, i) => i !== idx) }))} style={{ border:"none", background:"transparent", color:"#f87171", cursor:"pointer" }}><X size={14}/></button>}
                       </div>
                     );
                   })}
                 </div>
               </div>
-              <div style={{ background:cardBg, border:cardBorder, borderRadius:"12px", padding:"12px" }}>
-                <SectionHeader title="Exit Strategy" />
+
+              <div style={{ border:"1px solid #e2e8f0", borderRadius:"12px", padding:"12px" }}>
+                <SectionHeader title="Exit Strategy" action={!readOnly ? <button data-icon-tooltip="Add exit target" onClick={() => setForm((prev) => ({ ...prev, takeProfitTargets:[...prev.takeProfitTargets, { mode:"fixed", value:"", allocation:"", shares:"", executed:false, notes:"" }] }))} style={{ border:"none", width:"26px", height:"26px", borderRadius:"7px", background:"#2563eb", color:"#fff", cursor:"pointer" }}>+</button> : null} />
                 <div style={{ display:"grid", gap:"8px" }}>
                   {form.takeProfitTargets.map((target, idx) => {
+                    const price = computedPrice(target.mode, target.value, "up");
                     const barWidth = Math.min(100, Math.max(8, Number(target.allocation) || 0));
                     return (
-                      <div key={`tp-${idx}`} style={{ display:"grid", gridTemplateColumns:"72px 1fr 95px 1fr auto", gap:"8px", alignItems:"center" }}>
-                        <span style={{ color:"#cbd5e1", fontSize:"0.76rem" }}>{`Target ${idx + 1}`}</span>
-                        <div style={{ display:"flex", gap:"6px", alignItems:"center", flexWrap:"wrap" }}>
-                          <ModeToggle value={target.mode} onChange={(next) => updateList("takeProfitTargets", idx, "mode", next)} />
-                          <Input type="number" value={target.value} onChange={(e)=>updateList("takeProfitTargets", idx, "value", e.target.value)} isRTL={isRTL} readOnly={readOnly} style={{ background:inputBg, color:"#fff", border:"1px solid rgba(148,163,184,0.35)", maxWidth:"100px" }} />
+                      <div key={`tp-${idx}`} style={{ border:"1px solid #e2e8f0", borderRadius:"10px", padding:"10px", background:target.executed?"#f0fdf4":"#fff" }}>
+                        <div style={{ display:"grid", gridTemplateColumns:"72px 220px 1fr 1fr 1fr auto", gap:"8px", alignItems:"end" }}>
+                          <div>
+                            <div style={{ fontSize:"0.72rem", color:T.textMuted, marginBottom:"4px" }}>Target</div>
+                            <div style={{ color:T.textSecondary, fontSize:"0.8rem", fontWeight:600 }}>{`Target ${idx + 1}`}</div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize:"0.72rem", color:T.textMuted, marginBottom:"4px" }}>Type</div>
+                            {readOnly ? <div style={{ minHeight:"38px", border:"1px solid #dbe3ee", borderRadius:"8px", background:"#f8fafc", display:"flex", alignItems:"center", padding:"0 10px", fontWeight:600 }}>{target.mode.toUpperCase()}</div> : <ModeToggle value={target.mode} onChange={(next)=>updateList("takeProfitTargets", idx, "mode", next)} />}
+                          </div>
+                          {readOnly ? <StaticField label="Target Price" value={fmtMoney(price, { currency, decimals:2 })} /> : <FormField label="Target Price"><Input type="number" value={target.value} onChange={(e)=>updateList("takeProfitTargets", idx, "value", e.target.value)} isRTL={isRTL} style={{ background:"#fff" }} /></FormField>}
+                          {readOnly ? <StaticField label="Quantity %" value={`${target.allocation || 0}%`} /> : <FormField label="Quantity %"><Input type="number" value={target.allocation} onChange={(e)=>updateList("takeProfitTargets", idx, "allocation", e.target.value)} isRTL={isRTL} style={{ background:"#fff" }} /></FormField>}
+                          <div>
+                            <div style={{ fontSize:"0.72rem", color:T.textMuted, marginBottom:"4px" }}>Progress</div>
+                            <div style={{ height:"38px", border:"1px solid #dbe3ee", borderRadius:"8px", display:"flex", alignItems:"center", padding:"0 8px", background:"#f8fafc" }}>
+                              <div style={{ height:"10px", borderRadius:"999px", background:"#dcfce7", overflow:"hidden", width:"100%" }}>
+                                <div style={{ width:`${barWidth}%`, height:"100%", background:"linear-gradient(90deg,#22c55e,#16a34a)" }} />
+                              </div>
+                            </div>
+                          </div>
+                          <ExecutionToggle value={Boolean(target.executed)} onChange={(next)=>updateList("takeProfitTargets", idx, "executed", next)} />
                         </div>
-                        <Input type="number" value={target.allocation} onChange={(e)=>updateList("takeProfitTargets", idx, "allocation", e.target.value)} isRTL={isRTL} readOnly={readOnly} style={{ background:inputBg, color:"#fff", border:"1px solid rgba(148,163,184,0.35)" }} />
-                        <div style={{ height:"10px", borderRadius:"999px", background:"#0f172a", overflow:"hidden", border:"1px solid rgba(148,163,184,0.28)" }}>
-                          <div style={{ width:`${barWidth}%`, height:"100%", background:"linear-gradient(90deg,#22c55e,#16a34a)" }} />
-                        </div>
-                        {!readOnly && <button type="button" onClick={() => setForm((prev) => ({ ...prev, takeProfitTargets:prev.takeProfitTargets.filter((_, i) => i !== idx) }))} style={{ border:"none", background:"transparent", color:"#f87171", cursor:"pointer" }}><X size={14}/></button>}
                       </div>
                     );
                   })}
                 </div>
               </div>
-              <div style={{ background:cardBg, border:cardBorder, borderRadius:"12px", padding:"12px" }}>
+
+              <div style={{ border:"1px solid #e2e8f0", borderRadius:"12px", padding:"12px" }}>
                 <SectionHeader title="Buying Strategy Summary" />
-                <div style={{ display:"grid", gap:"4px", fontSize:"0.78rem", color:"#cbd5e1" }}>
-                  <div>DCA Buy Points: <strong style={{ color:"#f8fafc" }}>{form.dcaLevels.length}</strong></div>
-                  <div>DCA Buy Points (shares): <strong style={{ color:"#f8fafc" }}>{sumDcaShares}</strong></div>
-                  <div>DCA + Quantitty: <strong style={{ color:"#22c55e" }}>{fmtMoney(sumDcaAmount, { currency, decimals:2 })}</strong></div>
+                <div style={{ display:"grid", gap:"8px", gridTemplateColumns:"1fr 1fr 1fr" }}>
+                  <StaticField label="DCA Buy Points" value={form.dcaLevels.length} />
+                  <StaticField label="DCA Buy Points (shares)" value={sumDcaShares} />
+                  <StaticField label="DCA + Quantitty" value={fmtMoney(sumDcaAmount, { currency, decimals:2 })} color="#16a34a" />
                 </div>
               </div>
             </div>
           </div>
+
           <div style={{ display:"flex", justifyContent:"flex-end", gap:"8px" }}>
-            <button type="button" data-icon-tooltip={t.close} onClick={onClose} style={{ width:"38px", height:"38px", borderRadius:"10px", border:"1px solid rgba(148,163,184,0.35)", background:"#0f172a", color:"#e2e8f0", cursor:"pointer", display:"inline-flex", alignItems:"center", justifyContent:"center" }}><X size={16} /></button>
-            {!readOnly && <button type="button" onClick={() => onSave?.(form)} style={{ border:"none", borderRadius:"10px", background:"#2563eb", color:"#fff", fontWeight:700, letterSpacing:"0.03em", padding:"0 18px", minHeight:"38px", cursor:"pointer" }}>SAVE PLAN</button>}
+            <button type="button" data-icon-tooltip={t.close} onClick={onClose} style={{ width:"38px", height:"38px", borderRadius:"10px", border:"1px solid #cbd5e1", background:"#fff", color:"#1f2937", cursor:"pointer", display:"inline-flex", alignItems:"center", justifyContent:"center" }}><X size={16} /></button>
+            {readOnly ? (
+              <Btn variant="secondary" onClick={() => setIsEditing(true)}>Edit Plan</Btn>
+            ) : (
+              <>
+                {mode === "view" && <Btn variant="secondary" onClick={() => onSave?.(form)}>Update Plan</Btn>}
+                <button type="button" onClick={() => onSave?.(form)} style={{ border:"none", borderRadius:"10px", background:"#2563eb", color:"#fff", fontWeight:700, letterSpacing:"0.03em", padding:"0 18px", minHeight:"38px", cursor:"pointer" }}>SAVE PLAN</button>
+              </>
+            )}
           </div>
         </div>
       )}
     </Modal>
   );
 }
+
 
 function QuickPriceField({ inv }) {
   const { patchItem } = useApp();
