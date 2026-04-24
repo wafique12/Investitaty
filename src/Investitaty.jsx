@@ -4178,7 +4178,7 @@ function StockAnalysisTab() {
                     <td style={{ padding:"12px 10px",textAlign:"right" }}>
                       <div style={{ display:"flex",gap:"4px",justifyContent:"flex-end" }}>
                         <button data-icon-tooltip={t.addPlan} onClick={() => setEditingInv(inv)} style={{ background:"none",border:"none",cursor:"pointer",color:T.emerald,padding:"4px",borderRadius:"6px",display:"flex" }}><Plus size={14}/></button>
-                        <button data-icon-tooltip={planExists ? t.viewPlan : t.noPlanSaved} onClick={() => setViewingInv(inv)} style={{ background:"none",border:"none",cursor:"pointer",color:planExists ? T.info : T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}><BarChart2 size={14}/></button>
+                        <button data-icon-tooltip={planExists ? "View / Edit Plan" : t.noPlanSaved} onClick={() => setViewingInv(inv)} style={{ background:"none",border:"none",cursor:"pointer",color:planExists ? T.info : T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}><Eye size={14}/></button>
                       </div>
                     </td>
                   </tr>
@@ -4208,88 +4208,153 @@ function StockAnalysisTab() {
 function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
   const { db, t, isRTL } = useApp();
   const currency = portfolioCurrency(db, investment?.portfolioId);
-  const purchasePrice = Number(investment?.purchasePrice) || 0;
+  const purchasePrice = Number(investment?.purchasePrice) || 165;
+  const currentPrice = Number(effectiveCurrentPrice(db, investment)) || 174.5;
+  const quantity = Number(investment?.quantity) || 100;
+  const currentValue = currentPrice * quantity;
+  const totalRoi = purchasePrice > 0 ? ((currentPrice - purchasePrice) / purchasePrice) * 100 : 0;
   const readOnly = mode === "view";
-  const [form, setForm] = useState(() => normalizeTradingPlan(investment?.tradingPlan || {}, purchasePrice));
+  const [form, setForm] = useState(() => {
+    const seeded = normalizeTradingPlan(investment?.tradingPlan || {}, purchasePrice);
+    if (investment?.tradingPlan) return seeded;
+    return {
+      ...seeded,
+      supportFrom: { mode:"percentage", value:"3" },
+      supportTo: { mode:"percentage", value:"5" },
+      stopLoss: { mode:"percentage", value:"8" },
+      resistanceFrom: { mode:"percentage", value:"6" },
+      resistanceTo: { mode:"percentage", value:"9" },
+      dcaLevels: [
+        { mode:"percentage", value:"2", shares:"20", allocation:"", notes:"" },
+        { mode:"percentage", value:"4", shares:"30", allocation:"", notes:"" },
+        { mode:"percentage", value:"6", shares:"50", allocation:"", notes:"" },
+      ],
+      takeProfitTargets: [
+        { mode:"percentage", value:"8", allocation:"30", notes:"" },
+        { mode:"percentage", value:"12", allocation:"35", notes:"" },
+        { mode:"percentage", value:"16", allocation:"35", notes:"" },
+      ],
+    };
+  });
   const updateCore = (key, field, value) => setForm((prev) => ({ ...prev, [key]: { ...prev[key], [field]: value } }));
   const updateList = (listKey, idx, field, value) => setForm((prev) => ({ ...prev, [listKey]: prev[listKey].map((row, i) => i === idx ? { ...row, [field]: value } : row) }));
   const computedPrice = (modeType, value, direction) => computePlanPrice(purchasePrice, modeType, value, direction);
+  const cardBg = "#1f2937";
+  const cardBorder = "1px solid rgba(148,163,184,0.22)";
+  const inputBg = "#111827";
+  const toggleBtn = (active) => ({ border:"1px solid rgba(148,163,184,0.34)", borderRadius:"8px", padding:"6px 10px", background:active?"#2563eb":"#111827", color:active?"#fff":"#94a3b8", cursor:readOnly?"not-allowed":"pointer", fontSize:"0.7rem", fontWeight:600 });
+  const sumDcaShares = form.dcaLevels.reduce((sum, row) => sum + (Number(row.shares) || 0), 0);
+  const sumDcaAmount = form.dcaLevels.reduce((sum, row) => sum + ((Number(row.shares) || 0) * computedPrice(row.mode, row.value, "down")), 0);
+  const supportRange = `${fmtMoney(computedPrice(form.supportFrom.mode, form.supportFrom.value, "down"), { currency, decimals:2 })} - ${fmtMoney(computedPrice(form.supportTo.mode, form.supportTo.value, "down"), { currency, decimals:2 })}`;
 
-  const PriceInput = ({ label, keyName, direction = "down" }) => (
-    <div style={{ display:"grid", gridTemplateColumns:"1.2fr 0.8fr 1fr", gap:"8px", alignItems:"end" }}>
-      <FormField label={label}><Input value={form[keyName].value} onChange={(e)=>updateCore(keyName, "value", e.target.value)} isRTL={isRTL} type="number" readOnly={readOnly} /></FormField>
-      <FormField label="Mode">
-        <Select
-          value={form[keyName].mode}
-          onChange={(e)=>updateCore(keyName, "mode", e.target.value)}
-          options={[{ value:"fixed", label:"Fixed Price" }, { value:"percentage", label:"Percentage (%)" }]}
-          isRTL={isRTL}
-          disabled={readOnly}
-        />
-      </FormField>
-      <FormField label="Calculated">
-        <Input value={fmtMoney(computedPrice(form[keyName].mode, form[keyName].value, direction), { currency, decimals:3 })} isRTL={isRTL} readOnly />
-      </FormField>
+  const ModeToggle = ({ value, onChange }) => (
+    <div style={{ display:"inline-flex", gap:"6px", alignItems:"center" }}>
+      <button type="button" onClick={() => onChange("fixed")} disabled={readOnly} style={toggleBtn(value === "fixed")}>FIXED</button>
+      <button type="button" onClick={() => onChange("percentage")} disabled={readOnly} style={toggleBtn(value === "percentage")}>PERCENTAGE</button>
+    </div>
+  );
+  const WidePlanRow = ({ label, keyName, direction, color }) => (
+    <div style={{ display:"grid", gridTemplateColumns:"180px 230px 1fr", gap:"10px", alignItems:"center", background:inputBg, border:cardBorder, borderRadius:"10px", padding:"10px" }}>
+      <div style={{ color:"#e5e7eb", fontSize:"0.82rem", fontWeight:600 }} data-app-tooltip={label}>{label}</div>
+      <div style={{ display:"flex", alignItems:"center", gap:"8px", flexWrap:"wrap" }}>
+        <ModeToggle value={form[keyName].mode} onChange={(next) => updateCore(keyName, "mode", next)} />
+        <Input value={form[keyName].value} onChange={(e)=>updateCore(keyName, "value", e.target.value)} isRTL={isRTL} type="number" readOnly={readOnly} style={{ background:inputBg, color:"#f8fafc", border:"1px solid rgba(148,163,184,0.35)", maxWidth:"110px" }} />
+      </div>
+      <div style={{ color, fontWeight:700, fontSize:"0.8rem" }}>
+        {fmtMoney(computedPrice(form[keyName].mode, form[keyName].value, direction), { currency, decimals:2 })}
+      </div>
     </div>
   );
 
   return (
-    <Modal title={`${readOnly ? t.viewPlan : t.addPlan} · ${investment?.name || "—"}`} onClose={onClose} maxWidth="960px">
+    <Modal title={`${readOnly ? "View/Edit Plan" : "Create Plan"} · ${investment?.name || "AAPL"}`} onClose={onClose} maxWidth="1240px">
       {!investment?.tradingPlan && readOnly ? (
         <EmptyState text={t.noPlanSaved} />
       ) : (
-        <div style={{ display:"grid", gap:"14px" }}>
-          <Card style={{ padding:"14px" }}>
-            <SectionHeader title="Support, Resistance & Stop Loss" />
-            <div style={{ fontSize:"0.78rem", color:T.textMuted, marginBottom:"8px" }}>
-              Purchase Price: <strong style={{ color:T.textPrimary }}>{fmtMoney(purchasePrice, { currency, decimals:3 })}</strong>
+        <div style={{ display:"grid", gap:"14px", background:"#0b1220", border:"1px solid rgba(148,163,184,0.2)", borderRadius:"14px", padding:"14px" }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(4, minmax(0,1fr))", gap:"10px" }}>
+            {[
+              { label:"Current Price", value:fmtMoney(currentPrice, { currency, decimals:2 }), color:"#38bdf8" },
+              { label:"Purchase Price", value:fmtMoney(purchasePrice, { currency, decimals:2 }), color:"#f8fafc" },
+              { label:"Current Value", value:fmtMoney(currentValue, { currency, decimals:2 }), color:"#a78bfa" },
+              { label:"Total ROI", value:`${totalRoi >= 0 ? "+" : ""}${totalRoi.toFixed(2)}%`, color:totalRoi >= 0 ? "#22c55e" : "#ef4444" },
+            ].map((card) => (
+              <div key={card.label} style={{ background:cardBg, border:cardBorder, borderRadius:"12px", padding:"14px" }}>
+                <div style={{ color:"#94a3b8", fontSize:"0.75rem" }}>{card.label}</div>
+                <div style={{ color:card.color, fontSize:"1.12rem", fontWeight:700, marginTop:"5px" }}>{card.value}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1.1fr 1fr", gap:"12px", alignItems:"start" }}>
+            <div style={{ background:cardBg, border:cardBorder, borderRadius:"12px", padding:"12px", display:"grid", gap:"10px" }}>
+              <SectionHeader title="Technical Zones & Stop Loss" />
+              <WidePlanRow label="Support Zone" keyName="supportFrom" direction="down" color="#22c55e" />
+              <WidePlanRow label="Support Zone (To)" keyName="supportTo" direction="down" color="#22c55e" />
+              <WidePlanRow label="Resistance Zone" keyName="resistanceFrom" direction="up" color="#22c55e" />
+              <WidePlanRow label="Resistance Zone (To)" keyName="resistanceTo" direction="up" color="#22c55e" />
+              <WidePlanRow label="Stop Loss" keyName="stopLoss" direction="down" color="#ef4444" />
+              <div style={{ background:"#111827", border:cardBorder, borderRadius:"10px", padding:"10px", color:"#22c55e", fontWeight:700, fontSize:"0.82rem" }} data-app-tooltip="Support range result">
+                {supportRange}
+              </div>
             </div>
-            <div style={{ display:"grid", gap:"8px" }}>
-              <PriceInput label="Support Zone (From)" keyName="supportFrom" direction="down" />
-              <PriceInput label="Support Zone (To)" keyName="supportTo" direction="down" />
-              <PriceInput label="Stop Loss" keyName="stopLoss" direction="down" />
-              <PriceInput label="Resistance Zone (From)" keyName="resistanceFrom" direction="up" />
-              <PriceInput label="Resistance Zone (To)" keyName="resistanceTo" direction="up" />
-            </div>
-          </Card>
-          <Card style={{ padding:"14px" }}>
-            <SectionHeader
-              title="DCA Strategy (Buying Plan)"
-              action={!readOnly ? <Btn size="sm" variant="secondary" onClick={() => setForm((prev) => ({ ...prev, dcaLevels:[...prev.dcaLevels, { mode:"fixed", value:"", allocation:"", notes:"" }] }))}>+ Level</Btn> : null}
-            />
-            <div style={{ display:"grid", gap:"8px" }}>
-              {form.dcaLevels.map((level, idx) => (
-                <div key={`dca-${idx}`} style={{ display:"grid", gridTemplateColumns:"1fr 0.8fr 0.8fr 1fr auto", gap:"8px", alignItems:"end" }}>
-                  <FormField label={`Buy Level ${idx + 1}`}><Input type="number" value={level.value} onChange={(e)=>updateList("dcaLevels", idx, "value", e.target.value)} isRTL={isRTL} readOnly={readOnly} /></FormField>
-                  <FormField label="Mode"><Select value={level.mode} onChange={(e)=>updateList("dcaLevels", idx, "mode", e.target.value)} options={[{ value:"fixed", label:"Fixed Price" }, { value:"percentage", label:"Percentage (%)" }]} isRTL={isRTL} disabled={readOnly} /></FormField>
-                  <FormField label="Allocation %"><Input type="number" value={level.allocation} onChange={(e)=>updateList("dcaLevels", idx, "allocation", e.target.value)} isRTL={isRTL} readOnly={readOnly} /></FormField>
-                  <FormField label="Calculated Price"><Input value={fmtMoney(computedPrice(level.mode, level.value, "down"), { currency, decimals:3 })} isRTL={isRTL} readOnly /></FormField>
-                  {!readOnly && <button type="button" onClick={() => setForm((prev) => ({ ...prev, dcaLevels:prev.dcaLevels.filter((_, i) => i !== idx) }))} style={{ height:"38px", border:`1px solid ${T.border}`, borderRadius:"8px", background:"transparent", cursor:"pointer", color:T.negative }}>✕</button>}
+            <div style={{ display:"grid", gap:"10px" }}>
+              <div style={{ background:cardBg, border:cardBorder, borderRadius:"12px", padding:"12px" }}>
+                <SectionHeader title="Accumulation Plan (DCA)" action={!readOnly ? <button data-icon-tooltip="Add DCA level" onClick={() => setForm((prev) => ({ ...prev, dcaLevels:[...prev.dcaLevels, { mode:"fixed", value:"", shares:"", allocation:"", notes:"" }] }))} style={{ border:"none", width:"24px", height:"24px", borderRadius:"7px", background:"#2563eb", color:"#fff", cursor:"pointer", display:"inline-flex", alignItems:"center", justifyContent:"center" }}>+</button> : null} />
+                <div style={{ display:"grid", gap:"8px" }}>
+                  {form.dcaLevels.map((level, idx) => {
+                    const levelPrice = computedPrice(level.mode, level.value, "down");
+                    const shares = Number(level.shares) || 0;
+                    const amount = levelPrice * shares;
+                    return (
+                      <div key={`dca-${idx}`} style={{ display:"grid", gridTemplateColumns:"72px 1fr 90px 120px auto", gap:"8px", alignItems:"center" }}>
+                        <span style={{ color:"#cbd5e1", fontSize:"0.76rem" }}>{`Level ${idx + 1}`}</span>
+                        <div style={{ display:"flex", gap:"6px", alignItems:"center", flexWrap:"wrap" }}>
+                          <ModeToggle value={level.mode} onChange={(next) => updateList("dcaLevels", idx, "mode", next)} />
+                          <Input type="number" value={level.value} onChange={(e)=>updateList("dcaLevels", idx, "value", e.target.value)} isRTL={isRTL} readOnly={readOnly} style={{ background:inputBg, color:"#fff", border:"1px solid rgba(148,163,184,0.35)", maxWidth:"100px" }} />
+                        </div>
+                        <Input type="number" value={level.shares || ""} onChange={(e)=>updateList("dcaLevels", idx, "shares", e.target.value)} isRTL={isRTL} readOnly={readOnly} style={{ background:inputBg, color:"#fff", border:"1px solid rgba(148,163,184,0.35)" }} />
+                        <Input value={fmtMoney(amount, { currency, decimals:2 })} isRTL={isRTL} readOnly style={{ background:inputBg, color:"#a7f3d0", border:"1px solid rgba(34,197,94,0.35)" }} />
+                        {!readOnly && <button type="button" onClick={() => setForm((prev) => ({ ...prev, dcaLevels:prev.dcaLevels.filter((_, i) => i !== idx) }))} style={{ border:"none", background:"transparent", color:"#f87171", cursor:"pointer" }}><X size={14}/></button>}
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
-            </div>
-          </Card>
-          <Card style={{ padding:"14px" }}>
-            <SectionHeader
-              title="Take Profit (Exit Targets)"
-              action={!readOnly ? <Btn size="sm" variant="secondary" onClick={() => setForm((prev) => ({ ...prev, takeProfitTargets:[...prev.takeProfitTargets, { mode:"fixed", value:"", allocation:"", notes:"" }] }))}>+ Target</Btn> : null}
-            />
-            <div style={{ display:"grid", gap:"8px" }}>
-              {form.takeProfitTargets.map((target, idx) => (
-                <div key={`tp-${idx}`} style={{ display:"grid", gridTemplateColumns:"1fr 0.8fr 0.8fr 1fr auto", gap:"8px", alignItems:"end" }}>
-                  <FormField label={`Exit Target ${idx + 1}`}><Input type="number" value={target.value} onChange={(e)=>updateList("takeProfitTargets", idx, "value", e.target.value)} isRTL={isRTL} readOnly={readOnly} /></FormField>
-                  <FormField label="Mode"><Select value={target.mode} onChange={(e)=>updateList("takeProfitTargets", idx, "mode", e.target.value)} options={[{ value:"fixed", label:"Fixed Price" }, { value:"percentage", label:"Percentage (%)" }]} isRTL={isRTL} disabled={readOnly} /></FormField>
-                  <FormField label="Sell %"><Input type="number" value={target.allocation} onChange={(e)=>updateList("takeProfitTargets", idx, "allocation", e.target.value)} isRTL={isRTL} readOnly={readOnly} /></FormField>
-                  <FormField label="Calculated Price"><Input value={fmtMoney(computedPrice(target.mode, target.value, "up"), { currency, decimals:3 })} isRTL={isRTL} readOnly /></FormField>
-                  {!readOnly && <button type="button" onClick={() => setForm((prev) => ({ ...prev, takeProfitTargets:prev.takeProfitTargets.filter((_, i) => i !== idx) }))} style={{ height:"38px", border:`1px solid ${T.border}`, borderRadius:"8px", background:"transparent", cursor:"pointer", color:T.negative }}>✕</button>}
+              </div>
+              <div style={{ background:cardBg, border:cardBorder, borderRadius:"12px", padding:"12px" }}>
+                <SectionHeader title="Exit Strategy" />
+                <div style={{ display:"grid", gap:"8px" }}>
+                  {form.takeProfitTargets.map((target, idx) => {
+                    const barWidth = Math.min(100, Math.max(8, Number(target.allocation) || 0));
+                    return (
+                      <div key={`tp-${idx}`} style={{ display:"grid", gridTemplateColumns:"72px 1fr 95px 1fr auto", gap:"8px", alignItems:"center" }}>
+                        <span style={{ color:"#cbd5e1", fontSize:"0.76rem" }}>{`Target ${idx + 1}`}</span>
+                        <div style={{ display:"flex", gap:"6px", alignItems:"center", flexWrap:"wrap" }}>
+                          <ModeToggle value={target.mode} onChange={(next) => updateList("takeProfitTargets", idx, "mode", next)} />
+                          <Input type="number" value={target.value} onChange={(e)=>updateList("takeProfitTargets", idx, "value", e.target.value)} isRTL={isRTL} readOnly={readOnly} style={{ background:inputBg, color:"#fff", border:"1px solid rgba(148,163,184,0.35)", maxWidth:"100px" }} />
+                        </div>
+                        <Input type="number" value={target.allocation} onChange={(e)=>updateList("takeProfitTargets", idx, "allocation", e.target.value)} isRTL={isRTL} readOnly={readOnly} style={{ background:inputBg, color:"#fff", border:"1px solid rgba(148,163,184,0.35)" }} />
+                        <div style={{ height:"10px", borderRadius:"999px", background:"#0f172a", overflow:"hidden", border:"1px solid rgba(148,163,184,0.28)" }}>
+                          <div style={{ width:`${barWidth}%`, height:"100%", background:"linear-gradient(90deg,#22c55e,#16a34a)" }} />
+                        </div>
+                        {!readOnly && <button type="button" onClick={() => setForm((prev) => ({ ...prev, takeProfitTargets:prev.takeProfitTargets.filter((_, i) => i !== idx) }))} style={{ border:"none", background:"transparent", color:"#f87171", cursor:"pointer" }}><X size={14}/></button>}
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
+              </div>
+              <div style={{ background:cardBg, border:cardBorder, borderRadius:"12px", padding:"12px" }}>
+                <SectionHeader title="Buying Strategy Summary" />
+                <div style={{ display:"grid", gap:"4px", fontSize:"0.78rem", color:"#cbd5e1" }}>
+                  <div>DCA Buy Points: <strong style={{ color:"#f8fafc" }}>{form.dcaLevels.length}</strong></div>
+                  <div>DCA Buy Points (shares): <strong style={{ color:"#f8fafc" }}>{sumDcaShares}</strong></div>
+                  <div>DCA + Quantitty: <strong style={{ color:"#22c55e" }}>{fmtMoney(sumDcaAmount, { currency, decimals:2 })}</strong></div>
+                </div>
+              </div>
             </div>
-          </Card>
-          <FormField label={t.notes}><textarea value={form.notes} onChange={(e)=>setForm((prev)=>({ ...prev, notes:e.target.value }))} readOnly={readOnly} style={{ ...inputCss(isRTL), minHeight:"84px", resize:"vertical", background:readOnly?"#e2e8f0":T.bgInput }} /></FormField>
+          </div>
           <div style={{ display:"flex", justifyContent:"flex-end", gap:"8px" }}>
-            <Btn variant="secondary" onClick={onClose}>{t.close}</Btn>
-            {!readOnly && <Btn onClick={() => onSave?.(form)}>{t.save}</Btn>}
+            <button type="button" data-icon-tooltip={t.close} onClick={onClose} style={{ width:"38px", height:"38px", borderRadius:"10px", border:"1px solid rgba(148,163,184,0.35)", background:"#0f172a", color:"#e2e8f0", cursor:"pointer", display:"inline-flex", alignItems:"center", justifyContent:"center" }}><X size={16} /></button>
+            {!readOnly && <button type="button" onClick={() => onSave?.(form)} style={{ border:"none", borderRadius:"10px", background:"#2563eb", color:"#fff", fontWeight:700, letterSpacing:"0.03em", padding:"0 18px", minHeight:"38px", cursor:"pointer" }}>SAVE PLAN</button>}
           </div>
         </div>
       )}
