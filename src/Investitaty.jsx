@@ -4206,12 +4206,14 @@ function StockAnalysisTab() {
 }
 
 function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
+  const { isRTL } = useApp();
   const purchasePrice = Number(investment?.purchasePrice) || 28;
   const currentPrice = Number(investment?.currentPrice) || purchasePrice;
   const quantity = Number(investment?.quantity) || 0;
   const totalValue = currentPrice * quantity;
   const roiPct = purchasePrice > 0 ? ((currentPrice - purchasePrice) / purchasePrice) * 100 : 0;
   const readOnly = mode === "view";
+
   const [form, setForm] = useState(() => {
     const seeded = normalizeTradingPlan(investment?.tradingPlan || {}, purchasePrice);
     return {
@@ -4226,118 +4228,168 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
     };
   });
 
-  const fmtSar = (v) => `${Number(v || 0).toFixed(2)} ريال`;
+  const TText = isRTL
+    ? {
+      title: "خطة التداول",
+      save: "حفظ الخطة",
+      cancel: "إلغاء",
+      cp: "السعر الحالي",
+      pp: "سعر الشراء",
+      tv: "القيمة الإجمالية",
+      roi: "ROI",
+      support: "الدعم",
+      resistance: "المقاومة",
+      stop: "وقف الخسارة",
+      from: "من",
+      to: "إلى",
+      trigger: "تفعيل",
+      dca: "خطة التجميع (DCA)",
+      exit: "أهداف التخارج",
+      level: "مستوى",
+      target: "هدف",
+      addLevel: "+ مستوى",
+      addTarget: "+ هدف",
+      fixedTip: "سعر ثابت",
+      percentTip: "نسبة مئوية",
+      doneTip: "تم التنفيذ",
+      pendingTip: "غير منفذ",
+    }
+    : {
+      title: "Trading Plan",
+      save: "Save Plan",
+      cancel: "Cancel",
+      cp: "Current Price",
+      pp: "Purchase Price",
+      tv: "Total Value",
+      roi: "ROI",
+      support: "Support",
+      resistance: "Resistance",
+      stop: "Stop Loss",
+      from: "From",
+      to: "To",
+      trigger: "Trigger",
+      dca: "Accumulation Plan (DCA)",
+      exit: "Exit Strategy",
+      level: "Level",
+      target: "Target",
+      addLevel: "+ Level",
+      addTarget: "+ Target",
+      fixedTip: "Fixed Price",
+      percentTip: "Percentage",
+      doneTip: "Executed",
+      pendingTip: "Not Executed",
+    };
+
+  const fmtSar = (v) => {
+    const n = Number(v || 0).toLocaleString("en-US", { minimumFractionDigits:2, maximumFractionDigits:2 });
+    return isRTL ? `${n} ﷼` : `﷼ ${n}`;
+  };
+
   const calc = (mode, value, direction) => computePlanPrice(purchasePrice, mode, value, direction);
   const updateCore = (k, f, v) => setForm((p) => ({ ...p, [k]: { ...p[k], [f]: v } }));
   const updateList = (key, idx, field, value) => setForm((p) => ({ ...p, [key]: p[key].map((r, i) => i === idx ? { ...r, [field]: value } : r) }));
   const removeRow = (key, idx) => setForm((p) => ({ ...p, [key]: p[key].filter((_, i) => i !== idx) }));
 
   const Segmented = ({ value, onChange }) => (
-    <div style={{ position:"relative", width:"96px", height:"48px", border:"1px solid #bfd0e5", borderRadius:"24px", overflow:"hidden", display:"grid", gridTemplateColumns:"1fr 1fr", background:"#edf3fb" }}>
-      <div style={{ position:"absolute", top:0, bottom:0, width:"50%", left:value === "fixed" ? 0 : "50%", background:"#c8daf2" }} />
-      <button type="button" disabled={readOnly} onClick={()=>onChange("fixed")} data-icon-tooltip="Fixed Price" style={{ zIndex:1, border:"none", background:"transparent", color:"#5d6f8a", fontSize:"1.9rem", cursor:readOnly?"default":"pointer", lineHeight:1 }}>$</button>
-      <button type="button" disabled={readOnly} onClick={()=>onChange("percentage")} data-icon-tooltip="Percentage" style={{ zIndex:1, border:"none", background:"transparent", color:"#1d4ed8", fontSize:"1.7rem", fontWeight:700, cursor:readOnly?"default":"pointer", lineHeight:1 }}>%</button>
+    <div style={{ position:"relative", width:"58px", height:"24px", border:"1px solid #bfd0e5", borderRadius:"999px", overflow:"hidden", display:"grid", gridTemplateColumns:"1fr 1fr", background:"#f4f8ff" }}>
+      <div style={{ position:"absolute", top:0, bottom:0, width:"50%", left:value === "fixed" ? 0 : "50%", background:"#3b82f6" }} />
+      <button type="button" disabled={readOnly} onClick={()=>onChange("fixed")} data-icon-tooltip={TText.fixedTip} style={{ zIndex:1, border:"none", background:"transparent", color:value === "fixed" ? "#fff" : "#64748b", fontSize:"0.82rem", fontWeight:700, cursor:readOnly?"default":"pointer" }}>$</button>
+      <button type="button" disabled={readOnly} onClick={()=>onChange("percentage")} data-icon-tooltip={TText.percentTip} style={{ zIndex:1, border:"none", background:"transparent", color:value === "percentage" ? "#fff" : "#64748b", fontSize:"0.82rem", fontWeight:700, cursor:readOnly?"default":"pointer" }}>%</button>
     </div>
   );
 
   const ActionIcons = ({ value, onChange, onDelete }) => (
-    <div style={{ display:"inline-flex", alignItems:"center", gap:"10px" }}>
-      <button type="button" disabled={readOnly} onClick={()=>onChange(!value)} data-icon-tooltip="Executed" style={{ width:"34px", height:"34px", border:"1px solid #bccbdf", borderRadius:"50%", background:value?"#e9f7ef":"#f4f8fd", color:"#6c809d", display:"inline-flex", alignItems:"center", justifyContent:"center" }}><CheckCircle2 size={16}/></button>
-      <button type="button" data-icon-tooltip="Schedule" style={{ width:"34px", height:"34px", border:"1px solid #bccbdf", borderRadius:"50%", background:"#edf3fb", color:"#6c809d", display:"inline-flex", alignItems:"center", justifyContent:"center" }}><CalendarClock size={16}/></button>
-      {!readOnly && <button type="button" onClick={onDelete} data-icon-tooltip="Delete" style={{ border:"none", background:"transparent", color:"#ef4444", display:"inline-flex" }}><Trash2 size={18}/></button>}
+    <div style={{ display:"inline-flex", alignItems:"center", gap:"5px" }}>
+      <button type="button" disabled={readOnly} onClick={()=>onChange(!value)} data-icon-tooltip={TText.doneTip} style={{ width:"22px", height:"22px", border:"1px solid #c9d5e4", borderRadius:"50%", background:value?"#eaf8ef":"#f8fbff", color:value?"#16a34a":"#7b8ea8", display:"inline-flex", alignItems:"center", justifyContent:"center" }}><CheckCircle2 size={11}/></button>
+      <button type="button" data-icon-tooltip={TText.pendingTip} style={{ width:"22px", height:"22px", border:"1px solid #c9d5e4", borderRadius:"50%", background:"#f1f6fd", color:"#7b8ea8", display:"inline-flex", alignItems:"center", justifyContent:"center" }}><CalendarClock size={11}/></button>
+      {!readOnly && <button type="button" onClick={onDelete} data-icon-tooltip="Delete" style={{ border:"none", background:"transparent", color:"#ef4444", display:"inline-flex", padding:0 }}><Trash2 size={14}/></button>}
     </div>
   );
 
-  const TechRow = ({ title, fromKey, toKey, stop = false }) => {
-    const fromMode = form[fromKey]?.mode || "percentage";
-    const fromVal = form[fromKey]?.value || "";
-    const toMode = toKey ? (form[toKey]?.mode || fromMode) : fromMode;
-    const toVal = toKey ? (form[toKey]?.value || "") : "";
-    const fromCalc = calc(fromMode, fromVal, stop ? "down" : (title === "Resistance" ? "up" : "down"));
-    const toCalc = toKey ? calc(toMode, toVal, title === "Resistance" ? "up" : "down") : null;
-
+  const ZoneRow = ({ label, fromKey, toKey, stop=false }) => {
+    const mode = form[fromKey]?.mode || "percentage";
+    const fromValue = form[fromKey]?.value || "";
+    const toValue = toKey ? (form[toKey]?.value || "") : "";
+    const fromCalc = calc(mode, fromValue, stop ? "down" : (label === TText.resistance ? "up" : "down"));
+    const toCalc = toKey ? calc(mode, toValue, label === TText.resistance ? "up" : "down") : null;
     return (
-      <div style={{ border:"1px solid #cbd8e8", borderRadius:"18px", padding:"18px 16px", marginBottom:"14px" }}>
-        <div style={{ fontSize:"2rem", fontWeight:700, color:"#5f7390", marginBottom:"10px" }}>{title}</div>
-        <div style={{ display:"flex", alignItems:"center", gap:"12px", flexWrap:"nowrap" }}>
-          <Segmented value={fromMode} onChange={(next)=>{ updateCore(fromKey, "mode", next); if (toKey) updateCore(toKey, "mode", next); }} />
-          <span style={{ fontSize:"2rem", color:"#8a9ab0", fontWeight:600 }}>From</span>
-          {readOnly ? <span style={{ fontSize:"2.3rem", color:"#1f2937", minWidth:"62px" }}>{fromVal}</span> : <input type="number" value={fromVal} onChange={(e)=>updateCore(fromKey, "value", e.target.value)} style={{ width:"138px", height:"60px", border:"1px solid #c4d2e3", borderRadius:"16px", fontSize:"2rem", padding:"0 16px", background:"#fff" }} />}
-          {!stop && <><span style={{ fontSize:"2rem", color:"#8a9ab0", fontWeight:600 }}>To</span>{readOnly ? <span style={{ fontSize:"2.3rem", color:"#1f2937", minWidth:"62px" }}>{toVal}</span> : <input type="number" value={toVal} onChange={(e)=>updateCore(toKey, "value", e.target.value)} style={{ width:"138px", height:"60px", border:"1px solid #c4d2e3", borderRadius:"16px", fontSize:"2rem", padding:"0 16px", background:"#fff" }} />}</>}
-          <span style={{ fontSize:"2rem", fontWeight:700, color:stop?"#ef4444":"#16a34a", whiteSpace:"nowrap" }}>{stop ? fmtSar(fromCalc) : `${fmtSar(fromCalc)} → ${fmtSar(toCalc)}`}</span>
-        </div>
+      <div style={{ display:"grid", gridTemplateColumns: stop ? "52px 60px 90px 1fr" : "52px 60px 90px 90px 1fr", gap:"6px", alignItems:"center", marginBottom:"6px" }}>
+        <span style={{ fontSize:"0.72rem", color:"#7a8ca7" }}>{stop ? TText.trigger : TText.from}</span>
+        <Segmented value={mode} onChange={(next)=>{ updateCore(fromKey, "mode", next); if (toKey) updateCore(toKey, "mode", next); }} />
+        {readOnly ? <span style={{ fontSize:"0.83rem", color:"#1f2937" }}>{fromValue}</span> : <input type="number" value={fromValue} onChange={(e)=>updateCore(fromKey, "value", e.target.value)} style={{ height:"30px", border:"1px solid #cad7e6", borderRadius:"8px", padding:"0 8px", fontSize:"0.86rem", textAlign:isRTL?"right":"left" }} />}
+        {!stop && (readOnly ? <span style={{ fontSize:"0.83rem", color:"#1f2937" }}>{toValue}</span> : <input type="number" value={toValue} onChange={(e)=>updateCore(toKey, "value", e.target.value)} style={{ height:"30px", border:"1px solid #cad7e6", borderRadius:"8px", padding:"0 8px", fontSize:"0.86rem", textAlign:isRTL?"right":"left" }} />)}
+        <span style={{ fontSize:"0.82rem", fontWeight:700, color:stop?"#dc2626":"#16a34a", whiteSpace:"nowrap" }}>{stop ? fmtSar(fromCalc) : `${fmtSar(fromCalc)} → ${fmtSar(toCalc)}`}</span>
       </div>
     );
   };
 
   return (
-    <Modal title={null} onClose={onClose} maxWidth="1880px">
-      <div style={{ background:"#f7fbff", borderRadius:"26px", border:"1px solid #d4deea", overflow:"hidden", boxShadow:"0 18px 60px rgba(15,23,42,0.25)" }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"22px 34px", borderBottom:"1px solid #d2dbe7" }}>
-          <div style={{ fontSize:"4.2rem", fontWeight:700, color:"#111827" }}>{`Trading Plan - ${investment?.name || "Alinma - 1150"}`}</div>
-          <button onClick={onClose} style={{ border:"none", background:"transparent", color:"#90a0b8", cursor:"pointer" }}><X size={42}/></button>
+    <Modal title={null} onClose={onClose} maxWidth="1120px">
+      <div dir={isRTL ? "rtl" : "ltr"} style={{ background:"#fff", borderRadius:"16px", border:"1px solid #d4deea", overflow:"hidden", boxShadow:"0 14px 36px rgba(15,23,42,0.2)" }}>
+        <div style={{ position:"sticky", top:0, zIndex:5, display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 14px", borderBottom:"1px solid #d7e0eb", background:"#fff" }}>
+          <div style={{ fontSize:"1rem", fontWeight:700, color:"#1f2937" }}>{`${TText.title} - ${investment?.name || "Stock"}`}</div>
+          <div style={{ display:"inline-flex", gap:"6px" }}>
+            <button type="button" onClick={()=>onSave?.(form)} style={{ border:"none", background:"#2563eb", color:"#fff", borderRadius:"8px", padding:"6px 10px", fontSize:"0.78rem", fontWeight:700 }}>{TText.save}</button>
+            <button type="button" onClick={onClose} style={{ border:"1px solid #c5d3e4", background:"#fff", color:"#5b6d86", borderRadius:"8px", padding:"6px 10px", fontSize:"0.78rem" }}>{TText.cancel}</button>
+          </div>
         </div>
 
-        <div style={{ padding:"18px 32px", borderBottom:"1px solid #d2dbe7", display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"12px" }}>
-          {[
-            { k:"Current Price", v:fmtSar(currentPrice) },
-            { k:"Purchase Price", v:fmtSar(purchasePrice) },
-            { k:"Total Value", v:fmtSar(totalValue) },
-            { k:"ROI", v:`${roiPct>=0?"+":""}${roiPct.toFixed(2)}%`, c: roiPct>=0?"#16a34a":"#ef4444" },
-          ].map((it)=>(<div key={it.k}><div style={{ fontSize:"1.35rem", color:"#8b9bb2" }}>{it.k}</div><div style={{ fontSize:"2.05rem", fontWeight:700, color:it.c||"#1f2937" }}>{it.v}</div></div>))}
+        <div style={{ padding:"6px 14px", borderBottom:"1px solid #d7e0eb", background:"#f9fbff", display:"flex", gap:"14px", fontSize:"0.72rem", color:"#6f8098", alignItems:"center" }}>
+          <span>{TText.cp}: <strong style={{ color:"#1f2937", fontSize:"0.8rem" }}>{fmtSar(currentPrice)}</strong></span>
+          <span style={{ opacity:0.5 }}>|</span>
+          <span>{TText.pp}: <strong style={{ color:"#1f2937", fontSize:"0.8rem" }}>{fmtSar(purchasePrice)}</strong></span>
+          <span style={{ opacity:0.5 }}>|</span>
+          <span>{TText.tv}: <strong style={{ color:"#1f2937", fontSize:"0.8rem" }}>{fmtSar(totalValue)}</strong></span>
+          <span style={{ opacity:0.5 }}>|</span>
+          <span>{TText.roi}: <strong style={{ color:roiPct>=0?"#16a34a":"#ef4444", fontSize:"0.8rem" }}>{`${roiPct>=0?"+":""}${roiPct.toFixed(2)}%`}</strong></span>
         </div>
 
-        <div style={{ padding:"22px 30px" }}>
-          <div style={{ border:"1px solid #ccd8e7", borderRadius:"22px", padding:"20px", display:"grid", gridTemplateColumns:"1fr 1fr", gap:"18px" }}>
-            <div style={{ border:"1px solid #c9d5e4", borderRadius:"20px", padding:"20px" }}>
-              <div style={{ fontSize:"2.3rem", fontWeight:700, letterSpacing:"0.08em", color:"#8195b0", marginBottom:"12px" }}>TECHNICAL ZONES</div>
-              <TechRow title="Support" fromKey="supportFrom" toKey="supportTo" />
-              <TechRow title="Resistance" fromKey="resistanceFrom" toKey="resistanceTo" />
-              <TechRow title="Stop Loss" fromKey="stopLoss" stop />
+        <div style={{ padding:"12px 14px" }}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px" }}>
+            <div style={{ border:"1px solid #d0dbe9", borderRadius:"12px", padding:"10px" }}>
+              <div style={{ fontSize:"0.82rem", fontWeight:700, color:"#7a8da8", marginBottom:"8px" }}>{TText.support}</div>
+              <ZoneRow label={TText.support} fromKey="supportFrom" toKey="supportTo" />
+              <div style={{ fontSize:"0.82rem", fontWeight:700, color:"#7a8da8", marginBottom:"8px", marginTop:"8px" }}>{TText.resistance}</div>
+              <ZoneRow label={TText.resistance} fromKey="resistanceFrom" toKey="resistanceTo" />
+              <div style={{ fontSize:"0.82rem", fontWeight:700, color:"#7a8da8", marginBottom:"8px", marginTop:"8px" }}>{TText.stop}</div>
+              <ZoneRow label={TText.stop} fromKey="stopLoss" stop />
             </div>
 
-            <div style={{ display:"grid", gap:"16px" }}>
-              <div style={{ border:"1px solid #c9d5e4", borderRadius:"20px", padding:"18px" }}>
-                <div style={{ fontSize:"2.3rem", fontWeight:700, letterSpacing:"0.08em", color:"#8195b0", marginBottom:"8px" }}>ACCUMULATION PLAN (DCA)</div>
+            <div style={{ display:"grid", gap:"10px" }}>
+              <div style={{ border:"1px solid #d0dbe9", borderRadius:"12px", padding:"10px" }}>
+                <div style={{ fontSize:"0.82rem", fontWeight:700, color:"#7a8da8", marginBottom:"8px" }}>{TText.dca}</div>
                 {form.dcaLevels.map((row, idx) => {
                   const calcV = calc(row.mode, row.value, "down");
                   return (
-                    <div key={`dca-${idx}`} style={{ display:"grid", gridTemplateColumns:"120px 106px 150px 150px 170px auto", gap:"10px", alignItems:"center", padding:"10px 0", borderBottom:"1px solid #d8e2ef" }}>
-                      <span style={{ fontSize:"2rem", color:"#617796" }}>{`Level ${idx+1}`}</span>
+                    <div key={`dca-${idx}`} style={{ display:"grid", gridTemplateColumns:"70px 64px 1fr 110px auto", gap:"6px", alignItems:"center", padding:"5px 0", borderBottom:"1px solid #e3ebf5" }}>
+                      <span style={{ fontSize:"0.78rem", color:"#617796" }}>{`${TText.level} ${idx+1}`}</span>
                       <Segmented value={row.mode || "percentage"} onChange={(next)=>updateList("dcaLevels", idx, "mode", next)} />
-                      {readOnly ? <span style={{ fontSize:"2rem" }}>{row.value}</span> : <input type="number" value={row.value} onChange={(e)=>updateList("dcaLevels", idx, "value", e.target.value)} style={{ height:"58px", border:"1px solid #c4d2e3", borderRadius:"14px", fontSize:"2rem", padding:"0 14px" }} />}
-                      {readOnly ? <span style={{ fontSize:"2rem" }}>{row.allocation || ""}</span> : <input type="number" value={row.allocation || ""} onChange={(e)=>updateList("dcaLevels", idx, "allocation", e.target.value)} style={{ height:"58px", border:"1px solid #c4d2e3", borderRadius:"14px", fontSize:"2rem", padding:"0 14px" }} />}
-                      <span style={{ fontSize:"2rem", fontWeight:700, color:"#16a34a" }}>{fmtSar(calcV)}</span>
+                      {readOnly ? <span style={{ fontSize:"0.84rem" }}>{row.value}</span> : <input type="number" value={row.value} onChange={(e)=>updateList("dcaLevels", idx, "value", e.target.value)} style={{ height:"30px", border:"1px solid #cad7e6", borderRadius:"8px", padding:"0 8px", fontSize:"0.86rem", textAlign:isRTL?"right":"left" }} />}
+                      <span style={{ fontSize:"0.82rem", fontWeight:700, color:"#16a34a", whiteSpace:"nowrap" }}>{fmtSar(calcV)}</span>
                       <ActionIcons value={Boolean(row.executed)} onChange={(next)=>updateList("dcaLevels", idx, "executed", next)} onDelete={()=>removeRow("dcaLevels", idx)} />
                     </div>
                   );
                 })}
-                {!readOnly && <button type="button" onClick={() => setForm((p)=>({ ...p, dcaLevels:[...p.dcaLevels, { mode:"percentage", value:"", allocation:"", executed:false }] }))} style={{ marginTop:"12px", border:"1px solid #b8c9df", borderRadius:"12px", background:"#f7fbff", color:"#617796", fontSize:"2rem", padding:"6px 16px" }}>+ Level</button>}
+                {!readOnly && <button type="button" onClick={() => setForm((p)=>({ ...p, dcaLevels:[...p.dcaLevels, { mode:"percentage", value:"", allocation:"", executed:false }] }))} style={{ marginTop:"8px", border:"1px solid #bdd0e6", background:"#fff", color:"#617796", borderRadius:"8px", padding:"4px 8px", fontSize:"0.76rem" }}>{TText.addLevel}</button>}
               </div>
 
-              <div style={{ border:"1px solid #c9d5e4", borderRadius:"20px", padding:"18px" }}>
-                <div style={{ fontSize:"2.3rem", fontWeight:700, letterSpacing:"0.08em", color:"#8195b0", marginBottom:"8px" }}>EXIT STRATEGY</div>
+              <div style={{ border:"1px solid #d0dbe9", borderRadius:"12px", padding:"10px" }}>
+                <div style={{ fontSize:"0.82rem", fontWeight:700, color:"#7a8da8", marginBottom:"8px" }}>{TText.exit}</div>
                 {form.takeProfitTargets.map((row, idx) => {
                   const calcV = calc(row.mode, row.value, "up");
                   return (
-                    <div key={`tp-${idx}`} style={{ display:"grid", gridTemplateColumns:"120px 106px 150px 150px 170px auto", gap:"10px", alignItems:"center", padding:"10px 0", borderBottom:"1px solid #d8e2ef" }}>
-                      <span style={{ fontSize:"2rem", color:"#617796" }}>{`Target ${idx+1}`}</span>
+                    <div key={`tp-${idx}`} style={{ display:"grid", gridTemplateColumns:"70px 64px 1fr 110px auto", gap:"6px", alignItems:"center", padding:"5px 0", borderBottom:"1px solid #e3ebf5" }}>
+                      <span style={{ fontSize:"0.78rem", color:"#617796" }}>{`${TText.target} ${idx+1}`}</span>
                       <Segmented value={row.mode || "percentage"} onChange={(next)=>updateList("takeProfitTargets", idx, "mode", next)} />
-                      {readOnly ? <span style={{ fontSize:"2rem" }}>{row.value}</span> : <input type="number" value={row.value} onChange={(e)=>updateList("takeProfitTargets", idx, "value", e.target.value)} style={{ height:"58px", border:"1px solid #c4d2e3", borderRadius:"14px", fontSize:"2rem", padding:"0 14px" }} />}
-                      {readOnly ? <span style={{ fontSize:"2rem" }}>{row.allocation || ""}</span> : <input type="number" value={row.allocation || ""} onChange={(e)=>updateList("takeProfitTargets", idx, "allocation", e.target.value)} style={{ height:"58px", border:"1px solid #c4d2e3", borderRadius:"14px", fontSize:"2rem", padding:"0 14px" }} />}
-                      <span style={{ fontSize:"2rem", fontWeight:700, color:"#16a34a" }}>{fmtSar(calcV)}</span>
+                      {readOnly ? <span style={{ fontSize:"0.84rem" }}>{row.value}</span> : <input type="number" value={row.value} onChange={(e)=>updateList("takeProfitTargets", idx, "value", e.target.value)} style={{ height:"30px", border:"1px solid #cad7e6", borderRadius:"8px", padding:"0 8px", fontSize:"0.86rem", textAlign:isRTL?"right":"left" }} />}
+                      <span style={{ fontSize:"0.82rem", fontWeight:700, color:"#16a34a", whiteSpace:"nowrap" }}>{fmtSar(calcV)}</span>
                       <ActionIcons value={Boolean(row.executed)} onChange={(next)=>updateList("takeProfitTargets", idx, "executed", next)} onDelete={()=>removeRow("takeProfitTargets", idx)} />
                     </div>
                   );
                 })}
-                {!readOnly && <button type="button" onClick={() => setForm((p)=>({ ...p, takeProfitTargets:[...p.takeProfitTargets, { mode:"percentage", value:"", allocation:"", executed:false }] }))} style={{ marginTop:"12px", border:"1px solid #b8c9df", borderRadius:"12px", background:"#f7fbff", color:"#617796", fontSize:"2rem", padding:"6px 16px" }}>+ Target</button>}
+                {!readOnly && <button type="button" onClick={() => setForm((p)=>({ ...p, takeProfitTargets:[...p.takeProfitTargets, { mode:"percentage", value:"", allocation:"", executed:false }] }))} style={{ marginTop:"8px", border:"1px solid #bdd0e6", background:"#fff", color:"#617796", borderRadius:"8px", padding:"4px 8px", fontSize:"0.76rem" }}>{TText.addTarget}</button>}
               </div>
             </div>
-          </div>
-
-          <div style={{ display:"flex", justifyContent:"flex-end", alignItems:"center", gap:"16px", marginTop:"22px" }}>
-            <button onClick={onClose} style={{ width:"86px", height:"62px", border:"1px solid #b6c6db", borderRadius:"18px", background:"#f7fbff", color:"#1f2937", fontSize:"2.3rem", display:"inline-flex", alignItems:"center", justifyContent:"center" }}><X size={34}/></button>
-            {!readOnly && <button onClick={()=>onSave?.(form)} style={{ border:"none", borderRadius:"22px", background:"#2f63dc", color:"#fff", padding:"14px 38px", fontSize:"4rem", fontWeight:700 }}>Save Plan</button>}
           </div>
         </div>
       </div>
