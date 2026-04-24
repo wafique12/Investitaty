@@ -4206,7 +4206,7 @@ function StockAnalysisTab() {
 }
 
 function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
-  const displayCurrency = "SAR";
+  const { isRTL } = useApp();
   const purchasePrice = Number(investment?.purchasePrice) || 0;
   const currentPrice = Number(investment?.currentPrice) || purchasePrice || 0;
   const quantity = Number(investment?.quantity) || 0;
@@ -4234,6 +4234,53 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
 
   const [isEditing, setIsEditing] = useState(mode !== "view");
   const readOnly = !isEditing;
+  const L = isRTL
+    ? {
+      title: "خطة التداول",
+      editPlan: "تعديل الخطة",
+      savePlan: "حفظ الخطة",
+      cancel: "إلغاء",
+      currentPrice: "السعر الحالي",
+      purchasePrice: "سعر الشراء",
+      totalValue: "القيمة الإجمالية",
+      roi: "ROI",
+      support: "الدعم",
+      resistance: "المقاومة",
+      stopLoss: "وقف الخسارة",
+      dca: "خطة التجميع (DCA)",
+      exits: "أهداف التخارج",
+      levelPrefix: "م",
+      targetPrefix: "ه",
+      addLevel: "مستوى",
+      addTarget: "هدف",
+      fixedTip: "سعر ثابت",
+      percentTip: "نسبة مئوية",
+      executedTip: "تم التنفيذ",
+      notExecutedTip: "غير منفذ",
+    }
+    : {
+      title: "Trading Plan",
+      editPlan: "Edit Plan",
+      savePlan: "Save Plan",
+      cancel: "Cancel",
+      currentPrice: "Current Price",
+      purchasePrice: "Purchase Price",
+      totalValue: "Total Value",
+      roi: "ROI",
+      support: "Support",
+      resistance: "Resistance",
+      stopLoss: "Stop Loss",
+      dca: "Accumulation Plan (DCA)",
+      exits: "Exit Targets",
+      levelPrefix: "L",
+      targetPrefix: "T",
+      addLevel: "Level",
+      addTarget: "Target",
+      fixedTip: "Fixed Price",
+      percentTip: "Percentage",
+      executedTip: "Executed",
+      notExecutedTip: "Not Executed",
+    };
 
   const fmtSar = (val) => `${Number(val || 0).toLocaleString("en-US", { minimumFractionDigits:2, maximumFractionDigits:2 })} ﷼`;
   const computedPrice = (modeType, value, direction) => computePlanPrice(purchasePrice, modeType, value, direction);
@@ -4244,8 +4291,8 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
   const ModeToggle = ({ value, onChange }) => (
     <div style={{ position:"relative", display:"inline-grid", gridTemplateColumns:"1fr 1fr", width:"74px", border:"1px solid #bfdbfe", borderRadius:"999px", overflow:"hidden", background:"#fff" }}>
       <div style={{ position:"absolute", top:0, bottom:0, width:"50%", right:value === "fixed" ? "50%" : 0, background:"#3b82f6", transition:"right 0.15s ease" }} />
-      <button type="button" disabled={readOnly} onClick={() => onChange("fixed")} data-icon-tooltip="سعر ثابت" style={{ position:"relative", zIndex:1, border:"none", background:"transparent", color:value === "fixed" ? "#fff" : "#64748b", height:"26px", cursor:readOnly?"default":"pointer", display:"inline-flex", alignItems:"center", justifyContent:"center" }}><DollarSign size={12}/></button>
-      <button type="button" disabled={readOnly} onClick={() => onChange("percentage")} data-icon-tooltip="نسبة مئوية" style={{ position:"relative", zIndex:1, border:"none", background:"transparent", color:value === "percentage" ? "#fff" : "#64748b", height:"26px", cursor:readOnly?"default":"pointer", display:"inline-flex", alignItems:"center", justifyContent:"center" }}><span style={{fontWeight:700}}>%</span></button>
+      <button type="button" disabled={readOnly} onClick={() => onChange("fixed")} data-icon-tooltip={L.fixedTip} style={{ position:"relative", zIndex:1, border:"none", background:"transparent", color:value === "fixed" ? "#fff" : "#64748b", height:"26px", cursor:readOnly?"default":"pointer", display:"inline-flex", alignItems:"center", justifyContent:"center" }}><DollarSign size={12}/></button>
+      <button type="button" disabled={readOnly} onClick={() => onChange("percentage")} data-icon-tooltip={L.percentTip} style={{ position:"relative", zIndex:1, border:"none", background:"transparent", color:value === "percentage" ? "#fff" : "#64748b", height:"26px", cursor:readOnly?"default":"pointer", display:"inline-flex", alignItems:"center", justifyContent:"center" }}><span style={{fontWeight:700}}>%</span></button>
     </div>
   );
 
@@ -4263,32 +4310,32 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
 
   const RowExec = ({ value, onChange }) => (
     <div style={{ display:"inline-flex", gap:"3px" }}>
-      <button type="button" onClick={()=>onChange(true)} disabled={readOnly} data-icon-tooltip="تم التنفيذ" style={{ width:"22px", height:"22px", border:"1px solid #cbd5e1", borderRadius:"999px", background:value?"#dcfce7":"#fff", color:value?"#16a34a":"#94a3b8", display:"inline-flex", alignItems:"center", justifyContent:"center" }}><CheckCircle2 size={11}/></button>
-      <button type="button" onClick={()=>onChange(false)} disabled={readOnly} data-icon-tooltip="غير منفذ" style={{ width:"22px", height:"22px", border:"1px solid #cbd5e1", borderRadius:"999px", background:!value?"#eef2ff":"#fff", color:"#64748b", display:"inline-flex", alignItems:"center", justifyContent:"center" }}><CalendarClock size={11}/></button>
+      <button type="button" onClick={()=>onChange(true)} disabled={readOnly} data-icon-tooltip={L.executedTip} style={{ width:"22px", height:"22px", border:"1px solid #cbd5e1", borderRadius:"999px", background:value?"#dcfce7":"#fff", color:value?"#16a34a":"#94a3b8", display:"inline-flex", alignItems:"center", justifyContent:"center" }}><CheckCircle2 size={11}/></button>
+      <button type="button" onClick={()=>onChange(false)} disabled={readOnly} data-icon-tooltip={L.notExecutedTip} style={{ width:"22px", height:"22px", border:"1px solid #cbd5e1", borderRadius:"999px", background:!value?"#eef2ff":"#fff", color:"#64748b", display:"inline-flex", alignItems:"center", justifyContent:"center" }}><CalendarClock size={11}/></button>
     </div>
   );
 
   return (
     <Modal title={null} onClose={onClose} maxWidth="1160px">
-      <div dir="rtl" style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:"12px", overflow:"hidden", maxHeight:"82vh", display:"flex", flexDirection:"column" }}>
+      <div dir={isRTL ? "rtl" : "ltr"} style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:"12px", overflow:"hidden", maxHeight:"82vh", display:"flex", flexDirection:"column" }}>
         <div style={{ position:"sticky", top:0, zIndex:5, background:"#fff", borderBottom:"1px solid #e2e8f0", boxShadow:"0 2px 8px rgba(15,23,42,0.05)", padding:"10px 14px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-          <div style={{ fontSize:"0.95rem", fontWeight:700, color:"#0f172a" }}>{`خطة التداول - ${investment?.name || "السهم"}`}</div>
+          <div style={{ fontSize:"0.95rem", fontWeight:700, color:"#0f172a" }}>{`${L.title} - ${investment?.name || (isRTL ? "السهم" : "Stock")}`}</div>
           <div style={{ display:"inline-flex", gap:"8px" }}>
             {readOnly ? (
-              <button type="button" onClick={()=>setIsEditing(true)} style={{ border:"none", background:"#2563eb", color:"#fff", borderRadius:"8px", padding:"6px 10px", fontSize:"0.78rem", fontWeight:700, cursor:"pointer" }}>تعديل الخطة</button>
+              <button type="button" onClick={()=>setIsEditing(true)} style={{ border:"none", background:"#2563eb", color:"#fff", borderRadius:"8px", padding:"6px 10px", fontSize:"0.78rem", fontWeight:700, cursor:"pointer" }}>{L.editPlan}</button>
             ) : (
-              <button type="button" onClick={()=>onSave?.(form)} style={{ border:"none", background:"#2563eb", color:"#fff", borderRadius:"8px", padding:"6px 10px", fontSize:"0.78rem", fontWeight:700, cursor:"pointer" }}>حفظ الخطة</button>
+              <button type="button" onClick={()=>onSave?.(form)} style={{ border:"none", background:"#2563eb", color:"#fff", borderRadius:"8px", padding:"6px 10px", fontSize:"0.78rem", fontWeight:700, cursor:"pointer" }}>{L.savePlan}</button>
             )}
-            <button type="button" onClick={onClose} style={{ border:"1px solid #cbd5e1", background:"#fff", color:"#475569", borderRadius:"8px", padding:"6px 10px", fontSize:"0.78rem", cursor:"pointer" }}>إلغاء</button>
+            <button type="button" onClick={onClose} style={{ border:"1px solid #cbd5e1", background:"#fff", color:"#475569", borderRadius:"8px", padding:"6px 10px", fontSize:"0.78rem", cursor:"pointer" }}>{L.cancel}</button>
           </div>
         </div>
 
         <div style={{ background:"#f8fafc", borderBottom:"1px solid #e2e8f0", padding:"8px 14px", display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"8px" }}>
           {[
-            { k:"السعر الحالي", v:fmtSar(currentPrice) },
-            { k:"سعر الشراء", v:fmtSar(purchasePrice) },
-            { k:"القيمة الإجمالية", v:fmtSar(totalValue) },
-            { k:"ROI", v:`${roiPct >= 0 ? "+" : ""}${roiPct.toFixed(2)}%`, c: roiPct >= 0 ? "#16a34a" : "#dc2626" },
+            { k:L.currentPrice, v:fmtSar(currentPrice) },
+            { k:L.purchasePrice, v:fmtSar(purchasePrice) },
+            { k:L.totalValue, v:fmtSar(totalValue) },
+            { k:L.roi, v:`${roiPct >= 0 ? "+" : ""}${roiPct.toFixed(2)}%`, c: roiPct >= 0 ? "#16a34a" : "#dc2626" },
           ].map((item, i) => (
             <div key={item.k} style={{ borderLeft:i<3?"1px solid #e2e8f0":"none", paddingInlineStart:"8px" }}>
               <div style={{ fontSize:"0.68rem", color:"#64748b" }}>{item.k}</div>
@@ -4300,22 +4347,22 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
         <div style={{ overflowY:"auto", padding:"12px 14px" }}>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
             <div style={{ border:"1px solid #e2e8f0", borderRadius:"10px", padding:"10px" }}>
-              <div style={{ fontSize:"0.82rem", fontWeight:700, marginBottom:"8px", color:"#1e293b" }}>الدعم</div>
-              <ZoneRow label="الدعم" keyName="supportFrom" direction="down" />
-              <div style={{ fontSize:"0.82rem", fontWeight:700, marginBottom:"8px", color:"#1e293b", marginTop:"10px" }}>المقاومة</div>
-              <ZoneRow label="المقاومة" keyName="resistanceFrom" direction="up" />
-              <div style={{ fontSize:"0.82rem", fontWeight:700, marginBottom:"8px", color:"#1e293b", marginTop:"10px" }}>وقف الخسارة</div>
-              <ZoneRow label="وقف" keyName="stopLoss" direction="down" />
+              <div style={{ fontSize:"0.82rem", fontWeight:700, marginBottom:"8px", color:"#1e293b" }}>{L.support}</div>
+              <ZoneRow label={L.support} keyName="supportFrom" direction="down" />
+              <div style={{ fontSize:"0.82rem", fontWeight:700, marginBottom:"8px", color:"#1e293b", marginTop:"10px" }}>{L.resistance}</div>
+              <ZoneRow label={L.resistance} keyName="resistanceFrom" direction="up" />
+              <div style={{ fontSize:"0.82rem", fontWeight:700, marginBottom:"8px", color:"#1e293b", marginTop:"10px" }}>{L.stopLoss}</div>
+              <ZoneRow label={L.stopLoss} keyName="stopLoss" direction="down" />
             </div>
 
             <div style={{ display:"grid", gap:"10px" }}>
               <div style={{ border:"1px solid #e2e8f0", borderRadius:"10px", padding:"10px" }}>
-                <div style={{ fontSize:"0.82rem", fontWeight:700, marginBottom:"8px", color:"#1e293b" }}>خطة التجميع (DCA)</div>
+                <div style={{ fontSize:"0.82rem", fontWeight:700, marginBottom:"8px", color:"#1e293b" }}>{L.dca}</div>
                 {form.dcaLevels.map((row, idx) => {
                   const calc = computedPrice(row.mode, row.value, "down");
                   return (
                     <div key={`dca-${idx}`} style={{ display:"grid", gridTemplateColumns:"56px 80px 1fr 106px auto auto", gap:"6px", alignItems:"center", padding:"5px 0", borderBottom:"1px solid #f1f5f9" }}>
-                      <span style={{ fontSize:"0.76rem", color:"#334155" }}>{`م${idx+1}`}</span>
+                      <span style={{ fontSize:"0.76rem", color:"#334155" }}>{`${L.levelPrefix}${idx+1}`}</span>
                       {readOnly ? <span style={{ fontSize:"0.74rem", color:"#64748b" }}>{row.mode === "fixed" ? "$" : "%"}</span> : <ModeToggle value={row.mode} onChange={(next)=>updateList("dcaLevels", idx, "mode", next)} />}
                       {readOnly ? <span style={{ fontSize:"0.82rem" }}>{String(row.value || 0)}</span> : <input type="number" value={row.value} onChange={(e)=>updateList("dcaLevels", idx, "value", e.target.value)} style={{ width:"100%", height:"28px", border:"1px solid #dbe3ee", borderRadius:"8px", padding:"0 8px", background:"#fff", textAlign:"right" }} />}
                       <span style={{ fontSize:"0.8rem", color:"#16a34a", fontWeight:700 }}>{fmtSar(calc)}</span>
@@ -4324,16 +4371,16 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
                     </div>
                   );
                 })}
-                {!readOnly && <button type="button" onClick={() => setForm((prev)=>({ ...prev, dcaLevels:[...prev.dcaLevels, { mode:"fixed", value:"", shares:"", executed:false }] }))} style={{ marginTop:"8px", border:"1px solid #cbd5e1", background:"#fff", borderRadius:"8px", padding:"5px 8px", fontSize:"0.75rem", color:"#475569", display:"inline-flex", gap:"4px", alignItems:"center" }}><Plus size={11}/> مستوى</button>}
+                {!readOnly && <button type="button" onClick={() => setForm((prev)=>({ ...prev, dcaLevels:[...prev.dcaLevels, { mode:"fixed", value:"", shares:"", executed:false }] }))} style={{ marginTop:"8px", border:"1px solid #cbd5e1", background:"#fff", borderRadius:"8px", padding:"5px 8px", fontSize:"0.75rem", color:"#475569", display:"inline-flex", gap:"4px", alignItems:"center" }}><Plus size={11}/> {L.addLevel}</button>}
               </div>
 
               <div style={{ border:"1px solid #e2e8f0", borderRadius:"10px", padding:"10px" }}>
-                <div style={{ fontSize:"0.82rem", fontWeight:700, marginBottom:"8px", color:"#1e293b" }}>أهداف التخارج</div>
+                <div style={{ fontSize:"0.82rem", fontWeight:700, marginBottom:"8px", color:"#1e293b" }}>{L.exits}</div>
                 {form.takeProfitTargets.map((row, idx) => {
                   const calc = computedPrice(row.mode, row.value, "up");
                   return (
                     <div key={`tp-${idx}`} style={{ display:"grid", gridTemplateColumns:"56px 80px 1fr 106px auto auto", gap:"6px", alignItems:"center", padding:"5px 0", borderBottom:"1px solid #f1f5f9" }}>
-                      <span style={{ fontSize:"0.76rem", color:"#334155" }}>{`ه${idx+1}`}</span>
+                      <span style={{ fontSize:"0.76rem", color:"#334155" }}>{`${L.targetPrefix}${idx+1}`}</span>
                       {readOnly ? <span style={{ fontSize:"0.74rem", color:"#64748b" }}>{row.mode === "fixed" ? "$" : "%"}</span> : <ModeToggle value={row.mode} onChange={(next)=>updateList("takeProfitTargets", idx, "mode", next)} />}
                       {readOnly ? <span style={{ fontSize:"0.82rem" }}>{String(row.value || 0)}</span> : <input type="number" value={row.value} onChange={(e)=>updateList("takeProfitTargets", idx, "value", e.target.value)} style={{ width:"100%", height:"28px", border:"1px solid #dbe3ee", borderRadius:"8px", padding:"0 8px", background:"#fff", textAlign:"right" }} />}
                       <span style={{ fontSize:"0.8rem", color:"#16a34a", fontWeight:700 }}>{fmtSar(calc)}</span>
@@ -4342,7 +4389,7 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
                     </div>
                   );
                 })}
-                {!readOnly && <button type="button" onClick={() => setForm((prev)=>({ ...prev, takeProfitTargets:[...prev.takeProfitTargets, { mode:"fixed", value:"", allocation:"", executed:false }] }))} style={{ marginTop:"8px", border:"1px solid #cbd5e1", background:"#fff", borderRadius:"8px", padding:"5px 8px", fontSize:"0.75rem", color:"#475569", display:"inline-flex", gap:"4px", alignItems:"center" }}><Plus size={11}/> هدف</button>}
+                {!readOnly && <button type="button" onClick={() => setForm((prev)=>({ ...prev, takeProfitTargets:[...prev.takeProfitTargets, { mode:"fixed", value:"", allocation:"", executed:false }] }))} style={{ marginTop:"8px", border:"1px solid #cbd5e1", background:"#fff", borderRadius:"8px", padding:"5px 8px", fontSize:"0.75rem", color:"#475569", display:"inline-flex", gap:"4px", alignItems:"center" }}><Plus size={11}/> {L.addTarget}</button>}
               </div>
             </div>
           </div>
