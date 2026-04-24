@@ -4207,7 +4207,7 @@ function StockAnalysisTab() {
 
 function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
   const { t, isRTL } = useApp();
-  const displayCurrency = "SAR";
+  const fmtSar = (val) => `${Number(val || 0).toLocaleString("en-US", { minimumFractionDigits:2, maximumFractionDigits:2 })} ﷼`;
   const purchasePrice = Number(investment?.purchasePrice) || 165;
 
   const [form, setForm] = useState(() => {
@@ -4238,10 +4238,10 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
   const removeRow = (listKey, idx) => setForm((prev) => ({ ...prev, [listKey]: prev[listKey].filter((_, i) => i !== idx) }));
   const computedPrice = (modeType, value, direction) => computePlanPrice(purchasePrice, modeType, value, direction);
 
-  const toggleBtn = (active) => ({ border:"1px solid #cbd5e1", borderRadius:"8px", padding:"6px 8px", background:active?"#e0ecff":"#ffffff", color:active?"#1d4ed8":"#64748b", cursor:readOnly?"not-allowed":"pointer", minWidth:"34px", display:"inline-flex", justifyContent:"center", alignItems:"center" });
+  const toggleBtn = (active) => ({ border:"none", padding:"6px 8px", background:active?"#dbeafe":"#ffffff", color:active?"#1d4ed8":"#64748b", cursor:readOnly?"not-allowed":"pointer", minWidth:"30px", display:"inline-flex", justifyContent:"center", alignItems:"center" });
 
   const ModeToggle = ({ value, onChange }) => (
-    <div style={{ display:"inline-flex", gap:"5px" }}>
+    <div style={{ display:"inline-flex", gap:0, border:"1px solid #cbd5e1", borderRadius:"999px", overflow:"hidden" }}>
       <button type="button" onClick={() => onChange("fixed")} disabled={readOnly} style={toggleBtn(value === "fixed")} data-icon-tooltip="Fixed Price"><DollarSign size={12} /></button>
       <button type="button" onClick={() => onChange("percentage")} disabled={readOnly} style={toggleBtn(value === "percentage")} data-icon-tooltip="Percentage"><span style={{ fontSize:"0.85rem", fontWeight:700 }}>%</span></button>
     </div>
@@ -4260,13 +4260,13 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
     return (
       <div style={{ border:"1px solid #e2e8f0", borderRadius:"10px", padding:"10px", background:"#fff" }}>
         <div style={{ fontSize:"0.78rem", fontWeight:600, color:T.textSecondary, marginBottom:"8px" }}>{title}</div>
-        <div style={{ display:"grid", gridTemplateColumns:"150px auto auto auto auto 1fr", gap:"8px", alignItems:"center" }}>
+        <div style={{ display:"flex", gap:"6px", alignItems:"center", flexWrap:"nowrap", whiteSpace:"nowrap" }}>
           {readOnly ? <span style={{ color:T.textMuted, fontSize:"0.78rem" }}>{form[fromKey].mode.toUpperCase()}</span> : <ModeToggle value={form[fromKey].mode} onChange={(next) => { updateCore(fromKey, "mode", next); updateCore(toKey, "mode", next); }} />}
           <span style={{ fontSize:"0.76rem", color:T.textMuted }}>From</span>
-          {readOnly ? <span style={{ fontSize:"0.82rem", color:T.textPrimary, minWidth:"78px" }}>{fmtMoney(fromCalc, { currency:displayCurrency, decimals:2 })}</span> : <Input type="number" value={form[fromKey].value} onChange={(e)=>updateCore(fromKey, "value", e.target.value)} isRTL={isRTL} style={{ maxWidth:"95px", background:"#fff" }} />}
+          {readOnly ? <span style={{ fontSize:"0.82rem", color:T.textPrimary, minWidth:"78px" }}>{fmtSar(fromCalc)}</span> : <Input type="number" value={form[fromKey].value} onChange={(e)=>updateCore(fromKey, "value", e.target.value)} isRTL={isRTL} style={{ maxWidth:"84px", background:"#fff" }} />}
           <span style={{ fontSize:"0.76rem", color:T.textMuted }}>To</span>
-          {readOnly ? <span style={{ fontSize:"0.82rem", color:T.textPrimary, minWidth:"78px" }}>{fmtMoney(toCalc, { currency:displayCurrency, decimals:2 })}</span> : <Input type="number" value={form[toKey].value} onChange={(e)=>updateCore(toKey, "value", e.target.value)} isRTL={isRTL} style={{ maxWidth:"95px", background:"#fff" }} />}
-          <span style={{ fontSize:"0.82rem", fontWeight:700, color:valueColor }}>{fmtMoney(fromCalc, { currency:displayCurrency, decimals:2 })} → {fmtMoney(toCalc, { currency:displayCurrency, decimals:2 })}</span>
+          {readOnly ? <span style={{ fontSize:"0.82rem", color:T.textPrimary, minWidth:"78px" }}>{fmtSar(toCalc)}</span> : <Input type="number" value={form[toKey].value} onChange={(e)=>updateCore(toKey, "value", e.target.value)} isRTL={isRTL} style={{ maxWidth:"84px", background:"#fff" }} />}
+          <span style={{ fontSize:"0.82rem", fontWeight:700, color:valueColor }}>{fmtSar(fromCalc)} → {fmtSar(toCalc)}</span>
         </div>
       </div>
     );
@@ -4284,11 +4284,11 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
             <InlineZoneRow title="Resistance" fromKey="resistanceFrom" toKey="resistanceTo" direction="up" valueColor="#16a34a" />
             <div style={{ border:"1px solid #e2e8f0", borderRadius:"10px", padding:"10px" }}>
               <div style={{ fontSize:"0.78rem", fontWeight:600, color:T.textSecondary, marginBottom:"8px" }}>Stop Loss</div>
-              <div style={{ display:"grid", gridTemplateColumns:"150px auto auto 1fr", gap:"8px", alignItems:"center" }}>
+              <div style={{ display:"flex", gap:"6px", alignItems:"center", flexWrap:"nowrap", whiteSpace:"nowrap" }}>
                 {readOnly ? <span style={{ color:T.textMuted, fontSize:"0.78rem" }}>{form.stopLoss.mode.toUpperCase()}</span> : <ModeToggle value={form.stopLoss.mode} onChange={(next)=>updateCore("stopLoss", "mode", next)} />}
                 <span style={{ fontSize:"0.76rem", color:T.textMuted }}>From</span>
-                {readOnly ? <span style={{ fontSize:"0.82rem", color:T.textPrimary }}>{fmtMoney(stopLossCalc, { currency:displayCurrency, decimals:2 })}</span> : <Input type="number" value={form.stopLoss.value} onChange={(e)=>updateCore("stopLoss", "value", e.target.value)} isRTL={isRTL} style={{ maxWidth:"95px", background:"#fff" }} />}
-                <span style={{ fontSize:"0.82rem", fontWeight:700, color:"#dc2626" }}>{fmtMoney(stopLossCalc, { currency:displayCurrency, decimals:2 })}</span>
+                {readOnly ? <span style={{ fontSize:"0.82rem", color:T.textPrimary }}>{fmtSar(stopLossCalc)}</span> : <Input type="number" value={form.stopLoss.value} onChange={(e)=>updateCore("stopLoss", "value", e.target.value)} isRTL={isRTL} style={{ maxWidth:"84px", background:"#fff" }} />}
+                <span style={{ fontSize:"0.82rem", fontWeight:700, color:"#dc2626" }}>{fmtSar(stopLossCalc)}</span>
               </div>
             </div>
           </div>
@@ -4301,18 +4301,19 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
                   const price = computedPrice(row.mode, row.value, "down");
                   const amount = price * (Number(row.shares) || 0);
                   return (
-                    <div key={`dca-${idx}`} style={{ display:"grid", gridTemplateColumns:"80px 80px 1fr 1fr auto auto", gap:"8px", alignItems:"center", padding:"6px 0", borderBottom:"1px solid #f1f5f9" }}>
+                    <div key={`dca-${idx}`} style={{ display:"grid", gridTemplateColumns:"68px 70px 1fr 1fr 1fr auto auto", gap:"6px", alignItems:"center", padding:"5px 0", borderBottom:"1px solid #f1f5f9" }}>
                       <span style={{ fontSize:"0.78rem", color:T.textSecondary }}>{`Level ${idx + 1}`}</span>
                       {readOnly ? <span style={{ fontSize:"0.78rem", color:T.textMuted }}>{row.mode.toUpperCase()}</span> : <ModeToggle value={row.mode} onChange={(next)=>updateList("dcaLevels", idx, "mode", next)} />}
-                      {readOnly ? <span style={{ fontSize:"0.82rem" }}>{fmtMoney(price, { currency:displayCurrency, decimals:2 })}</span> : <Input type="number" value={row.value} onChange={(e)=>updateList("dcaLevels", idx, "value", e.target.value)} isRTL={isRTL} placeholder="Target" style={{ background:"#fff" }} />}
-                      {readOnly ? <span style={{ fontSize:"0.82rem", color:"#16a34a" }}>{fmtMoney(amount, { currency:displayCurrency, decimals:2 })}</span> : <Input type="number" value={row.shares || ""} onChange={(e)=>updateList("dcaLevels", idx, "shares", e.target.value)} isRTL={isRTL} placeholder="Shares" style={{ background:"#fff" }} />}
+                      {readOnly ? <span style={{ fontSize:"0.82rem" }}>{fmtSar(price)}</span> : <Input type="number" value={row.value} onChange={(e)=>updateList("dcaLevels", idx, "value", e.target.value)} isRTL={isRTL} placeholder="Target" style={{ background:"#fff" }} />}
+                      {readOnly ? <span style={{ fontSize:"0.82rem", color:T.textPrimary }}>{row.shares || 0}</span> : <Input type="number" value={row.shares || ""} onChange={(e)=>updateList("dcaLevels", idx, "shares", e.target.value)} isRTL={isRTL} placeholder="Shares" style={{ background:"#fff" }} />}
+                      <span style={{ fontSize:"0.82rem", color:"#16a34a", fontWeight:600 }}>{fmtSar(amount)}</span>
                       <ExecToggle value={Boolean(row.executed)} onChange={(next)=>updateList("dcaLevels", idx, "executed", next)} />
                       {!readOnly && <button type="button" data-icon-tooltip="Delete row" onClick={() => removeRow("dcaLevels", idx)} style={{ border:"none", background:"transparent", color:"#ef4444", cursor:"pointer", display:"inline-flex" }}><Trash2 size={14} /></button>}
                     </div>
                   );
                 })}
               </div>
-              {!readOnly && <button type="button" onClick={() => setForm((prev) => ({ ...prev, dcaLevels:[...prev.dcaLevels, { mode:"fixed", value:"", shares:"", executed:false }] }))} style={{ marginTop:"8px", border:"1px dashed #cbd5e1", background:"#fff", color:T.textSecondary, borderRadius:"8px", padding:"6px 10px", cursor:"pointer", fontSize:"0.78rem" }}>+ Level</button>}
+              {!readOnly && <button type="button" onClick={() => setForm((prev) => ({ ...prev, dcaLevels:[...prev.dcaLevels, { mode:"fixed", value:"", shares:"", executed:false }] }))} style={{ marginTop:"8px", border:"1px solid #cbd5e1", background:"#fff", color:T.textSecondary, borderRadius:"8px", padding:"6px 10px", cursor:"pointer", fontSize:"0.78rem", display:"inline-flex", alignItems:"center", gap:"5px" }}><Plus size={12}/> Level</button>}
             </div>
 
             <div style={{ border:"1px solid #e2e8f0", borderRadius:"12px", padding:"12px" }}>
@@ -4321,18 +4322,19 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
                 {form.takeProfitTargets.map((row, idx) => {
                   const price = computedPrice(row.mode, row.value, "up");
                   return (
-                    <div key={`tp-${idx}`} style={{ display:"grid", gridTemplateColumns:"80px 80px 1fr 1fr auto auto", gap:"8px", alignItems:"center", padding:"6px 0", borderBottom:"1px solid #f1f5f9" }}>
+                    <div key={`tp-${idx}`} style={{ display:"grid", gridTemplateColumns:"68px 70px 1fr 1fr 1fr auto auto", gap:"6px", alignItems:"center", padding:"5px 0", borderBottom:"1px solid #f1f5f9" }}>
                       <span style={{ fontSize:"0.78rem", color:T.textSecondary }}>{`Target ${idx + 1}`}</span>
                       {readOnly ? <span style={{ fontSize:"0.78rem", color:T.textMuted }}>{row.mode.toUpperCase()}</span> : <ModeToggle value={row.mode} onChange={(next)=>updateList("takeProfitTargets", idx, "mode", next)} />}
-                      {readOnly ? <span style={{ fontSize:"0.82rem" }}>{fmtMoney(price, { currency:displayCurrency, decimals:2 })}</span> : <Input type="number" value={row.value} onChange={(e)=>updateList("takeProfitTargets", idx, "value", e.target.value)} isRTL={isRTL} placeholder="Target" style={{ background:"#fff" }} />}
-                      {readOnly ? <span style={{ fontSize:"0.82rem", color:"#16a34a" }}>{`${row.allocation || 0}%`}</span> : <Input type="number" value={row.allocation || ""} onChange={(e)=>updateList("takeProfitTargets", idx, "allocation", e.target.value)} isRTL={isRTL} placeholder="Quantity %" style={{ background:"#fff" }} />}
+                      {readOnly ? <span style={{ fontSize:"0.82rem" }}>{fmtSar(price)}</span> : <Input type="number" value={row.value} onChange={(e)=>updateList("takeProfitTargets", idx, "value", e.target.value)} isRTL={isRTL} placeholder="Target" style={{ background:"#fff" }} />}
+                      {readOnly ? <span style={{ fontSize:"0.82rem", color:T.textPrimary }}>{`${row.allocation || 0}%`}</span> : <Input type="number" value={row.allocation || ""} onChange={(e)=>updateList("takeProfitTargets", idx, "allocation", e.target.value)} isRTL={isRTL} placeholder="Quantity %" style={{ background:"#fff" }} />}
+                      <span style={{ fontSize:"0.82rem", color:"#16a34a", fontWeight:600 }}>{fmtSar(price)}</span>
                       <ExecToggle value={Boolean(row.executed)} onChange={(next)=>updateList("takeProfitTargets", idx, "executed", next)} />
                       {!readOnly && <button type="button" data-icon-tooltip="Delete row" onClick={() => removeRow("takeProfitTargets", idx)} style={{ border:"none", background:"transparent", color:"#ef4444", cursor:"pointer", display:"inline-flex" }}><Trash2 size={14} /></button>}
                     </div>
                   );
                 })}
               </div>
-              {!readOnly && <button type="button" onClick={() => setForm((prev) => ({ ...prev, takeProfitTargets:[...prev.takeProfitTargets, { mode:"fixed", value:"", allocation:"", executed:false }] }))} style={{ marginTop:"8px", border:"1px dashed #cbd5e1", background:"#fff", color:T.textSecondary, borderRadius:"8px", padding:"6px 10px", cursor:"pointer", fontSize:"0.78rem" }}>+ Target</button>}
+              {!readOnly && <button type="button" onClick={() => setForm((prev) => ({ ...prev, takeProfitTargets:[...prev.takeProfitTargets, { mode:"fixed", value:"", allocation:"", executed:false }] }))} style={{ marginTop:"8px", border:"1px solid #cbd5e1", background:"#fff", color:T.textSecondary, borderRadius:"8px", padding:"6px 10px", cursor:"pointer", fontSize:"0.78rem", display:"inline-flex", alignItems:"center", gap:"5px" }}><Plus size={12}/> Target</button>}
             </div>
           </div>
         </div>
@@ -4340,7 +4342,7 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
         <div style={{ display:"flex", justifyContent:"flex-end", gap:"8px" }}>
           <button type="button" data-icon-tooltip={t.close} onClick={onClose} style={{ width:"38px", height:"38px", borderRadius:"10px", border:"1px solid #cbd5e1", background:"#fff", color:"#1f2937", cursor:"pointer", display:"inline-flex", alignItems:"center", justifyContent:"center" }}><X size={16} /></button>
           {readOnly ? (
-            <Btn variant="secondary" onClick={() => setIsEditing(true)}>Update Plan</Btn>
+            <Btn variant="secondary" onClick={() => setIsEditing(true)}>Edit Plan</Btn>
           ) : (
             <button type="button" onClick={() => onSave?.(form)} style={{ border:"none", borderRadius:"10px", background:"#2563eb", color:"#fff", fontWeight:700, letterSpacing:"0.03em", padding:"0 18px", minHeight:"38px", cursor:"pointer" }}>Save Plan</button>
           )}
