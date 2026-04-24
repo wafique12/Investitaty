@@ -4207,6 +4207,10 @@ function StockAnalysisTab() {
 
 function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
   const purchasePrice = Number(investment?.purchasePrice) || 28;
+  const currentPrice = Number(investment?.currentPrice) || purchasePrice;
+  const quantity = Number(investment?.quantity) || 0;
+  const totalValue = currentPrice * quantity;
+  const roiPct = purchasePrice > 0 ? ((currentPrice - purchasePrice) / purchasePrice) * 100 : 0;
   const readOnly = mode === "view";
   const [form, setForm] = useState(() => {
     const seeded = normalizeTradingPlan(investment?.tradingPlan || {}, purchasePrice);
