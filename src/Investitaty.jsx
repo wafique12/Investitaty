@@ -4206,10 +4206,12 @@ function StockAnalysisTab() {
 }
 
 function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
-  const { isRTL } = useApp();
+  const { isRTL, patchItem } = useApp();
   const isArabic = Boolean(isRTL);
   const initiallyView = mode === "view";
   const [isEditing, setIsEditing] = useState(!initiallyView);
+  const [errors, setErrors] = useState({});
+  const [saveError, setSaveError] = useState("");
 
   const labels = isArabic
     ? {
@@ -4340,6 +4342,38 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
     takeProfitTargets: (form.takeProfitTargets || []).map(({ _rowId, ...rest }) => rest),
   });
 
+  const validateRequired = () => {
+    const nextErrors = {};
+    const required = [
+      ["supportFrom", form.supportFrom?.value],
+      ["supportTo", form.supportTo?.value],
+      ["resistanceFrom", form.resistanceFrom?.value],
+      ["resistanceTo", form.resistanceTo?.value],
+      ["stopLoss", form.stopLoss?.value],
+    ];
+    required.forEach(([k, v]) => {
+      if (v === undefined || v === null || String(v).trim() === "") nextErrors[k] = true;
+    });
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length) {
+      setSaveError(isArabic ? "الرجاء تعبئة جميع حقول الدعم والمقاومة ووقف الخسارة قبل الحفظ." : "Please complete Support, Resistance, and Stop Loss fields before saving.");
+      return false;
+    }
+    setSaveError("");
+    return true;
+  };
+
+  const handleSavePlan = () => {
+    if (!validateRequired()) return;
+    const payload = { ...cleanForSave(), updatedAt: new Date().toISOString() };
+    if (investment?.id && patchItem) {
+      patchItem("investments", investment.id, { tradingPlan: payload });
+    } else {
+      onSave?.(payload);
+    }
+    setIsEditing(false);
+  };
+
   const Card = ({ title, children }) => (
     <section className="bg-white border border-[#E2E8F0] rounded-[10px] p-4 mb-3 overflow-hidden">
       <h4 className="text-[12px] tracking-[0.08em] text-slate-500 font-semibold mb-3">{title}</h4>
@@ -4364,7 +4398,7 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
     </div>
   );
 
-  const InputField = React.memo(function InputField({ label, value, onCommit, placeholder, showPercent = false }) {
+  const InputField = React.memo(function InputField({ label, value, onCommit, placeholder, showPercent = false, invalid = false }) {
     const [draft, setDraft] = useState(value ?? "");
     useEffect(() => { setDraft(value ?? ""); }, [value]);
 
@@ -4372,7 +4406,7 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
       return (
         <div className="w-[88px] shrink-0">
           {label && <div className={`text-[10px] text-slate-500 mb-1 ${isArabic ? "text-right" : "text-left"}`}>{label}</div>}
-          <div className={`h-9 px-2 flex items-center text-[13px] text-[#111827] ${isArabic ? "justify-end text-right" : "justify-start text-left"}`}>{value || "—"}</div>
+          <div className={`h-9 px-2 flex items-center text-[13px] text-[#111827] ${isArabic ? "justify-end text-right" : "justify-start text-left"}`}>{value ? `${value}${showPercent ? "%" : ""}` : "—"}</div>
         </div>
       );
     }
@@ -4386,7 +4420,7 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
           onChange={(e) => setDraft(e.target.value)}
           onBlur={() => onCommit(draft)}
           placeholder={placeholder}
-          className={`h-9 w-full rounded-lg border border-[#E2E8F0] focus:border-[#334155] focus:ring-2 focus:ring-slate-100 pl-2 pr-6 text-[13px] text-[#111827] bg-white ${isArabic ? "text-right" : "text-left"}`}
+          className={`h-9 w-full rounded-lg border ${invalid ? "border-red-400" : "border-[#E2E8F0]"} focus:border-[#334155] focus:ring-2 focus:ring-slate-100 pl-2 pr-6 text-[13px] text-[#111827] bg-white ${isArabic ? "text-right" : "text-left"}`}
         />
         {showPercent && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-500">%</span>}
       </div>
@@ -4412,11 +4446,11 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
     </div>
   );
 
-  const RowItem = ({ mode, fromValue, toValue, onModeChange, onFromCommit, onToCommit, result, danger = false, showTo = true }) => (
+  const RowItem = ({ mode, fromValue, toValue, onModeChange, onFromCommit, onToCommit, result, danger = false, showTo = true, fromInvalid = false, toInvalid = false }) => (
     <div className="flex items-end gap-2 min-w-0">
       <ToggleSwitch value={mode} onChange={onModeChange} />
-      <InputField label={labels.from} value={fromValue} onCommit={onFromCommit} placeholder={labels.fromPlaceholder} showPercent={mode === "percentage"} />
-      {showTo && <InputField label={labels.to} value={toValue} onCommit={onToCommit} placeholder={labels.toPlaceholder} showPercent={mode === "percentage"} />}
+      <InputField label={labels.from} value={fromValue} onCommit={onFromCommit} placeholder={labels.fromPlaceholder} showPercent={mode === "percentage"} invalid={fromInvalid} />
+      {showTo && <InputField label={labels.to} value={toValue} onCommit={onToCommit} placeholder={labels.toPlaceholder} showPercent={mode === "percentage"} invalid={toInvalid} />}
       <span className={`ml-auto text-[13px] font-semibold shrink-0 ${danger ? "text-red-500" : "text-green-600"}`}>{result}</span>
     </div>
   );
@@ -4428,11 +4462,12 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
           <h2 className="text-[20px] font-semibold text-gray-900">{`${labels.title} - ${namePart}${codePart ? ` - ${codePart}` : ""}`}</h2>
           <div className="flex items-center gap-2 shrink-0">
             {isEditing
-              ? <button type="button" onClick={() => onSave?.(cleanForSave())} className="h-9 px-4 rounded-lg bg-[#1E293B] text-white text-[13px] font-semibold hover:bg-[#334155]">{labels.save}</button>
+              ? <button type="button" onClick={handleSavePlan} className="h-9 px-4 rounded-lg bg-[#1E293B] text-white text-[13px] font-semibold hover:bg-[#334155]">{labels.save}</button>
               : <button type="button" onClick={() => setIsEditing(true)} className="h-9 px-3 rounded-lg border border-slate-300 text-[#334155] text-[13px] font-semibold bg-slate-100 hover:bg-slate-200 inline-flex items-center gap-1" data-icon-tooltip={labels.edit}><Edit3 size={14} />{labels.update}</button>}
             <button type="button" onClick={onClose} className="h-9 w-9 rounded-lg border border-[#E2E8F0] bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50" aria-label={labels.close}><X size={16} /></button>
           </div>
         </header>
+        {saveError && <div className="mb-3 text-[12px] text-red-600">{saveError}</div>}
 
         <div className="flex items-center justify-between gap-4 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 mb-6">
           {[
@@ -4474,6 +4509,8 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
                   onModeChange={(next) => { updateCore("supportFrom", "mode", next); updateCore("supportTo", "mode", next); }}
                   onFromCommit={(v) => updateCore("supportFrom", "value", v)}
                   onToCommit={(v) => updateCore("supportTo", "value", v)}
+                  fromInvalid={Boolean(errors.supportFrom)}
+                  toInvalid={Boolean(errors.supportTo)}
                   result={`${fmtSar(calc(form.supportFrom?.mode || "percentage", form.supportFrom?.value, "down"))} → ${fmtSar(calc(form.supportTo?.mode || "percentage", form.supportTo?.value, "down"))}`}
                 />
               </InnerCard>
@@ -4485,6 +4522,8 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
                   onModeChange={(next) => { updateCore("resistanceFrom", "mode", next); updateCore("resistanceTo", "mode", next); }}
                   onFromCommit={(v) => updateCore("resistanceFrom", "value", v)}
                   onToCommit={(v) => updateCore("resistanceTo", "value", v)}
+                  fromInvalid={Boolean(errors.resistanceFrom)}
+                  toInvalid={Boolean(errors.resistanceTo)}
                   result={`${fmtSar(calc(form.resistanceFrom?.mode || "percentage", form.resistanceFrom?.value, "up"))} → ${fmtSar(calc(form.resistanceTo?.mode || "percentage", form.resistanceTo?.value, "up"))}`}
                 />
               </InnerCard>
@@ -4494,6 +4533,7 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
                   fromValue={form.stopLoss?.value || ""}
                   onModeChange={(next) => updateCore("stopLoss", "mode", next)}
                   onFromCommit={(v) => updateCore("stopLoss", "value", v)}
+                  fromInvalid={Boolean(errors.stopLoss)}
                   result={fmtSar(calc(form.stopLoss?.mode || "percentage", form.stopLoss?.value, "down"))}
                   danger
                   showTo={false}
