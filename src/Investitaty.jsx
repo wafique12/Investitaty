@@ -4208,13 +4208,14 @@ function StockAnalysisTab() {
 function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
   const { isRTL } = useApp();
   const isArabic = Boolean(isRTL);
-  const readOnly = mode === "view";
+  const initiallyView = mode === "view";
+  const [isEditing, setIsEditing] = useState(!initiallyView);
 
   const labels = isArabic
     ? {
       title: "خطة التداول",
       save: "حفظ الخطة",
-      cancel: "إلغاء",
+      update: "تحديث الخطة",
       price: "السعر الحالي",
       purchase: "سعر الشراء",
       total: "القيمة الإجمالية",
@@ -4223,32 +4224,27 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
       support: "الدعم",
       resistance: "المقاومة",
       stopLoss: "وقف الخسارة",
-      from: "من",
-      to: "إلى",
-      value: "القيمة",
-      percentage: "النسبة",
-      quantity: "الكمية",
-      fromPlaceholder: "من",
-      toPlaceholder: "إلى",
-      valuePlaceholder: "القيمة",
-      percentagePlaceholder: "نسبة",
-      quantityPlaceholder: "الكمية",
+      fromPlaceholder: "From",
+      toPlaceholder: "To",
+      valuePlaceholder: "Value",
+      percentagePlaceholder: "Percentage",
+      quantityPlaceholder: "Qty",
       dca: "خطة التجميع (DCA)",
       exit: "استراتيجية التخارج",
-      level: "مستوى",
-      target: "هدف",
       addLevel: "+ مستوى",
       addTarget: "+ هدف",
-      fixedTip: "سعر ثابت",
+      fixedTip: "قيمة ثابتة",
       percentTip: "نسبة مئوية",
       delete: "حذف",
       executed: "منفذ",
       pending: "معلق",
+      edit: "تعديل",
+      close: "إغلاق",
     }
     : {
       title: "Trading Plan",
       save: "Save Plan",
-      cancel: "Cancel",
+      update: "Update Plan",
       price: "Current Price",
       purchase: "Purchase Price",
       total: "Total Value",
@@ -4257,27 +4253,22 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
       support: "Support",
       resistance: "Resistance",
       stopLoss: "Stop Loss",
-      from: "From",
-      to: "To",
-      value: "Value",
-      percentage: "Percentage",
-      quantity: "Quantity",
       fromPlaceholder: "From",
       toPlaceholder: "To",
       valuePlaceholder: "Value",
       percentagePlaceholder: "Percentage",
-      quantityPlaceholder: "Quantity",
+      quantityPlaceholder: "Qty",
       dca: "ACCUMULATION PLAN (DCA)",
       exit: "EXIT STRATEGY",
-      level: "Level",
-      target: "Target",
       addLevel: "+ Level",
       addTarget: "+ Target",
-      fixedTip: "Fixed Price",
+      fixedTip: "Fixed Value",
       percentTip: "Percentage",
       delete: "Delete",
       executed: "Executed",
       pending: "Pending",
+      edit: "Edit",
+      close: "Close",
     };
 
   const purchasePrice = Number(investment?.purchasePrice) || 0;
@@ -4288,6 +4279,13 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
   const namePart = investment?.name || (isArabic ? "الأصل" : "Asset");
   const codePart = investment?.symbol || investment?.ticker || investment?.code || "";
 
+  const rowIdRef = useRef(0);
+  const nextRowId = () => {
+    rowIdRef.current += 1;
+    return `row-${rowIdRef.current}`;
+  };
+  const withRowIds = (rows = []) => rows.map((row) => ({ ...row, _rowId: row._rowId || nextRowId() }));
+
   const [form, setForm] = useState(() => {
     const seeded = normalizeTradingPlan(investment?.tradingPlan || {}, purchasePrice);
     return {
@@ -4297,8 +4295,8 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
       resistanceFrom: seeded.resistanceFrom?.value ? seeded.resistanceFrom : { mode: "percentage", value: "6" },
       resistanceTo: seeded.resistanceTo?.value ? seeded.resistanceTo : { mode: "percentage", value: "9" },
       stopLoss: seeded.stopLoss?.value ? seeded.stopLoss : { mode: "percentage", value: "8" },
-      dcaLevels: (seeded.dcaLevels || []).length ? seeded.dcaLevels : [{ mode: "percentage", value: "2", allocation: "20", executed: false }],
-      takeProfitTargets: (seeded.takeProfitTargets || []).length ? seeded.takeProfitTargets : [{ mode: "percentage", value: "8", allocation: "10", executed: false }],
+      dcaLevels: withRowIds((seeded.dcaLevels || []).length ? seeded.dcaLevels : [{ mode: "percentage", value: "2", allocation: "20", executed: false }]),
+      takeProfitTargets: withRowIds((seeded.takeProfitTargets || []).length ? seeded.takeProfitTargets : [{ mode: "percentage", value: "8", allocation: "10", executed: false }]),
     };
   });
 
@@ -4309,9 +4307,15 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
 
   const calc = (m, v, direction) => computePlanPrice(purchasePrice, m, v, direction);
   const updateCore = (k, field, value) => setForm((p) => ({ ...p, [k]: { ...p[k], [field]: value } }));
-  const updateList = (key, idx, field, value) => setForm((p) => ({ ...p, [key]: p[key].map((r, i) => (i === idx ? { ...r, [field]: value } : r)) }));
-  const removeRow = (key, idx) => setForm((p) => ({ ...p, [key]: p[key].filter((_, i) => i !== idx) }));
+  const updateListById = (key, rowId, field, value) => setForm((p) => ({ ...p, [key]: p[key].map((r) => (r._rowId === rowId ? { ...r, [field]: value } : r)) }));
+  const removeRowById = (key, rowId) => setForm((p) => ({ ...p, [key]: p[key].filter((r) => r._rowId !== rowId) }));
   const placeholderByMode = (mode) => (mode === "percentage" ? labels.percentagePlaceholder : labels.valuePlaceholder);
+
+  const cleanForSave = () => ({
+    ...form,
+    dcaLevels: (form.dcaLevels || []).map(({ _rowId, ...rest }) => rest),
+    takeProfitTargets: (form.takeProfitTargets || []).map(({ _rowId, ...rest }) => rest),
+  });
 
   const Card = ({ title, children }) => (
     <section className="bg-white border border-gray-200 rounded-[10px] p-4 mb-3">
@@ -4328,34 +4332,51 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
   );
 
   const ToggleSwitch = ({ value, onChange }) => (
-    <div className="grid grid-cols-2 w-16 h-9 p-0.5 rounded-full bg-[#EEF5FF] border border-blue-100 shrink-0">
-      <button type="button" disabled={readOnly} onClick={() => onChange("fixed")} data-icon-tooltip={labels.fixedTip} className={`rounded-full text-[13px] font-semibold transition-colors ${value === "fixed" ? "bg-[#7FB3FF] text-white" : "text-[#3B82F6]"}`}>$</button>
-      <button type="button" disabled={readOnly} onClick={() => onChange("percentage")} data-icon-tooltip={labels.percentTip} className={`rounded-full text-[13px] font-semibold transition-colors ${value === "percentage" ? "bg-[#7FB3FF] text-white" : "text-[#3B82F6]"}`}>%</button>
+    <div className="relative w-16 h-9 rounded-full bg-[#EEF5FF] overflow-hidden shrink-0" data-icon-tooltip={value === "percentage" ? labels.percentTip : labels.fixedTip}>
+      <div className={`absolute top-0 bottom-0 w-1/2 bg-[#7FB3FF] transition-all ${value === "fixed" ? "left-0" : "left-1/2"}`} />
+      <div className="relative z-10 grid grid-cols-2 h-full">
+        <button type="button" disabled={!isEditing} onClick={() => onChange("fixed")} className={`text-[13px] font-semibold ${value === "fixed" ? "text-white" : "text-[#3B82F6]"}`}>$</button>
+        <button type="button" disabled={!isEditing} onClick={() => onChange("percentage")} className={`text-[13px] font-semibold ${value === "percentage" ? "text-white" : "text-[#3B82F6]"}`}>%</button>
+      </div>
     </div>
   );
 
-  const InputField = ({ label, value, onChange, placeholder }) => (
-    <div className="w-[86px] shrink-0">
-      {label && <div className="text-[11px] text-gray-500 mb-1">{label}</div>}
-      {readOnly
-        ? <div className="h-9 rounded-lg border border-gray-200 px-2.5 flex items-center text-[13px] text-gray-900">{value || "—"}</div>
-        : <input type="number" value={value} onChange={onChange} placeholder={placeholder} className="h-9 w-full rounded-lg border border-gray-300 focus:border-[#7FB3FF] focus:ring-2 focus:ring-blue-100 px-2.5 text-[13px] text-gray-900 bg-white" />}
-    </div>
-  );
+  const InputField = React.memo(function InputField({ value, onCommit, placeholder, showPercent = false }) {
+    const [draft, setDraft] = useState(value ?? "");
+    useEffect(() => { setDraft(value ?? ""); }, [value]);
+
+    if (!isEditing) {
+      return <div className="w-[88px] h-9 px-2 flex items-center text-[13px] text-[#111827]">{value || "—"}</div>;
+    }
+
+    return (
+      <div className="relative w-[88px] shrink-0">
+        <input
+          type="number"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => onCommit(draft)}
+          placeholder={placeholder}
+          className="h-9 w-full rounded-lg border border-gray-300 focus:border-[#7FB3FF] focus:ring-2 focus:ring-blue-100 pl-2 pr-6 text-[13px] text-[#111827] bg-white"
+        />
+        {showPercent && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-500">%</span>}
+      </div>
+    );
+  });
 
   const StatusIcon = ({ executed, onToggle }) => (
     <div className="ml-1 flex items-center gap-1.5 shrink-0">
-      <button type="button" disabled={readOnly} onClick={onToggle} data-icon-tooltip={labels.executed} className={`h-7 w-7 rounded-full border flex items-center justify-center ${executed ? "bg-blue-50 border-blue-200 text-[#3B82F6]" : "bg-white border-gray-200 text-gray-400"}`}><CheckCircle2 size={13} /></button>
+      <button type="button" disabled={!isEditing} onClick={onToggle} data-icon-tooltip={labels.executed} className={`h-7 w-7 rounded-full border flex items-center justify-center ${executed ? "bg-blue-50 border-blue-200 text-[#3B82F6]" : "bg-white border-gray-200 text-gray-400"}`}><CheckCircle2 size={13} /></button>
       <span data-icon-tooltip={labels.pending} className="h-7 w-7 rounded-full border border-gray-200 bg-white text-gray-400 flex items-center justify-center"><CalendarClock size={13} /></span>
     </div>
   );
 
-  const RowItem = ({ mode, fromValue, toValue, onModeChange, onFromChange, onToChange, result, danger = false, showTo = true }) => (
-    <div className="flex items-end gap-3 overflow-x-auto whitespace-nowrap">
+  const RowItem = ({ mode, fromValue, toValue, onModeChange, onFromCommit, onToCommit, result, danger = false, showTo = true }) => (
+    <div className="flex items-center gap-3 overflow-x-auto whitespace-nowrap">
       <ToggleSwitch value={mode} onChange={onModeChange} />
-      <InputField label={labels.from} value={fromValue} onChange={onFromChange} placeholder={labels.fromPlaceholder} />
-      {showTo && <InputField label={labels.to} value={toValue} onChange={onToChange} placeholder={labels.toPlaceholder} />}
-      <span className={`ml-auto mb-2 text-[13px] font-semibold shrink-0 ${danger ? "text-red-500" : "text-green-600"}`}>{result}</span>
+      <InputField value={fromValue} onCommit={onFromCommit} placeholder={labels.fromPlaceholder} showPercent={mode === "percentage"} />
+      {showTo && <InputField value={toValue} onCommit={onToCommit} placeholder={labels.toPlaceholder} showPercent={mode === "percentage"} />}
+      <span className={`ml-auto text-[13px] font-semibold shrink-0 ${danger ? "text-red-500" : "text-green-600"}`}>{result}</span>
     </div>
   );
 
@@ -4365,9 +4386,10 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
         <header className="flex items-center justify-between gap-4 mb-5">
           <h2 className="text-[20px] font-semibold text-gray-900">{`${labels.title} - ${namePart}${codePart ? ` - ${codePart}` : ""}`}</h2>
           <div className="flex items-center gap-2 shrink-0">
-            {!readOnly && <button type="button" onClick={() => onSave?.(form)} className="h-9 px-4 rounded-lg bg-[#7FB3FF] text-white text-[13px] font-semibold hover:bg-[#6EA8FE]">{labels.save}</button>}
-            <button type="button" onClick={onClose} className="h-9 px-4 rounded-lg border border-gray-300 text-gray-700 text-[13px] font-semibold bg-white hover:bg-gray-50">{labels.cancel}</button>
-            <button type="button" onClick={onClose} className="h-9 w-9 rounded-lg border border-gray-300 bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50" aria-label="Close"><X size={16} /></button>
+            {isEditing
+              ? <button type="button" onClick={() => onSave?.(cleanForSave())} className="h-9 px-4 rounded-lg bg-gradient-to-r from-[#6EA8FE] to-[#3B82F6] text-white text-[13px] font-semibold hover:brightness-95">{labels.save}</button>
+              : <button type="button" onClick={() => setIsEditing(true)} className="h-9 px-3 rounded-lg border border-blue-200 text-[#3B82F6] text-[13px] font-semibold bg-[#EEF5FF] hover:bg-blue-100 inline-flex items-center gap-1" data-icon-tooltip={labels.edit}><Edit3 size={14} />{labels.update}</button>}
+            <button type="button" onClick={onClose} className="h-9 w-9 rounded-lg border border-gray-300 bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50" aria-label={labels.close}><X size={16} /></button>
           </div>
         </header>
 
@@ -4394,8 +4416,8 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
                   fromValue={form.supportFrom?.value || ""}
                   toValue={form.supportTo?.value || ""}
                   onModeChange={(next) => { updateCore("supportFrom", "mode", next); updateCore("supportTo", "mode", next); }}
-                  onFromChange={(e) => updateCore("supportFrom", "value", e.target.value)}
-                  onToChange={(e) => updateCore("supportTo", "value", e.target.value)}
+                  onFromCommit={(v) => updateCore("supportFrom", "value", v)}
+                  onToCommit={(v) => updateCore("supportTo", "value", v)}
                   result={`${fmtSar(calc(form.supportFrom?.mode || "percentage", form.supportFrom?.value, "down"))} → ${fmtSar(calc(form.supportTo?.mode || "percentage", form.supportTo?.value, "down"))}`}
                 />
               </InnerCard>
@@ -4405,8 +4427,8 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
                   fromValue={form.resistanceFrom?.value || ""}
                   toValue={form.resistanceTo?.value || ""}
                   onModeChange={(next) => { updateCore("resistanceFrom", "mode", next); updateCore("resistanceTo", "mode", next); }}
-                  onFromChange={(e) => updateCore("resistanceFrom", "value", e.target.value)}
-                  onToChange={(e) => updateCore("resistanceTo", "value", e.target.value)}
+                  onFromCommit={(v) => updateCore("resistanceFrom", "value", v)}
+                  onToCommit={(v) => updateCore("resistanceTo", "value", v)}
                   result={`${fmtSar(calc(form.resistanceFrom?.mode || "percentage", form.resistanceFrom?.value, "up"))} → ${fmtSar(calc(form.resistanceTo?.mode || "percentage", form.resistanceTo?.value, "up"))}`}
                 />
               </InnerCard>
@@ -4415,7 +4437,7 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
                   mode={form.stopLoss?.mode || "percentage"}
                   fromValue={form.stopLoss?.value || ""}
                   onModeChange={(next) => updateCore("stopLoss", "mode", next)}
-                  onFromChange={(e) => updateCore("stopLoss", "value", e.target.value)}
+                  onFromCommit={(v) => updateCore("stopLoss", "value", v)}
                   result={fmtSar(calc(form.stopLoss?.mode || "percentage", form.stopLoss?.value, "down"))}
                   danger
                   showTo={false}
@@ -4431,19 +4453,19 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
                   const mode = row.mode || "percentage";
                   const calcValue = calc(mode, row.value, "down");
                   return (
-                    <div key={`dca-${idx}`} className="flex items-end gap-3 overflow-x-auto whitespace-nowrap">
-                      <span className="w-16 mb-2 text-[13px] font-semibold text-gray-900 shrink-0">{`${labels.level} ${idx + 1}`}</span>
-                      <ToggleSwitch value={mode} onChange={(next) => updateList("dcaLevels", idx, "mode", next)} />
-                      <InputField value={row.value} onChange={(e) => updateList("dcaLevels", idx, "value", e.target.value)} placeholder={placeholderByMode(mode)} />
-                      <InputField value={row.allocation} onChange={(e) => updateList("dcaLevels", idx, "allocation", e.target.value)} placeholder={labels.quantityPlaceholder} />
-                      <span className="ml-auto mb-2 w-36 text-[13px] font-semibold text-green-600 shrink-0 text-right">{fmtSar(calcValue)}</span>
-                      <StatusIcon executed={Boolean(row.executed)} onToggle={() => updateList("dcaLevels", idx, "executed", !row.executed)} />
-                      {!readOnly && <button type="button" onClick={() => removeRow("dcaLevels", idx)} className="h-8 w-8 mb-1 rounded-lg border border-gray-200 text-red-500 flex items-center justify-center hover:bg-red-50" aria-label={labels.delete}><Trash2 size={14} /></button>}
+                    <div key={row._rowId} className="flex items-center gap-3 overflow-x-auto whitespace-nowrap pb-1" style={{ borderBottom: "1px solid #f3f4f6" }}>
+                      <span className="w-10 text-[13px] font-semibold text-gray-900 shrink-0">L{idx + 1}</span>
+                      <ToggleSwitch value={mode} onChange={(next) => updateListById("dcaLevels", row._rowId, "mode", next)} />
+                      <InputField value={row.value} onCommit={(v) => updateListById("dcaLevels", row._rowId, "value", v)} placeholder={placeholderByMode(mode)} showPercent={mode === "percentage"} />
+                      <InputField value={row.allocation} onCommit={(v) => updateListById("dcaLevels", row._rowId, "allocation", v)} placeholder={labels.quantityPlaceholder} />
+                      <span className="ml-auto w-36 text-[13px] font-semibold text-green-600 shrink-0 text-right">{fmtSar(calcValue)}</span>
+                      <StatusIcon executed={Boolean(row.executed)} onToggle={() => updateListById("dcaLevels", row._rowId, "executed", !row.executed)} />
+                      {isEditing && <button type="button" onClick={() => removeRowById("dcaLevels", row._rowId)} className="h-8 w-8 rounded-lg border border-gray-200 text-red-500 flex items-center justify-center hover:bg-red-50" data-icon-tooltip={labels.delete}><Trash2 size={14} /></button>}
                     </div>
                   );
                 })}
               </div>
-              {!readOnly && <button type="button" onClick={() => setForm((p) => ({ ...p, dcaLevels: [...p.dcaLevels, { mode: "percentage", value: "", allocation: "", executed: false }] }))} className="mt-4 h-8 px-3 rounded-lg border border-gray-300 text-gray-700 text-[13px] font-semibold bg-white hover:bg-gray-50">{labels.addLevel}</button>}
+              {isEditing && <button type="button" onClick={() => setForm((p) => ({ ...p, dcaLevels: [...p.dcaLevels, { _rowId: nextRowId(), mode: "percentage", value: "", allocation: "", executed: false }] }))} className="mt-4 h-8 px-3 rounded-lg border border-gray-300 text-gray-700 text-[13px] font-semibold bg-white hover:bg-gray-50">{labels.addLevel}</button>}
             </Card>
 
             <Card title={labels.exit}>
@@ -4452,19 +4474,19 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
                   const mode = row.mode || "percentage";
                   const calcValue = calc(mode, row.value, "up");
                   return (
-                    <div key={`tp-${idx}`} className="flex items-end gap-3 overflow-x-auto whitespace-nowrap">
-                      <span className="w-16 mb-2 text-[13px] font-semibold text-gray-900 shrink-0">{`${labels.target} ${idx + 1}`}</span>
-                      <ToggleSwitch value={mode} onChange={(next) => updateList("takeProfitTargets", idx, "mode", next)} />
-                      <InputField value={row.value} onChange={(e) => updateList("takeProfitTargets", idx, "value", e.target.value)} placeholder={placeholderByMode(mode)} />
-                      <InputField value={row.allocation} onChange={(e) => updateList("takeProfitTargets", idx, "allocation", e.target.value)} placeholder={labels.quantityPlaceholder} />
-                      <span className="ml-auto mb-2 w-36 text-[13px] font-semibold text-green-600 shrink-0 text-right">{fmtSar(calcValue)}</span>
-                      <StatusIcon executed={Boolean(row.executed)} onToggle={() => updateList("takeProfitTargets", idx, "executed", !row.executed)} />
-                      {!readOnly && <button type="button" onClick={() => removeRow("takeProfitTargets", idx)} className="h-8 w-8 mb-1 rounded-lg border border-gray-200 text-red-500 flex items-center justify-center hover:bg-red-50" aria-label={labels.delete}><Trash2 size={14} /></button>}
+                    <div key={row._rowId} className="flex items-center gap-3 overflow-x-auto whitespace-nowrap pb-1" style={{ borderBottom: "1px solid #f3f4f6" }}>
+                      <span className="w-10 text-[13px] font-semibold text-gray-900 shrink-0">T{idx + 1}</span>
+                      <ToggleSwitch value={mode} onChange={(next) => updateListById("takeProfitTargets", row._rowId, "mode", next)} />
+                      <InputField value={row.value} onCommit={(v) => updateListById("takeProfitTargets", row._rowId, "value", v)} placeholder={placeholderByMode(mode)} showPercent={mode === "percentage"} />
+                      <InputField value={row.allocation} onCommit={(v) => updateListById("takeProfitTargets", row._rowId, "allocation", v)} placeholder={labels.quantityPlaceholder} />
+                      <span className="ml-auto w-36 text-[13px] font-semibold text-green-600 shrink-0 text-right">{fmtSar(calcValue)}</span>
+                      <StatusIcon executed={Boolean(row.executed)} onToggle={() => updateListById("takeProfitTargets", row._rowId, "executed", !row.executed)} />
+                      {isEditing && <button type="button" onClick={() => removeRowById("takeProfitTargets", row._rowId)} className="h-8 w-8 rounded-lg border border-gray-200 text-red-500 flex items-center justify-center hover:bg-red-50" data-icon-tooltip={labels.delete}><Trash2 size={14} /></button>}
                     </div>
                   );
                 })}
               </div>
-              {!readOnly && <button type="button" onClick={() => setForm((p) => ({ ...p, takeProfitTargets: [...p.takeProfitTargets, { mode: "percentage", value: "", allocation: "", executed: false }] }))} className="mt-4 h-8 px-3 rounded-lg border border-gray-300 text-gray-700 text-[13px] font-semibold bg-white hover:bg-gray-50">{labels.addTarget}</button>}
+              {isEditing && <button type="button" onClick={() => setForm((p) => ({ ...p, takeProfitTargets: [...p.takeProfitTargets, { _rowId: nextRowId(), mode: "percentage", value: "", allocation: "", executed: false }] }))} className="mt-4 h-8 px-3 rounded-lg border border-gray-300 text-gray-700 text-[13px] font-semibold bg-white hover:bg-gray-50">{labels.addTarget}</button>}
             </Card>
           </div>
         </main>
