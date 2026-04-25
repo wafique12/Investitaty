@@ -4224,10 +4224,10 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
       support: "الدعم",
       resistance: "المقاومة",
       stopLoss: "وقف الخسارة",
-      fromPlaceholder: "From",
-      toPlaceholder: "To",
-      valuePlaceholder: "Value",
-      percentagePlaceholder: "Percentage",
+      fromPlaceholder: "من",
+      toPlaceholder: "إلى",
+      valuePlaceholder: "قيمة",
+      percentagePlaceholder: "نسبة",
       quantityPlaceholder: "Qty",
       dca: "خطة التجميع (DCA)",
       exit: "استراتيجية التخارج",
@@ -4240,6 +4240,10 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
       pending: "معلق",
       edit: "تعديل",
       close: "إغلاق",
+      from: "من",
+      to: "إلى",
+      value: "القيمة",
+      qty: "الكمية",
     }
     : {
       title: "Trading Plan",
@@ -4269,6 +4273,10 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
       pending: "Pending",
       edit: "Edit",
       close: "Close",
+      from: "From",
+      to: "To",
+      value: "Value",
+      qty: "Qty",
     };
 
   const purchasePrice = Number(investment?.purchasePrice) || 0;
@@ -4318,46 +4326,52 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
   });
 
   const Card = ({ title, children }) => (
-    <section className="bg-white border border-gray-200 rounded-[10px] p-4 mb-3">
-      <h4 className="text-[12px] tracking-[0.08em] text-gray-500 font-semibold mb-3">{title}</h4>
+    <section className="bg-white border border-[#E2E8F0] rounded-[10px] p-4 mb-3">
+      <h4 className="text-[12px] tracking-[0.08em] text-slate-500 font-semibold mb-3">{title}</h4>
       {children}
     </section>
   );
 
   const InnerCard = ({ title, children }) => (
-    <div className="bg-white border border-gray-200 rounded-[10px] p-4 mb-3 last:mb-0">
+    <div className="bg-white border border-[#E2E8F0] rounded-[10px] p-4 mb-3 last:mb-0">
       <h5 className="text-[13px] font-semibold text-gray-900 mb-3">{title}</h5>
       {children}
     </div>
   );
 
   const ToggleSwitch = ({ value, onChange }) => (
-    <div className="relative w-16 h-9 rounded-full bg-[#EEF5FF] overflow-hidden shrink-0" data-icon-tooltip={value === "percentage" ? labels.percentTip : labels.fixedTip}>
-      <div className={`absolute top-0 bottom-0 w-1/2 bg-[#7FB3FF] transition-all ${value === "fixed" ? "left-0" : "left-1/2"}`} />
+    <div className="relative w-16 h-9 rounded-full bg-slate-100 overflow-hidden shrink-0 border border-[#E2E8F0]" data-icon-tooltip={value === "percentage" ? labels.percentTip : labels.fixedTip}>
+      <div className={`absolute top-0 bottom-0 w-1/2 bg-[#334155] transition-all ${value === "fixed" ? "left-0" : "left-1/2"}`} />
       <div className="relative z-10 grid grid-cols-2 h-full">
-        <button type="button" disabled={!isEditing} onClick={() => onChange("fixed")} className={`text-[13px] font-semibold ${value === "fixed" ? "text-white" : "text-[#3B82F6]"}`}>$</button>
-        <button type="button" disabled={!isEditing} onClick={() => onChange("percentage")} className={`text-[13px] font-semibold ${value === "percentage" ? "text-white" : "text-[#3B82F6]"}`}>%</button>
+        <button type="button" disabled={!isEditing} onClick={() => onChange("fixed")} className={`text-[13px] font-semibold ${value === "fixed" ? "text-white" : "text-[#334155]"}`}>$</button>
+        <button type="button" disabled={!isEditing} onClick={() => onChange("percentage")} className={`text-[13px] font-semibold ${value === "percentage" ? "text-white" : "text-[#334155]"}`}>%</button>
       </div>
     </div>
   );
 
-  const InputField = React.memo(function InputField({ value, onCommit, placeholder, showPercent = false }) {
+  const InputField = React.memo(function InputField({ label, value, onCommit, placeholder, showPercent = false }) {
     const [draft, setDraft] = useState(value ?? "");
     useEffect(() => { setDraft(value ?? ""); }, [value]);
 
     if (!isEditing) {
-      return <div className="w-[88px] h-9 px-2 flex items-center text-[13px] text-[#111827]">{value || "—"}</div>;
+      return (
+        <div className="w-[88px] shrink-0">
+          {label && <div className={`text-[10px] text-slate-500 mb-1 ${isArabic ? "text-right" : "text-left"}`}>{label}</div>}
+          <div className={`h-9 px-2 flex items-center text-[13px] text-[#111827] ${isArabic ? "justify-end text-right" : "justify-start text-left"}`}>{value || "—"}</div>
+        </div>
+      );
     }
 
     return (
       <div className="relative w-[88px] shrink-0">
+        {label && <div className={`text-[10px] text-slate-500 mb-1 ${isArabic ? "text-right" : "text-left"}`}>{label}</div>}
         <input
           type="number"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={() => onCommit(draft)}
           placeholder={placeholder}
-          className="h-9 w-full rounded-lg border border-gray-300 focus:border-[#7FB3FF] focus:ring-2 focus:ring-blue-100 pl-2 pr-6 text-[13px] text-[#111827] bg-white"
+          className={`h-9 w-full rounded-lg border border-[#E2E8F0] focus:border-[#334155] focus:ring-2 focus:ring-slate-100 pl-2 pr-6 text-[13px] text-[#111827] bg-white ${isArabic ? "text-right" : "text-left"}`}
         />
         {showPercent && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-500">%</span>}
       </div>
@@ -4366,16 +4380,16 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
 
   const StatusIcon = ({ executed, onToggle }) => (
     <div className="ml-1 flex items-center gap-1.5 shrink-0">
-      <button type="button" disabled={!isEditing} onClick={onToggle} data-icon-tooltip={labels.executed} className={`h-7 w-7 rounded-full border flex items-center justify-center ${executed ? "bg-blue-50 border-blue-200 text-[#3B82F6]" : "bg-white border-gray-200 text-gray-400"}`}><CheckCircle2 size={13} /></button>
-      <span data-icon-tooltip={labels.pending} className="h-7 w-7 rounded-full border border-gray-200 bg-white text-gray-400 flex items-center justify-center"><CalendarClock size={13} /></span>
+      <button type="button" disabled={!isEditing} onClick={onToggle} data-icon-tooltip={labels.executed} className={`h-7 w-7 rounded-full border flex items-center justify-center ${executed ? "bg-slate-100 border-slate-300 text-[#334155]" : "bg-white border-[#E2E8F0] text-gray-400"}`}><CheckCircle2 size={13} /></button>
+      <span data-icon-tooltip={labels.pending} className="h-7 w-7 rounded-full border border-[#E2E8F0] bg-white text-gray-400 flex items-center justify-center"><CalendarClock size={13} /></span>
     </div>
   );
 
   const RowItem = ({ mode, fromValue, toValue, onModeChange, onFromCommit, onToCommit, result, danger = false, showTo = true }) => (
-    <div className="flex items-center gap-3 overflow-x-auto whitespace-nowrap">
+    <div className="flex items-end gap-2 min-w-0">
       <ToggleSwitch value={mode} onChange={onModeChange} />
-      <InputField value={fromValue} onCommit={onFromCommit} placeholder={labels.fromPlaceholder} showPercent={mode === "percentage"} />
-      {showTo && <InputField value={toValue} onCommit={onToCommit} placeholder={labels.toPlaceholder} showPercent={mode === "percentage"} />}
+      <InputField label={labels.from} value={fromValue} onCommit={onFromCommit} placeholder={labels.fromPlaceholder} showPercent={mode === "percentage"} />
+      {showTo && <InputField label={labels.to} value={toValue} onCommit={onToCommit} placeholder={labels.toPlaceholder} showPercent={mode === "percentage"} />}
       <span className={`ml-auto text-[13px] font-semibold shrink-0 ${danger ? "text-red-500" : "text-green-600"}`}>{result}</span>
     </div>
   );
@@ -4387,9 +4401,9 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
           <h2 className="text-[20px] font-semibold text-gray-900">{`${labels.title} - ${namePart}${codePart ? ` - ${codePart}` : ""}`}</h2>
           <div className="flex items-center gap-2 shrink-0">
             {isEditing
-              ? <button type="button" onClick={() => onSave?.(cleanForSave())} className="h-9 px-4 rounded-lg bg-gradient-to-r from-[#6EA8FE] to-[#3B82F6] text-white text-[13px] font-semibold hover:brightness-95">{labels.save}</button>
-              : <button type="button" onClick={() => setIsEditing(true)} className="h-9 px-3 rounded-lg border border-blue-200 text-[#3B82F6] text-[13px] font-semibold bg-[#EEF5FF] hover:bg-blue-100 inline-flex items-center gap-1" data-icon-tooltip={labels.edit}><Edit3 size={14} />{labels.update}</button>}
-            <button type="button" onClick={onClose} className="h-9 w-9 rounded-lg border border-gray-300 bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50" aria-label={labels.close}><X size={16} /></button>
+              ? <button type="button" onClick={() => onSave?.(cleanForSave())} className="h-9 px-4 rounded-lg bg-[#1E293B] text-white text-[13px] font-semibold hover:bg-[#334155]">{labels.save}</button>
+              : <button type="button" onClick={() => setIsEditing(true)} className="h-9 px-3 rounded-lg border border-slate-300 text-[#334155] text-[13px] font-semibold bg-slate-100 hover:bg-slate-200 inline-flex items-center gap-1" data-icon-tooltip={labels.edit}><Edit3 size={14} />{labels.update}</button>}
+            <button type="button" onClick={onClose} className="h-9 w-9 rounded-lg border border-[#E2E8F0] bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50" aria-label={labels.close}><X size={16} /></button>
           </div>
         </header>
 
@@ -4453,11 +4467,11 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
                   const mode = row.mode || "percentage";
                   const calcValue = calc(mode, row.value, "down");
                   return (
-                    <div key={row._rowId} className="flex items-center gap-3 overflow-x-auto whitespace-nowrap pb-1" style={{ borderBottom: "1px solid #f3f4f6" }}>
+                    <div key={row._rowId} className="flex items-end gap-2 min-w-0 mb-3">
                       <span className="w-10 text-[13px] font-semibold text-gray-900 shrink-0">L{idx + 1}</span>
                       <ToggleSwitch value={mode} onChange={(next) => updateListById("dcaLevels", row._rowId, "mode", next)} />
-                      <InputField value={row.value} onCommit={(v) => updateListById("dcaLevels", row._rowId, "value", v)} placeholder={placeholderByMode(mode)} showPercent={mode === "percentage"} />
-                      <InputField value={row.allocation} onCommit={(v) => updateListById("dcaLevels", row._rowId, "allocation", v)} placeholder={labels.quantityPlaceholder} />
+                      <InputField label={labels.value} value={row.value} onCommit={(v) => updateListById("dcaLevels", row._rowId, "value", v)} placeholder={placeholderByMode(mode)} showPercent={mode === "percentage"} />
+                      <InputField label={labels.qty} value={row.allocation} onCommit={(v) => updateListById("dcaLevels", row._rowId, "allocation", v)} placeholder={labels.quantityPlaceholder} />
                       <span className="ml-auto w-36 text-[13px] font-semibold text-green-600 shrink-0 text-right">{fmtSar(calcValue)}</span>
                       <StatusIcon executed={Boolean(row.executed)} onToggle={() => updateListById("dcaLevels", row._rowId, "executed", !row.executed)} />
                       {isEditing && <button type="button" onClick={() => removeRowById("dcaLevels", row._rowId)} className="h-8 w-8 rounded-lg border border-gray-200 text-red-500 flex items-center justify-center hover:bg-red-50" data-icon-tooltip={labels.delete}><Trash2 size={14} /></button>}
@@ -4474,11 +4488,11 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
                   const mode = row.mode || "percentage";
                   const calcValue = calc(mode, row.value, "up");
                   return (
-                    <div key={row._rowId} className="flex items-center gap-3 overflow-x-auto whitespace-nowrap pb-1" style={{ borderBottom: "1px solid #f3f4f6" }}>
+                    <div key={row._rowId} className="flex items-end gap-2 min-w-0 mb-3">
                       <span className="w-10 text-[13px] font-semibold text-gray-900 shrink-0">T{idx + 1}</span>
                       <ToggleSwitch value={mode} onChange={(next) => updateListById("takeProfitTargets", row._rowId, "mode", next)} />
-                      <InputField value={row.value} onCommit={(v) => updateListById("takeProfitTargets", row._rowId, "value", v)} placeholder={placeholderByMode(mode)} showPercent={mode === "percentage"} />
-                      <InputField value={row.allocation} onCommit={(v) => updateListById("takeProfitTargets", row._rowId, "allocation", v)} placeholder={labels.quantityPlaceholder} />
+                      <InputField label={labels.value} value={row.value} onCommit={(v) => updateListById("takeProfitTargets", row._rowId, "value", v)} placeholder={placeholderByMode(mode)} showPercent={mode === "percentage"} />
+                      <InputField label={labels.qty} value={row.allocation} onCommit={(v) => updateListById("takeProfitTargets", row._rowId, "allocation", v)} placeholder={labels.quantityPlaceholder} />
                       <span className="ml-auto w-36 text-[13px] font-semibold text-green-600 shrink-0 text-right">{fmtSar(calcValue)}</span>
                       <StatusIcon executed={Boolean(row.executed)} onToggle={() => updateListById("takeProfitTargets", row._rowId, "executed", !row.executed)} />
                       {isEditing && <button type="button" onClick={() => removeRowById("takeProfitTargets", row._rowId)} className="h-8 w-8 rounded-lg border border-gray-200 text-red-500 flex items-center justify-center hover:bg-red-50" data-icon-tooltip={labels.delete}><Trash2 size={14} /></button>}
