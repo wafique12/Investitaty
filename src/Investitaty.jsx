@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext, useCallback, useRef, useMemo } from "react";
+import React, { useState, useEffect, createContext, useContext, useCallback, useRef, useMemo } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import {
   X, Trash2, Check, Edit3, MoreVertical, Zap, BookOpen,
