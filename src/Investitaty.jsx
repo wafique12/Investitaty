@@ -4229,13 +4229,19 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
       exit: "استراتيجية التخارج",
       level: "مستوى",
       target: "هدف",
-      qty: "الكمية %",
+      qty: "الكمية",
+      amount: "المبلغ",
       addLevel: "+ مستوى",
       addTarget: "+ هدف",
       fixedTip: "سعر ثابت",
       percentTip: "نسبة مئوية",
       delete: "حذف",
       result: "الناتج",
+      fromPlaceholder: "من",
+      toPlaceholder: "إلى",
+      percentPlaceholder: "%",
+      qtyPlaceholder: "كمية",
+      amountPlaceholder: "المبلغ",
     }
     : {
       title: "Trading Plan",
@@ -4255,13 +4261,19 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
       exit: "EXIT STRATEGY",
       level: "Level",
       target: "Target",
-      qty: "Qty %",
+      qty: "Qty",
+      amount: "Amount",
       addLevel: "+ Level",
       addTarget: "+ Target",
       fixedTip: "Fixed Price",
       percentTip: "Percentage",
       delete: "Delete",
       result: "Result",
+      fromPlaceholder: "From",
+      toPlaceholder: "To",
+      percentPlaceholder: "%",
+      qtyPlaceholder: "Qty",
+      amountPlaceholder: "Amount",
     };
 
   const purchasePrice = Number(investment?.purchasePrice) || 0;
@@ -4303,34 +4315,33 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
     </section>
   );
 
-  const Toggle = ({ value, onChange }) => (
-    <div className="relative grid grid-cols-2 w-16 h-9 border border-gray-300 rounded-full overflow-hidden shrink-0">
-      <div className={`absolute inset-y-0 w-1/2 bg-blue-600 transition-all ${value === "fixed" ? "left-0" : "left-1/2"}`} />
+  const InnerCard = ({ title, children }) => (
+    <div className="bg-white border border-gray-200 rounded-[10px] p-4 mb-3 last:mb-0">
+      <h5 className="text-[13px] font-semibold text-gray-900 mb-3">{title}</h5>
+      {children}
+    </div>
+  );
+
+  const ToggleSwitch = ({ value, onChange }) => (
+    <div className="relative grid grid-cols-2 w-16 h-9 border border-gray-300 rounded-full overflow-hidden shrink-0 bg-gray-50">
+      <div className={`absolute inset-y-0 w-1/2 bg-[#4F8EF7] transition-all ${value === "fixed" ? "left-0" : "left-1/2"}`} />
       <button type="button" disabled={readOnly} onClick={() => onChange("fixed")} data-icon-tooltip={labels.fixedTip} className={`relative z-10 text-[13px] font-bold ${value === "fixed" ? "text-white" : "text-gray-900"}`}>$</button>
       <button type="button" disabled={readOnly} onClick={() => onChange("percentage")} data-icon-tooltip={labels.percentTip} className={`relative z-10 text-[13px] font-bold ${value === "percentage" ? "text-white" : "text-gray-900"}`}>%</button>
     </div>
   );
 
-  const NumberField = ({ value, onChange, width = "w-24" }) => (
+  const NumberField = ({ value, onChange, width = "w-24", placeholder }) => (
     readOnly
       ? <div className={`${width} h-9 rounded-lg border border-gray-200 px-3 flex items-center text-[13px] text-gray-900`}>{value || "—"}</div>
-      : <input type="number" value={value} onChange={onChange} className={`${width} h-9 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 px-3 text-[13px] text-gray-900 bg-white`} />
+      : <input type="number" value={value} onChange={onChange} placeholder={placeholder} className={`${width} h-9 rounded-lg border border-gray-300 focus:border-[#4F8EF7] focus:ring-2 focus:ring-blue-100 px-3 text-[13px] text-gray-900 bg-white`} />
   );
 
-  const RowItem = ({ label, mode, fromValue, toValue, onModeChange, onFromChange, onToChange, result, danger = false, showTo = true }) => (
-    <div className="mb-3">
-      <div className="text-[13px] font-semibold text-gray-900 mb-2">{label}</div>
-      <div className="flex items-center gap-3 overflow-x-auto whitespace-nowrap">
-        <Toggle value={mode} onChange={onModeChange} />
-        <span className="text-[12px] text-gray-500">{labels.from}</span>
-        <NumberField value={fromValue} onChange={onFromChange} width="w-24" />
-        {showTo && <>
-          <span className="text-[12px] text-gray-500">{labels.to}</span>
-          <NumberField value={toValue} onChange={onToChange} width="w-24" />
-        </>}
-        <span className="text-[12px] text-gray-500">{labels.result}</span>
-        <span className={`text-[13px] font-semibold ${danger ? "text-red-500" : "text-green-600"}`}>{result}</span>
-      </div>
+  const RowItem = ({ mode, fromValue, toValue, onModeChange, onFromChange, onToChange, result, danger = false, showTo = true }) => (
+    <div className="flex items-center gap-3 overflow-x-auto whitespace-nowrap">
+      <ToggleSwitch value={mode} onChange={onModeChange} />
+      <NumberField value={fromValue} onChange={onFromChange} width="w-24" placeholder={labels.fromPlaceholder} />
+      {showTo && <NumberField value={toValue} onChange={onToChange} width="w-24" placeholder={labels.toPlaceholder} />}
+      <span className={`ml-auto text-[13px] font-semibold shrink-0 ${danger ? "text-red-500" : "text-green-600"}`}>{result}</span>
     </div>
   );
 
@@ -4340,7 +4351,7 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
         <header className="flex items-center justify-between gap-4 mb-5">
           <h2 className="text-[20px] font-semibold text-gray-900">{`${labels.title} - ${namePart}${codePart ? ` - ${codePart}` : ""}`}</h2>
           <div className="flex items-center gap-2 shrink-0">
-            {!readOnly && <button type="button" onClick={() => onSave?.(form)} className="h-9 px-4 rounded-lg bg-blue-600 text-white text-[13px] font-semibold hover:bg-blue-700">{labels.save}</button>}
+            {!readOnly && <button type="button" onClick={() => onSave?.(form)} className="h-9 px-4 rounded-lg bg-[#4F8EF7] text-white text-[13px] font-semibold hover:bg-[#3F7EE5]">{labels.save}</button>}
             <button type="button" onClick={onClose} className="h-9 px-4 rounded-lg border border-gray-300 text-gray-700 text-[13px] font-semibold bg-white hover:bg-gray-50">{labels.cancel}</button>
             <button type="button" onClick={onClose} className="h-9 w-9 rounded-lg border border-gray-300 bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50" aria-label="Close"><X size={16} /></button>
           </div>
@@ -4363,36 +4374,39 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
         <main className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div>
             <Card title={labels.technical}>
-              <RowItem
-                label={labels.support}
-                mode={form.supportFrom?.mode || "percentage"}
-                fromValue={form.supportFrom?.value || ""}
-                toValue={form.supportTo?.value || ""}
-                onModeChange={(next) => { updateCore("supportFrom", "mode", next); updateCore("supportTo", "mode", next); }}
-                onFromChange={(e) => updateCore("supportFrom", "value", e.target.value)}
-                onToChange={(e) => updateCore("supportTo", "value", e.target.value)}
-                result={`${fmtSar(calc(form.supportFrom?.mode || "percentage", form.supportFrom?.value, "down"))} → ${fmtSar(calc(form.supportTo?.mode || "percentage", form.supportTo?.value, "down"))}`}
-              />
-              <RowItem
-                label={labels.resistance}
-                mode={form.resistanceFrom?.mode || "percentage"}
-                fromValue={form.resistanceFrom?.value || ""}
-                toValue={form.resistanceTo?.value || ""}
-                onModeChange={(next) => { updateCore("resistanceFrom", "mode", next); updateCore("resistanceTo", "mode", next); }}
-                onFromChange={(e) => updateCore("resistanceFrom", "value", e.target.value)}
-                onToChange={(e) => updateCore("resistanceTo", "value", e.target.value)}
-                result={`${fmtSar(calc(form.resistanceFrom?.mode || "percentage", form.resistanceFrom?.value, "up"))} → ${fmtSar(calc(form.resistanceTo?.mode || "percentage", form.resistanceTo?.value, "up"))}`}
-              />
-              <RowItem
-                label={labels.stopLoss}
-                mode={form.stopLoss?.mode || "percentage"}
-                fromValue={form.stopLoss?.value || ""}
-                onModeChange={(next) => updateCore("stopLoss", "mode", next)}
-                onFromChange={(e) => updateCore("stopLoss", "value", e.target.value)}
-                result={fmtSar(calc(form.stopLoss?.mode || "percentage", form.stopLoss?.value, "down"))}
-                danger
-                showTo={false}
-              />
+              <InnerCard title={labels.support}>
+                <RowItem
+                  mode={form.supportFrom?.mode || "percentage"}
+                  fromValue={form.supportFrom?.value || ""}
+                  toValue={form.supportTo?.value || ""}
+                  onModeChange={(next) => { updateCore("supportFrom", "mode", next); updateCore("supportTo", "mode", next); }}
+                  onFromChange={(e) => updateCore("supportFrom", "value", e.target.value)}
+                  onToChange={(e) => updateCore("supportTo", "value", e.target.value)}
+                  result={`${fmtSar(calc(form.supportFrom?.mode || "percentage", form.supportFrom?.value, "down"))} → ${fmtSar(calc(form.supportTo?.mode || "percentage", form.supportTo?.value, "down"))}`}
+                />
+              </InnerCard>
+              <InnerCard title={labels.resistance}>
+                <RowItem
+                  mode={form.resistanceFrom?.mode || "percentage"}
+                  fromValue={form.resistanceFrom?.value || ""}
+                  toValue={form.resistanceTo?.value || ""}
+                  onModeChange={(next) => { updateCore("resistanceFrom", "mode", next); updateCore("resistanceTo", "mode", next); }}
+                  onFromChange={(e) => updateCore("resistanceFrom", "value", e.target.value)}
+                  onToChange={(e) => updateCore("resistanceTo", "value", e.target.value)}
+                  result={`${fmtSar(calc(form.resistanceFrom?.mode || "percentage", form.resistanceFrom?.value, "up"))} → ${fmtSar(calc(form.resistanceTo?.mode || "percentage", form.resistanceTo?.value, "up"))}`}
+                />
+              </InnerCard>
+              <InnerCard title={labels.stopLoss}>
+                <RowItem
+                  mode={form.stopLoss?.mode || "percentage"}
+                  fromValue={form.stopLoss?.value || ""}
+                  onModeChange={(next) => updateCore("stopLoss", "mode", next)}
+                  onFromChange={(e) => updateCore("stopLoss", "value", e.target.value)}
+                  result={fmtSar(calc(form.stopLoss?.mode || "percentage", form.stopLoss?.value, "down"))}
+                  danger
+                  showTo={false}
+                />
+              </InnerCard>
             </Card>
           </div>
 
@@ -4404,16 +4418,16 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
                   return (
                     <div key={`dca-${idx}`} className="flex items-center gap-3 overflow-x-auto whitespace-nowrap">
                       <span className="w-16 text-[13px] font-semibold text-gray-900 shrink-0">{`${labels.level} ${idx + 1}`}</span>
-                      <Toggle value={row.mode || "percentage"} onChange={(next) => updateList("dcaLevels", idx, "mode", next)} />
-                      <NumberField value={row.value} onChange={(e) => updateList("dcaLevels", idx, "value", e.target.value)} width="w-24" />
-                      <NumberField value={row.allocation} onChange={(e) => updateList("dcaLevels", idx, "allocation", e.target.value)} width="w-24" />
-                      <span className="w-36 text-[13px] font-semibold text-green-600 shrink-0">{fmtSar(calcValue)}</span>
+                      <ToggleSwitch value={row.mode || "percentage"} onChange={(next) => updateList("dcaLevels", idx, "mode", next)} />
+                      <NumberField value={row.value} onChange={(e) => updateList("dcaLevels", idx, "value", e.target.value)} width="w-24" placeholder={labels.percentPlaceholder} />
+                      <NumberField value={row.allocation} onChange={(e) => updateList("dcaLevels", idx, "allocation", e.target.value)} width="w-24" placeholder={labels.amountPlaceholder} />
+                      <span className="ml-auto w-36 text-[13px] font-semibold text-green-600 shrink-0 text-right">{fmtSar(calcValue)}</span>
                       {!readOnly && <button type="button" onClick={() => removeRow("dcaLevels", idx)} className="h-8 w-8 rounded-lg border border-gray-200 text-red-500 flex items-center justify-center hover:bg-red-50" aria-label={labels.delete}><Trash2 size={14} /></button>}
                     </div>
                   );
                 })}
               </div>
-              {!readOnly && <button type="button" onClick={() => setForm((p) => ({ ...p, dcaLevels: [...p.dcaLevels, { mode: "percentage", value: "", allocation: "", executed: false }] }))} className="mt-4 h-9 px-3 rounded-lg border border-gray-300 text-gray-700 text-[13px] font-semibold bg-white hover:bg-gray-50">{labels.addLevel}</button>}
+              {!readOnly && <button type="button" onClick={() => setForm((p) => ({ ...p, dcaLevels: [...p.dcaLevels, { mode: "percentage", value: "", allocation: "", executed: false }] }))} className="mt-4 h-8 px-3 rounded-lg border border-gray-300 text-gray-700 text-[13px] font-semibold bg-white hover:bg-gray-50">{labels.addLevel}</button>}
             </Card>
 
             <Card title={labels.exit}>
@@ -4423,16 +4437,16 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
                   return (
                     <div key={`tp-${idx}`} className="flex items-center gap-3 overflow-x-auto whitespace-nowrap">
                       <span className="w-16 text-[13px] font-semibold text-gray-900 shrink-0">{`${labels.target} ${idx + 1}`}</span>
-                      <Toggle value={row.mode || "percentage"} onChange={(next) => updateList("takeProfitTargets", idx, "mode", next)} />
-                      <NumberField value={row.value} onChange={(e) => updateList("takeProfitTargets", idx, "value", e.target.value)} width="w-24" />
-                      <NumberField value={row.allocation} onChange={(e) => updateList("takeProfitTargets", idx, "allocation", e.target.value)} width="w-24" />
-                      <span className="w-36 text-[13px] font-semibold text-green-600 shrink-0">{fmtSar(calcValue)}</span>
+                      <ToggleSwitch value={row.mode || "percentage"} onChange={(next) => updateList("takeProfitTargets", idx, "mode", next)} />
+                      <NumberField value={row.value} onChange={(e) => updateList("takeProfitTargets", idx, "value", e.target.value)} width="w-24" placeholder={labels.percentPlaceholder} />
+                      <NumberField value={row.allocation} onChange={(e) => updateList("takeProfitTargets", idx, "allocation", e.target.value)} width="w-24" placeholder={labels.qtyPlaceholder} />
+                      <span className="ml-auto w-36 text-[13px] font-semibold text-green-600 shrink-0 text-right">{fmtSar(calcValue)}</span>
                       {!readOnly && <button type="button" onClick={() => removeRow("takeProfitTargets", idx)} className="h-8 w-8 rounded-lg border border-gray-200 text-red-500 flex items-center justify-center hover:bg-red-50" aria-label={labels.delete}><Trash2 size={14} /></button>}
                     </div>
                   );
                 })}
               </div>
-              {!readOnly && <button type="button" onClick={() => setForm((p) => ({ ...p, takeProfitTargets: [...p.takeProfitTargets, { mode: "percentage", value: "", allocation: "", executed: false }] }))} className="mt-4 h-9 px-3 rounded-lg border border-gray-300 text-gray-700 text-[13px] font-semibold bg-white hover:bg-gray-50">{labels.addTarget}</button>}
+              {!readOnly && <button type="button" onClick={() => setForm((p) => ({ ...p, takeProfitTargets: [...p.takeProfitTargets, { mode: "percentage", value: "", allocation: "", executed: false }] }))} className="mt-4 h-8 px-3 rounded-lg border border-gray-300 text-gray-700 text-[13px] font-semibold bg-white hover:bg-gray-50">{labels.addTarget}</button>}
             </Card>
           </div>
         </main>
