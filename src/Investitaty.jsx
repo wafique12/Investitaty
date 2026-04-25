@@ -4225,7 +4225,7 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
       stopLoss: "وقف الخسارة",
       from: "من",
       to: "إلى",
-      trigger: "التفعيل",
+      trigger: "تفعيل",
       dca: "خطة التجميع (DCA)",
       exit: "استراتيجية التخارج",
       level: "مستوى",
@@ -4298,159 +4298,142 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
   const updateList = (key, idx, field, value) => setForm((p) => ({ ...p, [key]: p[key].map((r, i) => (i === idx ? { ...r, [field]: value } : r)) }));
   const removeRow = (key, idx) => setForm((p) => ({ ...p, [key]: p[key].filter((_, i) => i !== idx) }));
 
-  const colors = {
+  const S = {
     text: "#111827",
     border: "#E5E7EB",
-    muted: "#6B7280",
-    active: "#3B82F6",
-  };
-
-  const cardStyle = {
-    border: `1px solid ${colors.border}`,
-    borderRadius: "8px",
-    background: "#FFFFFF",
-    boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
-  };
-
-  const rowInputStyle = {
-    height: "28px",
-    minWidth: "64px",
-    padding: "0 8px",
-    border: `1px solid ${colors.border}`,
-    borderRadius: "6px",
-    color: colors.text,
-    background: "#FFFFFF",
-    fontSize: "0.8rem",
+    blue: "#3B82F6",
+    card: {
+      background: "#FFFFFF",
+      border: "1px solid #E5E7EB",
+      borderRadius: "12px",
+      padding: "16px",
+      marginBottom: "20px",
+    },
+    row: { display: "flex", alignItems: "center", gap: "12px" },
+    input: {
+      height: "32px",
+      minWidth: "72px",
+      border: "1px solid #E5E7EB",
+      borderRadius: "6px",
+      padding: "0 10px",
+      fontSize: "13px",
+      color: "#111827",
+      background: "#FFFFFF",
+    },
   };
 
   const Segmented = ({ value, onChange }) => (
-    <div style={{ position: "relative", width: "58px", height: "26px", border: `1px solid ${colors.border}`, borderRadius: "999px", overflow: "hidden", background: "#FFFFFF", display: "grid", gridTemplateColumns: "1fr 1fr", flexShrink: 0 }}>
-      <div style={{ position: "absolute", insetBlock: 0, insetInlineStart: value === "fixed" ? 0 : "50%", width: "50%", background: colors.active, transition: "inset-inline-start 120ms ease" }} />
-      <button type="button" onClick={() => onChange("fixed")} disabled={readOnly} data-icon-tooltip={labels.fixedTip} style={{ zIndex: 1, border: "none", background: "transparent", color: value === "fixed" ? "#FFFFFF" : colors.text, fontWeight: 700, cursor: readOnly ? "default" : "pointer", padding: 0 }}>$</button>
-      <button type="button" onClick={() => onChange("percentage")} disabled={readOnly} data-icon-tooltip={labels.percentTip} style={{ zIndex: 1, border: "none", background: "transparent", color: value === "percentage" ? "#FFFFFF" : colors.text, fontWeight: 700, cursor: readOnly ? "default" : "pointer", padding: 0 }}>%</button>
+    <div style={{ position: "relative", width: "64px", height: "30px", border: "1px solid #E5E7EB", borderRadius: "20px", overflow: "hidden", background: "#FFFFFF", display: "grid", gridTemplateColumns: "1fr 1fr", flexShrink: 0 }}>
+      <div style={{ position: "absolute", top: 0, bottom: 0, width: "50%", left: value === "fixed" ? 0 : "50%", background: S.blue, transition: "left 140ms ease" }} />
+      <button type="button" disabled={readOnly} onClick={() => onChange("fixed")} data-icon-tooltip={labels.fixedTip} style={{ position: "relative", zIndex: 1, border: "none", background: "transparent", color: value === "fixed" ? "#FFFFFF" : S.text, fontWeight: 700, fontSize: "13px", padding: 0, cursor: readOnly ? "default" : "pointer" }}>$</button>
+      <button type="button" disabled={readOnly} onClick={() => onChange("percentage")} data-icon-tooltip={labels.percentTip} style={{ position: "relative", zIndex: 1, border: "none", background: "transparent", color: value === "percentage" ? "#FFFFFF" : S.text, fontWeight: 700, fontSize: "13px", padding: 0, cursor: readOnly ? "default" : "pointer" }}>%</button>
     </div>
   );
 
   const StatusActions = ({ value, onChange, onDelete }) => (
-    <div style={{ display: "inline-flex", alignItems: "center", gap: "4px", flexShrink: 0 }}>
-      <button type="button" disabled={readOnly} onClick={() => onChange(!value)} data-icon-tooltip={labels.executed} style={{ width: "22px", height: "22px", border: `1px solid ${colors.border}`, borderRadius: "999px", background: value ? "#ECFDF3" : "#FFFFFF", color: value ? "#16A34A" : colors.muted, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}><CheckCircle2 size={12} /></button>
-      <button type="button" disabled data-icon-tooltip={labels.notExecuted} style={{ width: "22px", height: "22px", border: `1px solid ${colors.border}`, borderRadius: "999px", background: "#F9FAFB", color: colors.muted, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}><CalendarClock size={12} /></button>
-      {!readOnly && <button type="button" onClick={onDelete} data-icon-tooltip={labels.delete} style={{ border: "none", background: "transparent", color: "#EF4444", display: "inline-flex", padding: 0 }}><Trash2 size={13} /></button>}
+    <div style={{ ...S.row, gap: "6px", flexShrink: 0 }}>
+      <button type="button" disabled={readOnly} onClick={() => onChange(!value)} data-icon-tooltip={labels.executed} style={{ width: "22px", height: "22px", border: "1px solid #E5E7EB", borderRadius: "999px", background: value ? "#ECFDF3" : "#FFFFFF", color: value ? "#16A34A" : "#6B7280", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}><CheckCircle2 size={12} /></button>
+      <button type="button" disabled data-icon-tooltip={labels.notExecuted} style={{ width: "22px", height: "22px", border: "1px solid #E5E7EB", borderRadius: "999px", background: "#F9FAFB", color: "#6B7280", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}><CalendarClock size={12} /></button>
+      {!readOnly && <button type="button" onClick={onDelete} data-icon-tooltip={labels.delete} style={{ border: "none", background: "transparent", color: "#EF4444", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 }}><Trash2 size={13} /></button>}
     </div>
   );
 
-  const ZoneRow = ({ title, fromKey, toKey, stop = false }) => {
+  const ZoneRow = ({ zoneLabel, fromKey, toKey, stop = false }) => {
     const mode = form[fromKey]?.mode || "percentage";
     const fromVal = form[fromKey]?.value || "";
     const toVal = toKey ? (form[toKey]?.value || "") : "";
-    const fromCalc = calc(mode, fromVal, stop ? "down" : (title === labels.resistance ? "up" : "down"));
-    const toCalc = toKey ? calc(mode, toVal, title === labels.resistance ? "up" : "down") : null;
+    const fromCalc = calc(mode, fromVal, stop ? "down" : (zoneLabel === labels.resistance ? "up" : "down"));
+    const toCalc = toKey ? calc(mode, toVal, zoneLabel === labels.resistance ? "up" : "down") : null;
 
     return (
-      <div style={{ display: "flex", alignItems: "center", gap: "6px", whiteSpace: "nowrap", overflowX: "auto", padding: "2px 0" }}>
-        <span style={{ width: "74px", fontSize: "0.76rem", color: colors.text, fontWeight: 600 }}>{title}</span>
-        <span style={{ fontSize: "0.72rem", color: colors.muted }}>{stop ? labels.trigger : labels.from}</span>
+      <div style={{ ...S.row, fontSize: "13px", color: S.text, marginBottom: "10px", whiteSpace: "nowrap", overflowX: "auto" }}>
+        <span style={{ minWidth: "84px", fontWeight: 600, color: S.text }}>{zoneLabel}</span>
+        <span style={{ color: "#6B7280", fontSize: "12px" }}>{stop ? labels.trigger : labels.from}</span>
         <Segmented value={mode} onChange={(next) => { updateCore(fromKey, "mode", next); if (toKey) updateCore(toKey, "mode", next); }} />
-        {readOnly
-          ? <span style={{ color: colors.text, fontSize: "0.8rem", minWidth: "40px" }}>{fromVal}</span>
-          : <input type="number" value={fromVal} onChange={(e) => updateCore(fromKey, "value", e.target.value)} style={{ ...rowInputStyle, textAlign: isArabic ? "right" : "left" }} />}
-        {!stop && <span style={{ fontSize: "0.72rem", color: colors.muted }}>{labels.to}</span>}
-        {!stop && (readOnly
-          ? <span style={{ color: colors.text, fontSize: "0.8rem", minWidth: "40px" }}>{toVal}</span>
-          : <input type="number" value={toVal} onChange={(e) => updateCore(toKey, "value", e.target.value)} style={{ ...rowInputStyle, textAlign: isArabic ? "right" : "left" }} />)}
-        <span style={{ fontSize: "0.74rem", color: colors.text }}>{labels.calc}</span>
-        <span style={{ fontSize: "0.76rem", color: stop ? "#DC2626" : "#16A34A", fontWeight: 600 }}>
-          {stop ? fmtSar(fromCalc) : `${fmtSar(fromCalc)} → ${fmtSar(toCalc)}`}
-        </span>
+        {readOnly ? <span style={{ color: S.text, minWidth: "48px" }}>{fromVal || "—"}</span> : <input type="number" value={fromVal} onChange={(e) => updateCore(fromKey, "value", e.target.value)} style={{ ...S.input, textAlign: isArabic ? "right" : "left" }} />}
+        {!stop && <span style={{ color: "#6B7280", fontSize: "12px" }}>{labels.to}</span>}
+        {!stop && (readOnly ? <span style={{ color: S.text, minWidth: "48px" }}>{toVal || "—"}</span> : <input type="number" value={toVal} onChange={(e) => updateCore(toKey, "value", e.target.value)} style={{ ...S.input, textAlign: isArabic ? "right" : "left" }} />)}
+        <span style={{ color: S.text, fontSize: "12px" }}>{labels.calc}</span>
+        <span style={{ color: stop ? "#DC2626" : "#16A34A", fontWeight: 600 }}>{stop ? fmtSar(fromCalc) : `${fmtSar(fromCalc)} → ${fmtSar(toCalc)}`}</span>
       </div>
     );
   };
 
   return (
-    <Modal title={labels.title} onClose={onClose} maxWidth="1120px">
-      <div dir={isArabic ? "rtl" : "ltr"} style={{ background: "#FFFFFF", color: colors.text, maxHeight: "78vh", overflowY: "auto" }}>
-        <div style={{ position: "sticky", top: 0, zIndex: 2, background: "#FFFFFF", borderBottom: `1px solid ${colors.border}`, padding: "8px 0", marginBottom: "8px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
-            <div style={{ fontSize: "0.86rem", fontWeight: 700, color: colors.text }}>{labels.title}</div>
-            <div style={{ display: "inline-flex", gap: "6px" }}>
-              {!readOnly && <button type="button" onClick={() => onSave?.(form)} style={{ border: "none", background: colors.active, color: "#FFFFFF", borderRadius: "8px", padding: "6px 10px", fontSize: "0.76rem", fontWeight: 700 }}>{labels.save}</button>}
-              <button type="button" onClick={onClose} style={{ border: `1px solid ${colors.border}`, background: "#FFFFFF", color: colors.text, borderRadius: "8px", padding: "6px 10px", fontSize: "0.76rem" }}>{labels.cancel}</button>
+    <div style={{ position: "fixed", inset: 0, zIndex: 80, background: "rgba(17,24,39,0.58)", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px" }}>
+      <div dir={isArabic ? "rtl" : "ltr"} style={{ width: "100%", maxWidth: "1000px", maxHeight: "92vh", overflowY: "auto", background: "#FFFFFF", borderRadius: "14px", border: "1px solid #E5E7EB", boxShadow: "0 20px 50px rgba(0,0,0,0.15)", padding: "16px" }}>
+        <div style={{ position: "sticky", top: 0, zIndex: 2, background: "#FFFFFF", paddingBottom: "10px", marginBottom: "10px", borderBottom: "1px solid #F3F4F6" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
+            <div style={{ fontSize: "14px", fontWeight: 700, color: S.text }}>{labels.title}</div>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
+              {!readOnly && <button type="button" onClick={() => onSave?.(form)} style={{ border: "none", background: S.blue, color: "#FFFFFF", borderRadius: "8px", fontSize: "13px", fontWeight: 700, padding: "7px 12px", cursor: "pointer" }}>{labels.save}</button>}
+              <button type="button" onClick={onClose} style={{ border: "1px solid #D1D5DB", background: "#FFFFFF", color: S.text, borderRadius: "8px", fontSize: "13px", padding: "7px 12px", cursor: "pointer" }}>{labels.cancel}</button>
             </div>
           </div>
         </div>
 
-        <div style={{ ...cardStyle, padding: "8px 10px", marginBottom: "10px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: "8px" }}>
-            {[
-              { label: labels.price, value: fmtSar(currentPrice) },
-              { label: labels.purchase, value: fmtSar(purchasePrice) },
-              { label: labels.total, value: fmtSar(totalValue) },
-              { label: labels.roi, value: `${roiPct >= 0 ? "+" : ""}${roiPct.toFixed(2)}%`, color: roiPct >= 0 ? "#16A34A" : "#DC2626" },
-            ].map((item) => (
-              <div key={item.label} style={{ minWidth: 0 }}>
-                <div style={{ fontSize: "0.67rem", color: colors.muted }}>{item.label}</div>
-                <div style={{ fontSize: "0.83rem", color: item.color || colors.text, fontWeight: 700 }}>{item.value}</div>
-              </div>
-            ))}
-          </div>
+        <div style={{ display: "flex", justifyContent: "space-around", background: "#F9FAFB", padding: "10px", borderRadius: "8px", border: "1px solid #F3F4F6", marginBottom: "15px" }}>
+          {[
+            { key: labels.price, value: fmtSar(currentPrice) },
+            { key: labels.purchase, value: fmtSar(purchasePrice) },
+            { key: labels.total, value: fmtSar(totalValue) },
+            { key: labels.roi, value: `${roiPct >= 0 ? "+" : ""}${roiPct.toFixed(2)}%`, color: roiPct >= 0 ? "#16A34A" : "#DC2626" },
+          ].map((item) => (
+            <div key={item.key} style={{ textAlign: "center", minWidth: "0" }}>
+              <div style={{ fontSize: "11px", color: "#6B7280", marginBottom: "2px" }}>{item.key}</div>
+              <div style={{ fontSize: "13px", fontWeight: 700, color: item.color || S.text }}>{item.value}</div>
+            </div>
+          ))}
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-          <div style={{ ...cardStyle, padding: "10px" }}>
-            <div style={{ color: colors.text, fontSize: "0.78rem", fontWeight: 700, marginBottom: "8px" }}>{labels.technical}</div>
-            <div style={{ display: "grid", gap: "5px" }}>
-              <ZoneRow title={labels.support} fromKey="supportFrom" toKey="supportTo" />
-              <ZoneRow title={labels.resistance} fromKey="resistanceFrom" toKey="resistanceTo" />
-              <ZoneRow title={labels.stopLoss} fromKey="stopLoss" stop />
+        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: "20px" }}>
+          <div>
+            <div style={S.card}>
+              <div style={{ fontSize: "13px", fontWeight: 700, color: S.text, marginBottom: "10px" }}>{labels.technical}</div>
+              <ZoneRow zoneLabel={labels.support} fromKey="supportFrom" toKey="supportTo" />
+              <ZoneRow zoneLabel={labels.resistance} fromKey="resistanceFrom" toKey="resistanceTo" />
+              <ZoneRow zoneLabel={labels.stopLoss} fromKey="stopLoss" stop />
             </div>
           </div>
 
-          <div style={{ display: "grid", gap: "10px" }}>
-            <div style={{ ...cardStyle, padding: "10px" }}>
-              <div style={{ color: colors.text, fontSize: "0.78rem", fontWeight: 700, marginBottom: "8px" }}>{labels.dca}</div>
-              <div style={{ display: "grid", gap: "5px" }}>
-                {form.dcaLevels.map((row, idx) => {
-                  const calcV = calc(row.mode, row.value, "down");
-                  return (
-                    <div key={`dca-${idx}`} style={{ display: "flex", alignItems: "center", gap: "6px", whiteSpace: "nowrap", overflowX: "auto" }}>
-                      <span style={{ width: "68px", fontSize: "0.76rem", color: colors.text, fontWeight: 600 }}>{`${labels.level} ${idx + 1}`}</span>
-                      <Segmented value={row.mode || "percentage"} onChange={(next) => updateList("dcaLevels", idx, "mode", next)} />
-                      {readOnly
-                        ? <span style={{ color: colors.text, fontSize: "0.8rem", minWidth: "40px" }}>{row.value}</span>
-                        : <input type="number" value={row.value} onChange={(e) => updateList("dcaLevels", idx, "value", e.target.value)} style={{ ...rowInputStyle, textAlign: isArabic ? "right" : "left" }} />}
-                      <span style={{ fontSize: "0.76rem", color: "#16A34A", fontWeight: 600 }}>{fmtSar(calcV)}</span>
-                      <StatusActions value={Boolean(row.executed)} onChange={(next) => updateList("dcaLevels", idx, "executed", next)} onDelete={() => removeRow("dcaLevels", idx)} />
-                    </div>
-                  );
-                })}
-              </div>
-              {!readOnly && <button type="button" onClick={() => setForm((p) => ({ ...p, dcaLevels: [...p.dcaLevels, { mode: "percentage", value: "", allocation: "", executed: false }] }))} style={{ marginTop: "8px", border: `1px solid ${colors.border}`, background: "#FFFFFF", color: colors.text, borderRadius: "6px", padding: "4px 8px", fontSize: "0.72rem" }}>{labels.addLevel}</button>}
+          <div>
+            <div style={S.card}>
+              <div style={{ fontSize: "13px", fontWeight: 700, color: S.text, marginBottom: "10px" }}>{labels.dca}</div>
+              {form.dcaLevels.map((row, idx) => {
+                const calcValue = calc(row.mode, row.value, "down");
+                return (
+                  <div key={`dca-${idx}`} style={{ ...S.row, fontSize: "13px", color: S.text, marginBottom: "10px", whiteSpace: "nowrap", overflowX: "auto" }}>
+                    <span style={{ minWidth: "72px", fontWeight: 600 }}>{`${labels.level} ${idx + 1}`}</span>
+                    <Segmented value={row.mode || "percentage"} onChange={(next) => updateList("dcaLevels", idx, "mode", next)} />
+                    {readOnly ? <span style={{ minWidth: "48px", color: S.text }}>{row.value || "—"}</span> : <input type="number" value={row.value} onChange={(e) => updateList("dcaLevels", idx, "value", e.target.value)} style={{ ...S.input, textAlign: isArabic ? "right" : "left" }} />}
+                    <span style={{ color: "#16A34A", fontWeight: 600 }}>{fmtSar(calcValue)}</span>
+                    <StatusActions value={Boolean(row.executed)} onChange={(next) => updateList("dcaLevels", idx, "executed", next)} onDelete={() => removeRow("dcaLevels", idx)} />
+                  </div>
+                );
+              })}
+              {!readOnly && <button type="button" onClick={() => setForm((p) => ({ ...p, dcaLevels: [...p.dcaLevels, { mode: "percentage", value: "", allocation: "", executed: false }] }))} style={{ border: "1px solid #D1D5DB", background: "#FFFFFF", color: S.text, borderRadius: "8px", fontSize: "13px", padding: "6px 10px", cursor: "pointer" }}>{labels.addLevel}</button>}
             </div>
 
-            <div style={{ ...cardStyle, padding: "10px" }}>
-              <div style={{ color: colors.text, fontSize: "0.78rem", fontWeight: 700, marginBottom: "8px" }}>{labels.exit}</div>
-              <div style={{ display: "grid", gap: "5px" }}>
-                {form.takeProfitTargets.map((row, idx) => {
-                  const calcV = calc(row.mode, row.value, "up");
-                  return (
-                    <div key={`tp-${idx}`} style={{ display: "flex", alignItems: "center", gap: "6px", whiteSpace: "nowrap", overflowX: "auto" }}>
-                      <span style={{ width: "68px", fontSize: "0.76rem", color: colors.text, fontWeight: 600 }}>{`${labels.target} ${idx + 1}`}</span>
-                      <Segmented value={row.mode || "percentage"} onChange={(next) => updateList("takeProfitTargets", idx, "mode", next)} />
-                      {readOnly
-                        ? <span style={{ color: colors.text, fontSize: "0.8rem", minWidth: "40px" }}>{row.value}</span>
-                        : <input type="number" value={row.value} onChange={(e) => updateList("takeProfitTargets", idx, "value", e.target.value)} style={{ ...rowInputStyle, textAlign: isArabic ? "right" : "left" }} />}
-                      <span style={{ fontSize: "0.76rem", color: "#16A34A", fontWeight: 600 }}>{fmtSar(calcV)}</span>
-                      <StatusActions value={Boolean(row.executed)} onChange={(next) => updateList("takeProfitTargets", idx, "executed", next)} onDelete={() => removeRow("takeProfitTargets", idx)} />
-                    </div>
-                  );
-                })}
-              </div>
-              {!readOnly && <button type="button" onClick={() => setForm((p) => ({ ...p, takeProfitTargets: [...p.takeProfitTargets, { mode: "percentage", value: "", allocation: "", executed: false }] }))} style={{ marginTop: "8px", border: `1px solid ${colors.border}`, background: "#FFFFFF", color: colors.text, borderRadius: "6px", padding: "4px 8px", fontSize: "0.72rem" }}>{labels.addTarget}</button>}
+            <div style={S.card}>
+              <div style={{ fontSize: "13px", fontWeight: 700, color: S.text, marginBottom: "10px" }}>{labels.exit}</div>
+              {form.takeProfitTargets.map((row, idx) => {
+                const calcValue = calc(row.mode, row.value, "up");
+                return (
+                  <div key={`tp-${idx}`} style={{ ...S.row, fontSize: "13px", color: S.text, marginBottom: "10px", whiteSpace: "nowrap", overflowX: "auto" }}>
+                    <span style={{ minWidth: "72px", fontWeight: 600 }}>{`${labels.target} ${idx + 1}`}</span>
+                    <Segmented value={row.mode || "percentage"} onChange={(next) => updateList("takeProfitTargets", idx, "mode", next)} />
+                    {readOnly ? <span style={{ minWidth: "48px", color: S.text }}>{row.value || "—"}</span> : <input type="number" value={row.value} onChange={(e) => updateList("takeProfitTargets", idx, "value", e.target.value)} style={{ ...S.input, textAlign: isArabic ? "right" : "left" }} />}
+                    <span style={{ color: "#16A34A", fontWeight: 600 }}>{fmtSar(calcValue)}</span>
+                    <StatusActions value={Boolean(row.executed)} onChange={(next) => updateList("takeProfitTargets", idx, "executed", next)} onDelete={() => removeRow("takeProfitTargets", idx)} />
+                  </div>
+                );
+              })}
+              {!readOnly && <button type="button" onClick={() => setForm((p) => ({ ...p, takeProfitTargets: [...p.takeProfitTargets, { mode: "percentage", value: "", allocation: "", executed: false }] }))} style={{ border: "1px solid #D1D5DB", background: "#FFFFFF", color: S.text, borderRadius: "8px", fontSize: "13px", padding: "6px 10px", cursor: "pointer" }}>{labels.addTarget}</button>}
             </div>
           </div>
         </div>
       </div>
-    </Modal>
+    </div>
   );
 }
 
