@@ -4228,7 +4228,7 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
       toPlaceholder: "إلى",
       valuePlaceholder: "قيمة",
       percentagePlaceholder: "نسبة",
-      quantityPlaceholder: "Qty",
+      quantityPlaceholder: "الكمية",
       dca: "خطة التجميع (DCA)",
       exit: "استراتيجية التخارج",
       addLevel: "+ مستوى",
@@ -4244,6 +4244,8 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
       to: "إلى",
       value: "القيمة",
       qty: "الكمية",
+      noPlan: "لا يوجد خطة تداول لهذا السهم",
+      addPlan: "إضافة خطة",
     }
     : {
       title: "Trading Plan",
@@ -4277,6 +4279,8 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
       to: "To",
       value: "Value",
       qty: "Qty",
+      noPlan: "No trading plan for this stock",
+      addPlan: "Add Plan",
     };
 
   const purchasePrice = Number(investment?.purchasePrice) || 0;
@@ -4314,6 +4318,17 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
   };
 
   const calc = (m, v, direction) => computePlanPrice(purchasePrice, m, v, direction);
+  const hasSavedTradingPlan = useMemo(() => {
+    const plan = investment?.tradingPlan;
+    if (!plan || typeof plan !== "object") return false;
+    const hasZones = ["supportFrom", "supportTo", "resistanceFrom", "resistanceTo", "stopLoss"].some((k) => {
+      const val = plan?.[k]?.value;
+      return val !== undefined && val !== null && String(val).trim() !== "";
+    });
+    const hasDca = Array.isArray(plan.dcaLevels) && plan.dcaLevels.some((r) => String(r?.value ?? "").trim() !== "");
+    const hasTp = Array.isArray(plan.takeProfitTargets) && plan.takeProfitTargets.some((r) => String(r?.value ?? "").trim() !== "");
+    return hasZones || hasDca || hasTp;
+  }, [investment?.tradingPlan]);
   const updateCore = (k, field, value) => setForm((p) => ({ ...p, [k]: { ...p[k], [field]: value } }));
   const updateListById = (key, rowId, field, value) => setForm((p) => ({ ...p, [key]: p[key].map((r) => (r._rowId === rowId ? { ...r, [field]: value } : r)) }));
   const removeRowById = (key, rowId) => setForm((p) => ({ ...p, [key]: p[key].filter((r) => r._rowId !== rowId) }));
@@ -4326,14 +4341,14 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
   });
 
   const Card = ({ title, children }) => (
-    <section className="bg-white border border-[#E2E8F0] rounded-[10px] p-4 mb-3">
+    <section className="bg-white border border-[#E2E8F0] rounded-[10px] p-4 mb-3 overflow-hidden">
       <h4 className="text-[12px] tracking-[0.08em] text-slate-500 font-semibold mb-3">{title}</h4>
       {children}
     </section>
   );
 
   const InnerCard = ({ title, children }) => (
-    <div className="bg-white border border-[#E2E8F0] rounded-[10px] p-4 mb-3 last:mb-0">
+    <div className="bg-white border border-[#E2E8F0] rounded-[10px] p-4 mb-3 last:mb-0 overflow-hidden">
       <h5 className="text-[13px] font-semibold text-gray-900 mb-3">{title}</h5>
       {children}
     </div>
@@ -4380,8 +4395,20 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
 
   const StatusIcon = ({ executed, onToggle }) => (
     <div className="ml-1 flex items-center gap-1.5 shrink-0">
-      <button type="button" disabled={!isEditing} onClick={onToggle} data-icon-tooltip={labels.executed} className={`h-7 w-7 rounded-full border flex items-center justify-center ${executed ? "bg-slate-100 border-slate-300 text-[#334155]" : "bg-white border-[#E2E8F0] text-gray-400"}`}><CheckCircle2 size={13} /></button>
-      <span data-icon-tooltip={labels.pending} className="h-7 w-7 rounded-full border border-[#E2E8F0] bg-white text-gray-400 flex items-center justify-center"><CalendarClock size={13} /></span>
+      <button
+        type="button"
+        disabled={!isEditing}
+        onClick={() => onToggle(true)}
+        data-icon-tooltip={labels.executed}
+        className={`h-7 w-7 rounded-full border flex items-center justify-center shrink-0 ${executed ? "bg-emerald-100 border-emerald-300 text-emerald-700" : "bg-white border-[#E2E8F0] text-gray-400"}`}
+      ><CheckCircle2 size={13} /></button>
+      <button
+        type="button"
+        disabled={!isEditing}
+        onClick={() => onToggle(false)}
+        data-icon-tooltip={labels.pending}
+        className={`h-7 w-7 rounded-full border flex items-center justify-center shrink-0 ${!executed ? "bg-slate-100 border-slate-300 text-slate-700" : "bg-white border-[#E2E8F0] text-gray-400"}`}
+      ><CalendarClock size={13} /></button>
     </div>
   );
 
@@ -4422,6 +4449,21 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
         </div>
 
         <main className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {initiallyView && !isEditing && !hasSavedTradingPlan ? (
+            <div className="lg:col-span-2">
+              <div className="bg-white border border-[#E2E8F0] rounded-[10px] p-8 text-center">
+                <p className="text-[14px] text-[#111827] mb-4">{labels.noPlan}</p>
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(true)}
+                  className="h-9 px-4 rounded-lg bg-[#1E293B] text-white text-[13px] font-semibold hover:bg-[#334155]"
+                >
+                  {labels.addPlan}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
           <div>
             <Card title={labels.technical}>
               <InnerCard title={labels.support}>
@@ -4467,14 +4509,14 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
                   const mode = row.mode || "percentage";
                   const calcValue = calc(mode, row.value, "down");
                   return (
-                    <div key={row._rowId} className="flex items-end gap-2 min-w-0 mb-3">
+                    <div key={row._rowId} className="grid grid-cols-[40px_64px_88px_88px_minmax(120px,1fr)_auto_auto] items-end gap-2 mb-3">
                       <span className="w-10 text-[13px] font-semibold text-gray-900 shrink-0">L{idx + 1}</span>
                       <ToggleSwitch value={mode} onChange={(next) => updateListById("dcaLevels", row._rowId, "mode", next)} />
                       <InputField label={labels.value} value={row.value} onCommit={(v) => updateListById("dcaLevels", row._rowId, "value", v)} placeholder={placeholderByMode(mode)} showPercent={mode === "percentage"} />
                       <InputField label={labels.qty} value={row.allocation} onCommit={(v) => updateListById("dcaLevels", row._rowId, "allocation", v)} placeholder={labels.quantityPlaceholder} />
-                      <span className="ml-auto w-36 text-[13px] font-semibold text-green-600 shrink-0 text-right">{fmtSar(calcValue)}</span>
-                      <StatusIcon executed={Boolean(row.executed)} onToggle={() => updateListById("dcaLevels", row._rowId, "executed", !row.executed)} />
-                      {isEditing && <button type="button" onClick={() => removeRowById("dcaLevels", row._rowId)} className="h-8 w-8 rounded-lg border border-gray-200 text-red-500 flex items-center justify-center hover:bg-red-50" data-icon-tooltip={labels.delete}><Trash2 size={14} /></button>}
+                      <span className="w-full text-[13px] font-semibold text-green-600 shrink-0 text-right">{fmtSar(calcValue)}</span>
+                      <StatusIcon executed={Boolean(row.executed)} onToggle={(next) => updateListById("dcaLevels", row._rowId, "executed", next)} />
+                      {isEditing && <button type="button" onClick={() => removeRowById("dcaLevels", row._rowId)} className="h-8 w-8 rounded-lg border border-gray-200 text-red-500 flex items-center justify-center hover:bg-red-50 shrink-0" data-icon-tooltip={labels.delete}><Trash2 size={14} /></button>}
                     </div>
                   );
                 })}
@@ -4488,14 +4530,14 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
                   const mode = row.mode || "percentage";
                   const calcValue = calc(mode, row.value, "up");
                   return (
-                    <div key={row._rowId} className="flex items-end gap-2 min-w-0 mb-3">
+                    <div key={row._rowId} className="grid grid-cols-[40px_64px_88px_88px_minmax(120px,1fr)_auto_auto] items-end gap-2 mb-3">
                       <span className="w-10 text-[13px] font-semibold text-gray-900 shrink-0">T{idx + 1}</span>
                       <ToggleSwitch value={mode} onChange={(next) => updateListById("takeProfitTargets", row._rowId, "mode", next)} />
                       <InputField label={labels.value} value={row.value} onCommit={(v) => updateListById("takeProfitTargets", row._rowId, "value", v)} placeholder={placeholderByMode(mode)} showPercent={mode === "percentage"} />
                       <InputField label={labels.qty} value={row.allocation} onCommit={(v) => updateListById("takeProfitTargets", row._rowId, "allocation", v)} placeholder={labels.quantityPlaceholder} />
-                      <span className="ml-auto w-36 text-[13px] font-semibold text-green-600 shrink-0 text-right">{fmtSar(calcValue)}</span>
-                      <StatusIcon executed={Boolean(row.executed)} onToggle={() => updateListById("takeProfitTargets", row._rowId, "executed", !row.executed)} />
-                      {isEditing && <button type="button" onClick={() => removeRowById("takeProfitTargets", row._rowId)} className="h-8 w-8 rounded-lg border border-gray-200 text-red-500 flex items-center justify-center hover:bg-red-50" data-icon-tooltip={labels.delete}><Trash2 size={14} /></button>}
+                      <span className="w-full text-[13px] font-semibold text-green-600 shrink-0 text-right">{fmtSar(calcValue)}</span>
+                      <StatusIcon executed={Boolean(row.executed)} onToggle={(next) => updateListById("takeProfitTargets", row._rowId, "executed", next)} />
+                      {isEditing && <button type="button" onClick={() => removeRowById("takeProfitTargets", row._rowId)} className="h-8 w-8 rounded-lg border border-gray-200 text-red-500 flex items-center justify-center hover:bg-red-50 shrink-0" data-icon-tooltip={labels.delete}><Trash2 size={14} /></button>}
                     </div>
                   );
                 })}
@@ -4503,6 +4545,8 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
               {isEditing && <button type="button" onClick={() => setForm((p) => ({ ...p, takeProfitTargets: [...p.takeProfitTargets, { _rowId: nextRowId(), mode: "percentage", value: "", allocation: "", executed: false }] }))} className="mt-4 h-8 px-3 rounded-lg border border-gray-300 text-gray-700 text-[13px] font-semibold bg-white hover:bg-gray-50">{labels.addTarget}</button>}
             </Card>
           </div>
+            </>
+          )}
         </main>
       </div>
     </div>
