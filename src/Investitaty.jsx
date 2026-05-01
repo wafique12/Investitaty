@@ -2374,13 +2374,14 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileO
     { id:"portfolios",   label:t.portfolios,   icon:<FolderOpen size={17}/> },
     { id:"investments",  label:t.investments,  icon:<Wallet size={17}/> },
     { id:"transactions", label:t.transactions, icon:<DollarSign size={17}/> },
-    { id:"stockAnalysis", label:t.stockAnalysis, icon:<TrendingUp size={17}/> },
+    { id:"planningUnit", label:"Planning Unit", icon:<ListTree size={17}/>, children:[{ id:"planningDashboard", label:t.dashboard }, { id:"stockAnalysis", label:"Technical Analysis" }] },
     { id:"statistics",   label:t.statistics,   icon:<PieChartIcon size={17}/> },
     ...(canManageUsers ? [{ id:"users", label:"Users & Permissions", icon:<Shield size={17}/> }] : []),
     { id:"settings",     label:t.settings,     icon:<Settings size={17}/> },
   ];
 
   const showLabels = isMobile ? true : isOpen;
+  const [planningOpen, setPlanningOpen] = useState(true);
   const handleHamburger = () => setIsOpen((prev) => !prev);
 
   const sidebarContent = (
@@ -2411,23 +2412,16 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileO
       </div>
 
       <nav style={{ flex:1,padding:"10px 10px" }}>
-        {navItems.map(({ id, label, icon }) => {
+        {navItems.map(({ id, label, icon, children }) => {
+          if (children) {
+            const childActive = children.some((c) => c.id === activeTab);
+            return <div key={id} style={{ marginBottom:"4px" }}>
+              <button onClick={() => setPlanningOpen((p) => !p)} style={{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"9px 12px",borderRadius:"8px",border:"1px solid #1E293B",background:"#0F172A",color:childActive?"#e2e8f0":T.textSidebarMuted,cursor:"pointer",justifyContent:showLabels?"space-between":"center"}}>{showLabels?<><span style={{display:"flex",alignItems:"center",gap:"10px"}}>{icon}<span>{label}</span></span>{planningOpen?<ChevronDown size={14}/>:<ChevronRight size={14}/>}</>:icon}</button>
+              {planningOpen && showLabels && <div style={{ paddingLeft:"14px", marginTop:"4px" }}>{children.map((sub)=>{ const active = activeTab===sub.id; return <button key={sub.id} onClick={()=>{setActiveTab(sub.id); if (isMobile) setMobileOpen(false);}} style={{display:"block",width:"100%",textAlign:"left",padding:"8px 10px",borderRadius:"8px",border:"none",background:active?"#1E293B":"transparent",color:active?"#f8fafc":T.textSidebarMuted,cursor:"pointer"}}>{sub.label}</button>; })}</div>}
+            </div>;
+          }
           const active = activeTab === id;
-          return (
-            <button key={id} onClick={() => { setActiveTab(id); if (isMobile) setMobileOpen(false); }} style={{
-              display:"flex",alignItems:"center",gap:"10px",width:"100%",
-              padding:"9px 12px",borderRadius:"8px",border:"none",
-              background:active?T.emeraldBg:"transparent",
-              color:active?T.emerald:T.textSidebarMuted,
-              fontSize:"0.83rem",fontWeight:active?600:400,cursor:"pointer",
-              textAlign:"left",transition:"all 0.15s",marginBottom:"2px",
-              borderLeft:active?`2px solid ${T.emerald}`:"2px solid transparent",
-              justifyContent:showLabels?"flex-start":"center",
-            }}
-            >
-              {icon}{showLabels && <span>{label}</span>}
-            </button>
-          );
+          return <button key={id} onClick={() => { setActiveTab(id); if (isMobile) setMobileOpen(false); }} style={{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"9px 12px",borderRadius:"8px",border:"none",background:active?T.emeraldBg:"transparent",color:active?T.emerald:T.textSidebarMuted,fontSize:"0.83rem",fontWeight:active?600:400,cursor:"pointer",textAlign:"left",transition:"all 0.15s",marginBottom:"2px",borderLeft:active?`2px solid ${T.emerald}`:"2px solid transparent",justifyContent:showLabels?"flex-start":"center",}}>{icon}{showLabels && <span>{label}</span>}</button>;
         })}
       </nav>
 
@@ -4083,6 +4077,71 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   );
 }
 
+
+function PlanningUnitDashboard({ onQuickEdit }) {
+  const { db, isRTL, font } = useApp();
+  const investments = visible(db?.investments || []);
+  const portfolios = visible(db?.portfolios || []);
+  const stockPortfolioIds = useMemo(() => new Set(
+    portfolios.filter((p) => {
+      const type = String(p?.type || "").toLowerCase();
+      return type.includes("stock") || type.includes("etf");
+    }).map((p) => p.id)
+  ), [portfolios]);
+
+  const planRows = useMemo(() => investments
+    .filter((inv) => stockPortfolioIds.has(inv.portfolioId) && inv.tradingPlan)
+    .map((inv) => {
+      const purchase = Number(inv.purchasePrice) || 0;
+      const current = Number(inv.currentPrice) || purchase;
+      const qty = Number(inv.quantity) || 0;
+      const plan = normalizeTradingPlan(inv.tradingPlan || {}, purchase);
+      const supportLow = computePlanPrice(purchase, plan.supportTo?.mode || "percentage", plan.supportTo?.value, "down");
+      const supportHigh = computePlanPrice(purchase, plan.supportFrom?.mode || "percentage", plan.supportFrom?.value, "down");
+      const resistanceFrom = computePlanPrice(purchase, plan.resistanceFrom?.mode || "percentage", plan.resistanceFrom?.value, "up");
+      const stopLoss = computePlanPrice(purchase, plan.stopLoss?.mode || "percentage", plan.stopLoss?.value, "down");
+      const nearSupport = supportHigh > 0 && Math.abs(current - supportHigh) / supportHigh <= 0.02;
+      const nearTarget = (plan.takeProfitTargets || []).some((t) => {
+        const targetPrice = computePlanPrice(purchase, t.mode || "percentage", t.value, "up");
+        return targetPrice > 0 && current <= targetPrice && (targetPrice - current) / targetPrice <= 0.02;
+      });
+      const pendingDca = (plan.dcaLevels || []).filter((d) => !d.executed).filter((d) => current <= computePlanPrice(purchase, d.mode || "percentage", d.value, "down"));
+      const pendingTargets = (plan.takeProfitTargets || []).filter((t) => !t.executed).filter((t) => current >= computePlanPrice(purchase, t.mode || "percentage", t.value, "up"));
+      return { inv, purchase, current, qty, plan, nearSupport, nearTarget, pendingDca, pendingTargets, supportLow, supportHigh, resistanceFrom, stopLoss };
+    }), [investments, stockPortfolioIds]);
+
+  const totals = useMemo(() => {
+    const liquidity = planRows.reduce((sum, row) => sum + row.pendingDca.reduce((acc, d) => acc + (Number(d.allocation) || 0), 0), 0);
+    const potentialRoi = planRows.length ? (planRows.reduce((sum, row) => {
+      const target = row.pendingTargets[0] || row.plan.takeProfitTargets?.[0];
+      const price = target ? computePlanPrice(row.purchase, target.mode || "percentage", target.value, "up") : row.current;
+      return sum + ((price - row.purchase) / (row.purchase || 1)) * 100;
+    }, 0) / planRows.length) : 0;
+    const healthy = planRows.filter((r) => r.current >= r.supportLow && r.supportLow > 0).length;
+    const health = planRows.length ? (healthy / planRows.length) * 100 : 0;
+    return { liquidity, potentialRoi, health };
+  }, [planRows]);
+
+  if (!planRows.length) return <Card><div style={{ padding:"24px", textAlign:"center", color:T.textSecondary }}>لم يتم العثور على خطط مفعلة. توجه إلى وحدة التحليل الفني لبدء التخطيط.</div></Card>;
+
+  const zoneCard = (title, rows, tone) => <Card><h3 style={{ marginTop:0, color:"#0f172a" }}>{title}</h3>{rows.length===0?<div style={{ color:T.textMuted }}>No matching stocks.</div>:rows.map(({inv})=><div key={inv.id} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:`1px solid ${T.border}`}}><span style={{color:"#111827",fontWeight:600}}>{inv.name}</span><button onClick={()=>onQuickEdit(inv.id)} style={{background:tone,border:"none",color:"#fff",padding:"6px 10px",borderRadius:"8px",cursor:"pointer"}}>Quick Edit</button></div>)}</Card>;
+
+  return <div dir={isRTL?"rtl":"ltr"} style={{fontFamily:font}}>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:"12px",marginBottom:"14px"}}>
+      {[{k:"Total Planned Liquidity",v:totals.liquidity.toFixed(2)},{k:"Potential ROI",v:`${totals.potentialRoi.toFixed(2)}%`},{k:"Portfolio Health",v:`${totals.health.toFixed(1)}%`}].map((m)=><div key={m.k} style={{background:"#0F172A",color:"#f8fafc",borderRadius:"12px",padding:"14px",border:"1px solid #1E293B"}}><div style={{fontSize:"0.75rem",opacity:.8}}>{m.k}</div><div style={{fontWeight:700,fontSize:"1.2rem"}}>{m.v}</div></div>)}
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:"12px"}}>
+      {zoneCard("Watchlist (Near Support)", planRows.filter((r)=>r.nearSupport), "#1e40af")}
+      {zoneCard("Take Profit (Near Targets)", planRows.filter((r)=>r.nearTarget), "#0f766e")}
+      {zoneCard("Danger Zone", planRows.filter((r)=>r.current < r.stopLoss), "#b91c1c")}
+    </div>
+    <Card style={{marginTop:"12px"}}>
+      <h3 style={{marginTop:0,color:"#0f172a"}}>DCA Action Tracker</h3>
+      <table style={{width:"100%",borderCollapse:"collapse"}}><thead><tr><th style={{textAlign:"left"}}>Stock</th><th style={{textAlign:"left"}}>Triggered Levels</th><th/></tr></thead><tbody>{planRows.map((r)=>r.pendingDca.length? <tr key={r.inv.id}><td>{r.inv.name}</td><td>{r.pendingDca.length}</td><td><button onClick={()=>onQuickEdit(r.inv.id)} style={{background:"#0F172A",color:"#fff",border:"none",padding:"6px 10px",borderRadius:"8px"}}>Quick Edit</button></td></tr>:null)}</tbody></table>
+    </Card>
+  </div>;
+}
+
 function StockAnalysisTab() {
   const { db, patchItem, t, isRTL, font } = useApp();
   const investments = visible(db?.investments || []);
@@ -4107,6 +4166,15 @@ function StockAnalysisTab() {
   const [filterMethod, setFilterMethod] = useState("");
   const [editingInv, setEditingInv] = useState(null);
   const [viewingInv, setViewingInv] = useState(null);
+
+  useEffect(() => {
+    const handler = (event) => {
+      const inv = stockInvestments.find((row) => row.id === event?.detail?.investmentId);
+      if (inv) setEditingInv(inv);
+    };
+    window.addEventListener("planning-unit-quick-edit", handler);
+    return () => window.removeEventListener("planning-unit-quick-edit", handler);
+  }, [stockInvestments]);
 
   const filteredInvestments = useMemo(() => stockInvestments.filter((inv) => {
     const statusMatch = !filterStatus || inv.status === filterStatus;
@@ -6938,6 +7006,9 @@ function MainApp() {
   const [activeTab, setActiveTab] = useState(() => {
     const postLoginTarget = sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY);
     if (postLoginTarget) return postLoginTarget;
+    const path = window.location.pathname;
+    if (path === "/planning-unit/dashboard") return "planningDashboard";
+    if (path === "/planning-unit/analysis") return "stockAnalysis";
     return localStorage.getItem(TAB_STORAGE_KEY) || "dashboard";
   });
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -6966,6 +7037,8 @@ function MainApp() {
 
   useEffect(() => {
     localStorage.setItem(TAB_STORAGE_KEY, activeTab);
+    const path = activeTab === "planningDashboard" ? "/planning-unit/dashboard" : activeTab === "stockAnalysis" ? "/planning-unit/analysis" : "/";
+    if (window.location.pathname !== path) window.history.replaceState({}, "", path);
   }, [activeTab]);
 
   useEffect(() => {
@@ -7051,6 +7124,7 @@ function MainApp() {
 
   const tabs = {
     dashboard:    <Dashboard onNavigateTransactionsByStatus={(filter) => { setTxNavigationFilter(filter); setActiveTab("transactions"); }} onNavigateTransactionsByInvestment={goToTransactionsFromDashboardCashFlow} />,
+    planningDashboard: <PlanningUnitDashboard onQuickEdit={(investmentId) => { setActiveTab("stockAnalysis"); window.dispatchEvent(new CustomEvent("planning-unit-quick-edit", { detail:{ investmentId } })); }} />,
     portfolios:   <PortfoliosTab onQuickAddInvestment={quickAddInvestment} onViewInvestments={goToInvestmentsForPortfolio} />,
     investments:  <InvestmentsTab onQuickAddTransaction={quickAddTransaction} onViewTransactions={goToTransactionsForInvestment} modalPrefill={investmentPrefill} navigationFilter={investmentNavigationFilter} onModalPrefillConsumed={() => setInvestmentPrefill(null)} showPortfolioBack={showPortfolioBackInInvestments || sessionStorage.getItem("investments_from_portfolio_link_v1") === "1"} onPortfolioBack={handlePortfolioBackFromInvestments} />,
     transactions: <TransactionsTab showSmartBack={smartBackVisible} onSmartBack={handleSmartBack} onBackToDashboard={() => setActiveTab("dashboard")} navigationFilter={txNavigationFilter} modalPrefill={transactionPrefill} />,
