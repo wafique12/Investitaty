@@ -57,6 +57,7 @@ const INITIAL_SCHEMA = {
     riskLevels:       ["Low", "Medium", "High", "Speculative"],
     fundingSources:   ["Personal Savings", "Bank Loan", "Brokerage", "Exchange", "Partner Capital"],
     investmentMethods: ["Lump Sum", "DCA", "SIP", "Manual"],
+    investmentTypes: ["Income", "Growth", "Balanced", "Speculative"],
     investmentStatuses: ["Active", "Paused", "Closed"],
     transactionStatuses: ["recorded", "scheduled", "cancelled"],
     transactionCategories: ["Rental Income", "Dividend", "Capital Gain", "Interest", "Maintenance", "Management Fee", "Tax", "Insurance", "Other"],
@@ -104,6 +105,8 @@ const TRANSLATIONS = {
     totalActivePrincipal: "Total Active Principal",
     totalAnnualIncomeYear: "Total Annual Income {year}",
     expectedAnnualIncomeYear: "Expected Annual Income {year}",
+    achievedVsExpectedIncome: "Percentage of achieved income vs. expected target.",
+    expectedVsPrincipalIncome: "Expected income ratio vs total active principal.",
     totalIncome: "Total Income",
     incomeYearLabel: "Income {year}",
     collectedTransactions: "collected transactions",
@@ -222,6 +225,7 @@ const TRANSLATIONS = {
     startDate: "Start Date",
     endDate: "End Date",
     investmentMethod: "Investment Method",
+    investmentType: "Investment Type",
     year: "Year",
     month: "Month",
     allMonths: "All Months",
@@ -381,6 +385,8 @@ const TRANSLATIONS = {
     totalActivePrincipal: "إجمالي أصل المبلغ النشط",
     totalAnnualIncomeYear: "إجمالي دخل السنة {year}",
     expectedAnnualIncomeYear: "إجمالي الدخل المتوقع {year}",
+    achievedVsExpectedIncome: "نسبة الدخل المُنجز مقابل الهدف المتوقع.",
+    expectedVsPrincipalIncome: "نسبة الدخل المتوقع مقابل إجمالي رأس المال النشط.",
     totalIncome: "إجمالي الدخل",
     incomeYearLabel: "دخل عام {year}",
     collectedTransactions: "معاملات محصّلة",
@@ -496,6 +502,7 @@ const TRANSLATIONS = {
     startDate: "تاريخ البداية",
     endDate: "تاريخ النهاية",
     investmentMethod: "طريقة الاستثمار",
+    investmentType: "نوع الاستثمار",
     year: "السنة",
     month: "الشهر",
     allMonths: "كل الأشهر",
@@ -2191,7 +2198,7 @@ function KPICard({ label, value, sub, trend, accent = T.emerald, icon: Icon_, cu
           </span>
         )}
         {sub && <span style={{ fontSize:"0.72rem",color:T.textMuted }}>{sub}</span>}
-        {badge && <span style={{ fontSize:"0.72rem",color:badge.color||T.textSecondary,fontWeight:600,whiteSpace:"nowrap" }}>{badge.text}</span>}
+        {badge && <span style={{ display:"inline-flex", alignItems:"center", gap:"4px", fontSize:"0.72rem",color:badge.color||T.textSecondary,fontWeight:600,whiteSpace:"nowrap" }}>{badge.text}{badge.icon || null}</span>}
       </div>
     </Card>
   );
@@ -2716,6 +2723,8 @@ function Dashboard({ onNavigateTransactionsByStatus, onNavigateTransactionsByInv
       return category.includes("dividend") || category.includes("yield") || category.includes("توزيع") || category.includes("عائد");
     })
     .reduce((sum, tx) => sum + toBaseAmount(safeDb, parseFloat(tx.amount) || 0, portfolioCurrency(safeDb, tx.portfolioId), baseCurrency), 0);
+  const achievedIncomePct = expectedAnnualIncome > 0 ? (totalAnnualIncome / expectedAnnualIncome) * 100 : 0;
+  const expectedVsPrincipalPct = activePrincipal > 0 ? (expectedAnnualIncome / activePrincipal) * 100 : 0;
 
   const expectedCapitalGains = currentYearIncomeTransactions
     .filter((tx) => {
@@ -2870,6 +2879,11 @@ function Dashboard({ onNavigateTransactionsByStatus, onNavigateTransactionsByInv
           )}
           accent={T.positive}
           icon={ArrowUpRight}
+          badge={{
+            text: `${achievedIncomePct.toFixed(2)}%`,
+            color: T.info,
+            icon: <span data-app-tooltip={t.achievedVsExpectedIncome}><Info size={12} /></span>,
+          }}
         />
         <KPICard
           label={t.expectedAnnualIncomeYear.replace("{year}", isRTL ? currentYear.toLocaleString("ar-EG") : String(currentYear))}
@@ -2879,6 +2893,11 @@ function Dashboard({ onNavigateTransactionsByStatus, onNavigateTransactionsByInv
           sub={`${t.capitalGains}: ${fmtMoney(expectedCapitalGains, { currency:baseCurrency, decimals:2 })}`}
           accent={T.warning}
           icon={CalendarClock}
+          badge={{
+            text: `${expectedVsPrincipalPct.toFixed(2)}%`,
+            color: T.warning,
+            icon: <span data-app-tooltip={t.expectedVsPrincipalIncome}><Info size={12} /></span>,
+          }}
         />
         <KPICard label={t.totalIncome} value={transactions.filter(t=>t.type==="income").reduce((sum, tx)=>sum + toBaseAmount(safeDb, parseFloat(tx.amount)||0, portfolioCurrency(safeDb, tx.portfolioId), baseCurrency), 0)} valueDecimals={2} currency={baseCurrency} sub={`${transactions.filter(tx=>tx.type==="income").length} ${t.payments}`} accent={T.info} icon={Landmark} />
       </div>
@@ -3391,7 +3410,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   const [historyNotice, setHistoryNotice] = useState("");
   const [modalMode, setModalMode] = useState("create");
 
-  const EMPTY = useMemo(() => ({ portfolioId:"",name:"",quantity:"",purchasePrice:"",currentPrice:"",inheritPrice:false,purchaseDate:"",startDate:"",endDate:"",investmentMethod:"",risk:"",funding:[{source:"",amount:""}],status:"Active",notes:"" }), []);
+  const EMPTY = useMemo(() => ({ portfolioId:"",name:"",quantity:"",purchasePrice:"",currentPrice:"",inheritPrice:false,purchaseDate:"",startDate:"",endDate:"",investmentMethod:"",investmentType:"",risk:"",funding:[{source:"",amount:""}],status:"Active",notes:"" }), []);
   const [form, setForm] = useState(EMPTY);
   const f = k => v => setForm(p=>({...p,[k]:v}));
 
@@ -3422,6 +3441,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
       risk: !form.risk,
       status: !form.status,
       investmentMethod: !form.investmentMethod,
+      investmentType: !form.investmentType,
     };
     setInvalidFields(nextInvalid);
     if (Object.values(nextInvalid).some(Boolean)) {
@@ -3454,7 +3474,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
 
   const openView = (inv) => {
     setForm({ portfolioId:inv.portfolioId,name:inv.name,quantity:inv.quantity||"",purchasePrice:inv.purchasePrice||"",
-      currentPrice:inv.currentPrice||"",inheritPrice:Boolean(inv.inheritPrice),purchaseDate:inv.purchaseDate||"",startDate:inv.startDate||"",endDate:inv.endDate||"",investmentMethod:inv.investmentMethod||"",risk:inv.risk||"",funding:(inv.funding&&inv.funding.length?inv.funding:[{source:inv.source||"",amount:""}]),status:inv.status||"Active",notes:inv.notes||"" });
+      currentPrice:inv.currentPrice||"",inheritPrice:Boolean(inv.inheritPrice),purchaseDate:inv.purchaseDate||"",startDate:inv.startDate||"",endDate:inv.endDate||"",investmentMethod:inv.investmentMethod||"",investmentType:inv.investmentType||"",risk:inv.risk||"",funding:(inv.funding&&inv.funding.length?inv.funding:[{source:inv.source||"",amount:""}]),status:inv.status||"Active",notes:inv.notes||"" });
     setEditItem(inv); setModalMode("view"); setShowModal(true);
     setHistoryEditingRowId(null);
     setHistoryDraft({});
@@ -3508,6 +3528,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
 
   const statusOpts = ((db?.settings?.investmentStatuses&&db.settings.investmentStatuses.length)?db.settings.investmentStatuses:["Active","Paused","Closed"]).map((v)=>({ value:v, label:v }));
   const methodOpts = (db?.settings?.investmentMethods || []).map((v)=>({ value:v, label:v }));
+  const investmentTypeOpts = (db?.settings?.investmentTypes || []).map((v)=>({ value:v, label:v }));
   const [filterStartDate, setFilterStartDate] = useState("");
   const [filterEndDate, setFilterEndDate] = useState("");
   const [filterDateField, setFilterDateField] = useState("start");
@@ -3524,6 +3545,13 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     const walletPrice = parseFloat(portfolios.find((p)=>p.id===form.portfolioId)?.current_price) || 0;
     setForm((prev) => ({ ...prev, currentPrice: String(walletPrice) }));
   }, [form.inheritPrice, form.portfolioId, portfolios]);
+
+  useEffect(() => {
+    const selectedPortfolio = portfolios.find((p) => p.id === form.portfolioId);
+    const portfolioDefaultType = selectedPortfolio?.investmentType || selectedPortfolio?.type || "";
+    if (!portfolioDefaultType || String(form.investmentType || "").trim()) return;
+    setForm((prev) => ({ ...prev, investmentType: portfolioDefaultType }));
+  }, [form.portfolioId, form.investmentType, portfolios]);
 
   useEffect(() => () => {
     setShowModal(false);
@@ -3866,6 +3894,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
               <ReadOnlyField label={t.startDate} value={form.startDate} />
               <ReadOnlyField label={t.endDate} value={form.endDate} />
               <ReadOnlyField label={t.investmentMethod} value={form.investmentMethod} />
+              <ReadOnlyField label={t.investmentType} value={form.investmentType} />
               <ReadOnlyField label={t.risk} value={form.risk} />
               <ReadOnlyField label={t.status} value={form.status} />
               <ReadOnlyField label={t.splitFunding} value={(form.funding||[]).map((f)=>`${f.source||"—"}: ${f.amount||0}`).join(" | ")} />
@@ -3933,10 +3962,11 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                 <FormField label={t.startDate} required><Input type="date" value={form.startDate} onChange={e=>{f("startDate")(e.target.value);setInvalidFields(prev=>({...prev,startDate:false}));}} invalid={invalidFields.startDate} isRTL={isRTL}/></FormField>
                 <FormField label={t.endDate}><Input type="date" value={form.endDate} onChange={e=>f("endDate")(e.target.value)} isRTL={isRTL}/></FormField>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
                 <FormField label={t.risk} required><Select value={form.risk} onChange={e=>{f("risk")(e.target.value);setInvalidFields(prev=>({...prev,risk:false}));}} invalid={invalidFields.risk} options={db?.settings?.riskLevels||[]} placeholder={t.selectRisk} isRTL={isRTL}/></FormField>
                 <FormField label={t.status} required><Select value={form.status} onChange={e=>{f("status")(e.target.value);setInvalidFields(prev=>({...prev,status:false}));}} invalid={invalidFields.status} options={statusOpts} isRTL={isRTL}/></FormField>
                 <FormField label={t.investmentMethod} required><Select value={form.investmentMethod} onChange={e=>{f("investmentMethod")(e.target.value);setInvalidFields(prev=>({...prev,investmentMethod:false}));}} invalid={invalidFields.investmentMethod} options={methodOpts} placeholder={t.selectMethod} isRTL={isRTL}/></FormField>
+                <FormField label={t.investmentType} required><Select value={form.investmentType} onChange={e=>{f("investmentType")(e.target.value);setInvalidFields(prev=>({...prev,investmentType:false}));}} invalid={invalidFields.investmentType} options={investmentTypeOpts} placeholder={t.investmentType} isRTL={isRTL}/></FormField>
               </div>
              <FormField label={t.notes}><Input value={form.notes} onChange={e=>f("notes")(e.target.value)} isRTL={isRTL} placeholder={`(${t.optional})`}/></FormField>
             {formError && formError !== t.splitFundingMismatchError && <div style={{ color:T.negative, fontSize:"0.78rem", marginTop:"-6px", marginBottom:"10px" }}>{formError}</div>}
@@ -3958,7 +3988,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
             </>)}
             {modalMode==="edit" && (<>
               <Btn onClick={handleSave}>{t.save}</Btn>
-              <Btn variant="secondary" onClick={()=>{ setForm({ portfolioId:editItem.portfolioId,name:editItem.name,quantity:editItem.quantity||"",purchasePrice:editItem.purchasePrice||"",currentPrice:editItem.currentPrice||"",inheritPrice:Boolean(editItem.inheritPrice),purchaseDate:editItem.purchaseDate||"",startDate:editItem.startDate||"",endDate:editItem.endDate||"",investmentMethod:editItem.investmentMethod||"",risk:editItem.risk||"",funding:(editItem.funding&&editItem.funding.length?editItem.funding:[{source:editItem.source||"",amount:""}]),status:editItem.status||"Active",notes:editItem.notes||"" }); setFormError(""); setInvalidFields({}); setModalMode("view"); }}>{t.cancel}</Btn>
+              <Btn variant="secondary" onClick={()=>{ setForm({ portfolioId:editItem.portfolioId,name:editItem.name,quantity:editItem.quantity||"",purchasePrice:editItem.purchasePrice||"",currentPrice:editItem.currentPrice||"",inheritPrice:Boolean(editItem.inheritPrice),purchaseDate:editItem.purchaseDate||"",startDate:editItem.startDate||"",endDate:editItem.endDate||"",investmentMethod:editItem.investmentMethod||"",investmentType:editItem.investmentType||"",risk:editItem.risk||"",funding:(editItem.funding&&editItem.funding.length?editItem.funding:[{source:editItem.source||"",amount:""}]),status:editItem.status||"Active",notes:editItem.notes||"" }); setFormError(""); setInvalidFields({}); setModalMode("view"); }}>{t.cancel}</Btn>
             </>)}
             {modalMode==="create" && (<>
               <Btn variant="secondary" onClick={closeModal}>{t.cancel}</Btn>
@@ -4134,7 +4164,7 @@ function PlanningUnitDashboard() {
   if (!planRows.length) return <Card><div style={{ padding:"28px", textAlign:"center", color:"#4B5563" }}><div style={{ fontSize:"1.4rem", marginBottom:"6px" }}>◌</div>لم يتم العثور على خطط مفعلة. توجه إلى وحدة التحليل الفني لبدء التخطيط.</div></Card>;
 
   const EmptyPanel = ({ message, tone }) => <div style={{ border:`1px dashed ${tone}`, borderRadius:"12px", padding:"16px", color:"#4B5563", textAlign:"center", background:"#F8FAFC" }}>✓ {message}</div>;
-  const ZoneRow = ({ name, current, anchor, distance }) => <div style={{ padding:"12px 0", borderBottom:`1px solid ${T.border}`, display:"grid", gridTemplateColumns:"minmax(110px,1fr) minmax(220px,1.4fr)", alignItems:"center", gap:"10px" }}><div style={{ color:"#111827", fontWeight:700, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{name}</div><div style={{ display:"flex", gap:"10px", fontSize:"0.84rem", flexWrap:"wrap", justifyContent:isRTL ? "flex-start" : "flex-end" }}><span style={{ color:"#111827", fontWeight:700 }}>Current: {current.toFixed(2)}</span><span style={{ color:"#4B5563" }}>Zone: {anchor.toFixed(2)}</span><span style={{ color:"#4B5563" }}>{Math.abs(distance).toFixed(2)}% away</span></div></div>;
+  const ZoneRow = ({ name, current, anchor, distance }) => <div style={{ padding:"12px 0", borderBottom:`1px solid ${T.border}`, display:"flex", flexDirection:"column", alignItems:isRTL ? "flex-end" : "flex-start", gap:"6px" }}><div style={{ color:"#111827", fontWeight:700, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:"100%" }}>{name}</div><div style={{ display:"flex", gap:"10px", fontSize:"0.84rem", flexWrap:"wrap" }}><span style={{ color:"#111827", fontWeight:700 }}>Current: {current.toFixed(2)}</span><span style={{ color:"#4B5563" }}>Zone: {anchor.toFixed(2)}</span><span style={{ color:"#4B5563" }}>{Math.abs(distance).toFixed(2)}% away</span></div></div>;
 
   const watchRows = planRows.filter((r) => r.nearSupport && r.supportAnchor > 0);
   const tpRows = planRows.filter((r) => r.nearTarget && r.targetAnchor?.price > 0);
@@ -4143,7 +4173,7 @@ function PlanningUnitDashboard() {
   return <div dir={isRTL?"rtl":"ltr"} style={{fontFamily:font}}>
     <h1 style={{ margin:"0 0 16px", fontSize:"1.9rem", fontWeight:800, color:"#111827" }}>Planning Dashboard</h1>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:"12px",marginBottom:"18px"}}>
-      {[{k:"Total Planned Liquidity",v:totals.liquidity.toFixed(2)},{k:"Potential ROI",v:`${totals.potentialRoi.toFixed(2)}%`},{k:"Portfolio Health",v:`${totals.health.toFixed(1)}%`}].map((m)=><div key={m.k} style={{background:"linear-gradient(135deg, #10B981 0%, #1E293B 85%)",color:"#f8fafc",borderRadius:"14px",padding:"16px",border:"1px solid #34D39955",boxShadow:"0 1px 2px rgba(15,23,42,0.2)"}}><div style={{fontSize:"0.77rem",opacity:.95,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{m.k}</div><div style={{fontWeight:800,fontSize:"1.22rem",marginTop:"2px"}}>{m.v}</div></div>)}
+      {[{k:"Total Planned Liquidity",v:totals.liquidity.toFixed(2)},{k:"Potential ROI",v:`${totals.potentialRoi.toFixed(2)}%`},{k:"Portfolio Health",v:`${totals.health.toFixed(1)}%`}].map((m)=><div key={m.k} style={{background:"#F1F5F9",color:"#1e3a8a",borderRadius:"14px",padding:"16px",border:"1px solid #CBD5E1",boxShadow:"0 1px 2px rgba(15,23,42,0.08)"}}><div style={{fontSize:"0.77rem",opacity:.95,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{m.k}</div><div style={{fontWeight:800,fontSize:"1.22rem",marginTop:"2px"}}>{m.v}</div></div>)}
     </div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:"14px"}}>
       <section style={{ background:"#fff", border:"1px solid #E5E7EB", boxShadow:"0 1px 3px rgba(15,23,42,0.08)", borderRadius:"12px", padding:"14px" }}><h3 style={{ margin:"0 0 8px", color:"#312E81" }}>Watchlist (Near Support)</h3>{watchRows.length?watchRows.map((r)=><ZoneRow key={r.inv.id} name={r.inv.name} current={r.current} anchor={r.supportAnchor} distance={((r.current-r.supportAnchor)/r.supportAnchor)*100} />):<EmptyPanel tone="#C7D2FE" message="All clear. No stocks are currently near support."/>}</section>
@@ -4180,7 +4210,7 @@ function StockAnalysisTab() {
   const [filterPortfolio, setFilterPortfolio] = useState("");
   const [filterMethod, setFilterMethod] = useState("");
   const [editingInv, setEditingInv] = useState(null);
-  const [viewingInv, setViewingInv] = useState(null);
+  const [expandedPlanRow, setExpandedPlanRow] = useState(null);
 
   const filteredInvestments = useMemo(() => stockInvestments.filter((inv) => {
     const statusMatch = !filterStatus || inv.status === filterStatus;
@@ -4238,8 +4268,10 @@ function StockAnalysisTab() {
               {filteredInvestments.map((inv) => {
                 const roiVal = roi(inv, db);
                 const planExists = Boolean(inv.tradingPlan);
+                const isExpanded = expandedPlanRow === inv.id;
                 return (
-                  <tr key={inv.id} style={{ borderBottom:`1px solid ${T.border}` }}>
+                  <React.Fragment key={inv.id}>
+                  <tr style={{ borderBottom:`1px solid ${T.border}`, cursor:"pointer" }} onClick={() => setExpandedPlanRow(isExpanded ? null : inv.id)}>
                     <td style={{ padding:"12px 14px",color:T.textPrimary,fontWeight:500 }}>{inv.name || "—"}</td>
                     <td style={{ padding:"12px 14px",color:T.textSecondary }}>{inv.startDate || inv.purchaseDate || "—"}</td>
                     <td style={{ padding:"12px 14px",color:T.textSecondary }}>{inv.endDate || "—"}</td>
@@ -4251,11 +4283,21 @@ function StockAnalysisTab() {
                     <td style={{ padding:"12px 14px" }}><Chip color={statusColor(inv.status)}>{inv.status}</Chip></td>
                     <td style={{ padding:"12px 10px",textAlign:"right" }}>
                       <div style={{ display:"flex",gap:"4px",justifyContent:"flex-end" }}>
-                        <button data-icon-tooltip={t.addPlan} onClick={() => setEditingInv(inv)} style={{ background:"none",border:"none",cursor:"pointer",color:T.emerald,padding:"4px",borderRadius:"6px",display:"flex" }}><Plus size={14}/></button>
-                        <button data-icon-tooltip={planExists ? "View / Edit Plan" : t.noPlanSaved} onClick={() => setViewingInv(inv)} style={{ background:"none",border:"none",cursor:"pointer",color:planExists ? T.info : T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}><Eye size={14}/></button>
+                        <button data-icon-tooltip={t.addPlan} onClick={(e) => { e.stopPropagation(); setEditingInv(inv); }} style={{ background:"none",border:"none",cursor:"pointer",color:T.emerald,padding:"4px",borderRadius:"6px",display:"flex" }}><Plus size={14}/></button>
+                        <button data-icon-tooltip={planExists ? "View / Edit Plan" : t.noPlanSaved} onClick={(e) => { e.stopPropagation(); setExpandedPlanRow(isExpanded ? null : inv.id); }} style={{ background:"none",border:"none",cursor:"pointer",color:planExists ? T.info : T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}><Eye size={14}/></button>
                       </div>
                     </td>
                   </tr>
+                  {isExpanded && (
+                    <tr>
+                      <td colSpan={10} style={{ padding:"0", background:T.bgApp }}>
+                        <div style={{ padding:"14px 16px" }}>
+                          {planExists ? <TradingPlanInlineView investment={inv} /> : <div style={{ color:T.textMuted, fontSize:"0.82rem" }}>{t.noPlanSaved}</div>}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                 );
               })}
             </tbody>
@@ -4271,9 +4313,6 @@ function StockAnalysisTab() {
             setEditingInv(null);
           }}
         />
-      )}
-      {viewingInv && (
-        <TradingPlanModal investment={viewingInv} mode="view" onClose={() => setViewingInv(null)} />
       )}
     </div>
   );
@@ -4687,6 +4726,23 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
           )}
         </main>
       </div>
+    </div>
+  );
+}
+
+function TradingPlanInlineView({ investment }) {
+  const { isRTL } = useApp();
+  const plan = normalizeTradingPlan(investment?.tradingPlan || {}, Number(investment?.purchasePrice) || 0);
+  const purchase = Number(investment?.purchasePrice) || 0;
+  const asPrice = (entry, direction) => computePlanPrice(purchase, entry?.mode || "fixed", entry?.value, direction).toFixed(2);
+  const sectionTitleStyle = { margin:"0 0 6px", fontSize:"0.78rem", color:"#334155", textTransform:"uppercase", letterSpacing:"0.04em", fontWeight:700 };
+  const itemStyle = { fontSize:"0.82rem", color:"#0f172a", lineHeight:1.6 };
+  return (
+    <div dir={isRTL ? "rtl" : "ltr"} style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"10px" }}>
+      <div><h4 style={sectionTitleStyle}>Support</h4><div style={itemStyle}>From: {asPrice(plan.supportFrom, "down")} · To: {asPrice(plan.supportTo, "down")}</div></div>
+      <div><h4 style={sectionTitleStyle}>Resistance</h4><div style={itemStyle}>From: {asPrice(plan.resistanceFrom, "up")} · To: {asPrice(plan.resistanceTo, "up")}</div></div>
+      <div><h4 style={sectionTitleStyle}>DCA</h4><div style={itemStyle}>{(plan.dcaLevels || []).filter((d) => String(d?.value || "").trim()).map((d, idx) => `L${idx + 1}: ${computePlanPrice(purchase, d.mode || "fixed", d.value, "down").toFixed(2)} (${d.allocation || 0}%)`).join(" | ") || "—"}</div></div>
+      <div><h4 style={sectionTitleStyle}>Exit Strategy</h4><div style={itemStyle}>{(plan.takeProfitTargets || []).filter((t) => String(t?.value || "").trim()).map((t, idx) => `T${idx + 1}: ${computePlanPrice(purchase, t.mode || "fixed", t.value, "up").toFixed(2)} (${t.allocation || 0}%)`).join(" | ") || "—"}</div></div>
     </div>
   );
 }
