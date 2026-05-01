@@ -2416,8 +2416,8 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileO
           if (children) {
             const childActive = activeTab === "planningDashboard" || children.some((c) => c.id === activeTab);
             return <div key={id} style={{ marginBottom:"4px" }}>
-              <button onClick={() => { setActiveTab("planningDashboard"); setPlanningOpen((p) => !p); if (isMobile) setMobileOpen(false); }} style={{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"9px 12px",borderRadius:"8px",border:"1px solid #1E293B",background:"#0F172A",color:childActive?"#e2e8f0":T.textSidebarMuted,cursor:"pointer",justifyContent:showLabels?"space-between":"center"}}>{showLabels?<><span style={{display:"flex",alignItems:"center",gap:"10px"}}>{icon}<span>{label}</span></span>{planningOpen?<ChevronDown size={14}/>:<ChevronRight size={14}/>}</>:icon}</button>
-              {planningOpen && showLabels && <div style={{ marginTop:"2px" }}>{children.map((sub)=>{ const active = activeTab===sub.id; return <button key={sub.id} onClick={()=>{setActiveTab(sub.id); if (isMobile) setMobileOpen(false);}} style={{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"9px 12px",borderRadius:"8px",border:"none",background:active?T.emeraldBg:"transparent",color:active?T.emerald:T.textSidebarMuted,fontSize:"0.83rem",fontWeight:active?600:400,cursor:"pointer",textAlign:"left",transition:"all 0.15s",marginBottom:"2px",borderLeft:active?`2px solid ${T.emerald}`:"2px solid transparent",justifyContent:showLabels?"flex-start":"center",}}>{sub.label}</button>; })}</div>}
+              <button onClick={() => { setActiveTab("planningDashboard"); setPlanningOpen((p) => !p); if (isMobile) setMobileOpen(false); }} style={{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"9px 12px",minHeight:"38px",borderRadius:"8px",border:"none",background:childActive?T.emeraldBg:"transparent",color:childActive?T.emerald:T.textSidebarMuted,fontSize:"0.83rem",fontWeight:childActive?600:400,cursor:"pointer",textAlign:"left",transition:"all 0.15s",marginBottom:"2px",borderLeft:childActive?`2px solid ${T.emerald}`:"2px solid transparent",justifyContent:showLabels?"space-between":"center"}}>{showLabels?<><span style={{display:"flex",alignItems:"center",gap:"10px"}}>{icon}<span>{label}</span></span>{planningOpen?<ChevronDown size={13}/>:<ChevronRight size={13}/>}</>:icon}</button>
+              {planningOpen && showLabels && <div style={{ marginTop:"2px" }}>{children.map((sub)=>{ const active = activeTab===sub.id; return <button key={sub.id} onClick={()=>{setActiveTab(sub.id); if (isMobile) setMobileOpen(false);}} style={{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"9px 12px 9px 32px",minHeight:"38px",borderRadius:"8px",border:"none",background:active?T.emeraldBg:"transparent",color:active?T.emerald:T.textSidebarMuted,fontSize:"0.83rem",fontWeight:active?600:400,cursor:"pointer",textAlign:"left",transition:"all 0.15s",marginBottom:"2px",borderLeft:active?`2px solid ${T.emerald}`:"2px solid transparent",justifyContent:showLabels?"flex-start":"center",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sub.label}</button>; })}</div>}
             </div>;
           }
           const active = activeTab === id;
@@ -4134,7 +4134,7 @@ function PlanningUnitDashboard() {
   if (!planRows.length) return <Card><div style={{ padding:"28px", textAlign:"center", color:"#4B5563" }}><div style={{ fontSize:"1.4rem", marginBottom:"6px" }}>◌</div>لم يتم العثور على خطط مفعلة. توجه إلى وحدة التحليل الفني لبدء التخطيط.</div></Card>;
 
   const EmptyPanel = ({ message, tone }) => <div style={{ border:`1px dashed ${tone}`, borderRadius:"12px", padding:"16px", color:"#4B5563", textAlign:"center", background:"#F8FAFC" }}>✓ {message}</div>;
-  const ZoneRow = ({ name, current, anchor, distance }) => <div style={{ padding:"12px 0", borderBottom:`1px solid ${T.border}` }}><div style={{ color:"#111827", fontWeight:700 }}>{name}</div><div style={{ display:"flex", gap:"10px", fontSize:"0.84rem", marginTop:"4px" }}><span style={{ color:"#111827", fontWeight:700 }}>Current: {current.toFixed(2)}</span><span style={{ color:"#4B5563" }}>Zone: {anchor.toFixed(2)}</span><span style={{ color:"#4B5563" }}>{Math.abs(distance).toFixed(2)}% away</span></div></div>;
+  const ZoneRow = ({ name, current, anchor, distance }) => <div style={{ padding:"12px 0", borderBottom:`1px solid ${T.border}`, display:"grid", gridTemplateColumns:"minmax(110px,1fr) minmax(220px,1.4fr)", alignItems:"center", gap:"10px" }}><div style={{ color:"#111827", fontWeight:700, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{name}</div><div style={{ display:"flex", gap:"10px", fontSize:"0.84rem", flexWrap:"wrap", justifyContent:isRTL ? "flex-start" : "flex-end" }}><span style={{ color:"#111827", fontWeight:700 }}>Current: {current.toFixed(2)}</span><span style={{ color:"#4B5563" }}>Zone: {anchor.toFixed(2)}</span><span style={{ color:"#4B5563" }}>{Math.abs(distance).toFixed(2)}% away</span></div></div>;
 
   const watchRows = planRows.filter((r) => r.nearSupport && r.supportAnchor > 0);
   const tpRows = planRows.filter((r) => r.nearTarget && r.targetAnchor?.price > 0);
@@ -4143,7 +4143,7 @@ function PlanningUnitDashboard() {
   return <div dir={isRTL?"rtl":"ltr"} style={{fontFamily:font}}>
     <h1 style={{ margin:"0 0 16px", fontSize:"1.9rem", fontWeight:800, color:"#111827" }}>Planning Dashboard</h1>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:"12px",marginBottom:"18px"}}>
-      {[{k:"Total Planned Liquidity",v:totals.liquidity.toFixed(2)},{k:"Potential ROI",v:`${totals.potentialRoi.toFixed(2)}%`},{k:"Portfolio Health",v:`${totals.health.toFixed(1)}%`}].map((m)=><div key={m.k} style={{background:"#1E293B",color:"#f8fafc",borderRadius:"14px",padding:"16px",border:"1px solid #334155",boxShadow:"0 1px 2px rgba(15,23,42,0.2)"}}><div style={{fontSize:"0.77rem",opacity:.9}}>{m.k}</div><div style={{fontWeight:800,fontSize:"1.22rem",marginTop:"2px"}}>{m.v}</div></div>)}
+      {[{k:"Total Planned Liquidity",v:totals.liquidity.toFixed(2)},{k:"Potential ROI",v:`${totals.potentialRoi.toFixed(2)}%`},{k:"Portfolio Health",v:`${totals.health.toFixed(1)}%`}].map((m)=><div key={m.k} style={{background:"linear-gradient(135deg, #10B981 0%, #1E293B 85%)",color:"#f8fafc",borderRadius:"14px",padding:"16px",border:"1px solid #34D39955",boxShadow:"0 1px 2px rgba(15,23,42,0.2)"}}><div style={{fontSize:"0.77rem",opacity:.95,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{m.k}</div><div style={{fontWeight:800,fontSize:"1.22rem",marginTop:"2px"}}>{m.v}</div></div>)}
     </div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:"14px"}}>
       <section style={{ background:"#fff", border:"1px solid #E5E7EB", boxShadow:"0 1px 3px rgba(15,23,42,0.08)", borderRadius:"12px", padding:"14px" }}><h3 style={{ margin:"0 0 8px", color:"#312E81" }}>Watchlist (Near Support)</h3>{watchRows.length?watchRows.map((r)=><ZoneRow key={r.inv.id} name={r.inv.name} current={r.current} anchor={r.supportAnchor} distance={((r.current-r.supportAnchor)/r.supportAnchor)*100} />):<EmptyPanel tone="#C7D2FE" message="All clear. No stocks are currently near support."/>}</section>
@@ -4358,6 +4358,21 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
       noPlan: "No trading plan for this stock",
       addPlan: "Add Plan",
     };
+  const helpText = isArabic
+    ? {
+      support: "المنطقة التي يصعب على السهم كسرها هبوطاً، وتعد فرصة شراء قوية.",
+      resistance: "مناطق القمم التاريخية التي يصعب اختراقها، ويفضل البيع عندها.",
+      stopLoss: "السعر الذي تخرج عنده فوراً لحماية رأس مالك من خسائر أكبر.",
+      dca: "الشراء على مراحل لتحسين متوسط التكلفة بدلاً من الدخول دفعة واحدة.",
+      exit: "المحطات التي تجني عندها الأرباح وتخرج من الصفقة تدريجياً.",
+    }
+    : {
+      support: "A price zone that is difficult to break downward and often considered a strong buy area.",
+      resistance: "Historical peak zones that are hard to break through and are often preferred for selling.",
+      stopLoss: "The price where you exit immediately to protect capital from larger losses.",
+      dca: "Buying in stages to improve average cost instead of entering all at once.",
+      exit: "Profit-taking checkpoints where you scale out of the position gradually.",
+    };
 
   const purchasePrice = Number(investment?.purchasePrice) || 0;
   const currentPrice = Number(investment?.currentPrice) || purchasePrice;
@@ -4460,6 +4475,15 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
       <h5 className="text-[13px] font-semibold text-gray-900 mb-3">{title}</h5>
       {children}
     </div>
+  );
+  const TitleWithInfo = ({ label, info }) => (
+    <span style={{ display:"inline-flex", alignItems:"center", gap:"6px" }}>
+      <span>{label}</span>
+      <span
+        data-app-tooltip={info}
+        style={{ width:"15px", height:"15px", borderRadius:"999px", border:"1px solid #94a3b8", color:"#64748b", fontSize:"10px", display:"inline-flex", alignItems:"center", justifyContent:"center", cursor:"help", flexShrink:0 }}
+      >i</span>
+    </span>
   );
 
   const ToggleSwitch = ({ value, onChange }) => (
@@ -4575,7 +4599,7 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
             <>
           <div>
             <Card title={labels.technical}>
-              <InnerCard title={labels.support}>
+              <InnerCard title={<TitleWithInfo label={labels.support} info={helpText.support} />}>
                 <RowItem
                   mode={form.supportFrom?.mode || "percentage"}
                   fromValue={form.supportFrom?.value || ""}
@@ -4588,7 +4612,7 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
                   result={`${fmtSar(calc(form.supportFrom?.mode || "percentage", form.supportFrom?.value, "down"))} → ${fmtSar(calc(form.supportTo?.mode || "percentage", form.supportTo?.value, "down"))}`}
                 />
               </InnerCard>
-              <InnerCard title={labels.resistance}>
+              <InnerCard title={<TitleWithInfo label={labels.resistance} info={helpText.resistance} />}>
                 <RowItem
                   mode={form.resistanceFrom?.mode || "percentage"}
                   fromValue={form.resistanceFrom?.value || ""}
@@ -4601,7 +4625,7 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
                   result={`${fmtSar(calc(form.resistanceFrom?.mode || "percentage", form.resistanceFrom?.value, "up"))} → ${fmtSar(calc(form.resistanceTo?.mode || "percentage", form.resistanceTo?.value, "up"))}`}
                 />
               </InnerCard>
-              <InnerCard title={labels.stopLoss}>
+              <InnerCard title={<TitleWithInfo label={labels.stopLoss} info={helpText.stopLoss} />}>
                 <RowItem
                   mode={form.stopLoss?.mode || "percentage"}
                   fromValue={form.stopLoss?.value || ""}
@@ -4617,7 +4641,7 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
           </div>
 
           <div>
-            <Card title={labels.dca}>
+            <Card title={<TitleWithInfo label={labels.dca} info={helpText.dca} />}>
               <div className="space-y-3">
                 {form.dcaLevels.map((row, idx) => {
                   const mode = row.mode || "percentage";
@@ -4638,7 +4662,7 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
               {isEditing && <button type="button" onClick={() => setForm((p) => ({ ...p, dcaLevels: [...p.dcaLevels, { _rowId: nextRowId(), mode: "percentage", value: "", allocation: "", executed: false }] }))} className="mt-4 h-8 px-3 rounded-lg border border-gray-300 text-gray-700 text-[13px] font-semibold bg-white hover:bg-gray-50">{labels.addLevel}</button>}
             </Card>
 
-            <Card title={labels.exit}>
+            <Card title={<TitleWithInfo label={labels.exit} info={helpText.exit} />}>
               <div className="space-y-3">
                 {form.takeProfitTargets.map((row, idx) => {
                   const mode = row.mode || "percentage";
