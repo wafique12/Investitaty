@@ -2526,6 +2526,7 @@ const roi = (inv, db) => { const c=costBasis(inv); return c>0?((curVal(inv, db)-
 const PlanInputField = React.memo(function PlanInputField({ id, label, value, onCommit, placeholder, showPercent = false, invalid = false, isEditing, isArabic }) {
   const inputId = useId();
   const stableId = id || inputId;
+  const inputRef = useRef(null);
   const [draft, setDraft] = useState(value ?? "");
   const [focused, setFocused] = useState(false);
 
@@ -2533,6 +2534,22 @@ const PlanInputField = React.memo(function PlanInputField({ id, label, value, on
     if (focused) return;
     setDraft(value ?? "");
   }, [value, focused]);
+
+  useEffect(() => {
+    if (!focused) return;
+    const timer = setTimeout(() => {
+      if ((draft ?? "") !== (value ?? "")) onCommit(draft);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [draft, value, focused, onCommit]);
+
+  useEffect(() => {
+    if (focused && inputRef.current && document.activeElement !== inputRef.current) {
+      inputRef.current.focus();
+      const len = inputRef.current.value?.length || 0;
+      inputRef.current.setSelectionRange(len, len);
+    }
+  }, [focused]);
 
   if (!isEditing) {
     return (
@@ -2544,19 +2561,20 @@ const PlanInputField = React.memo(function PlanInputField({ id, label, value, on
   }
 
   return (
-    <div className="relative w-[88px] shrink-0">
+    <div className="relative w-[88px] shrink-0" key={stableId}>
       {label && <label htmlFor={stableId} className={`text-[10px] text-slate-500 mb-1 ${isArabic ? "text-right" : "text-left"}`}>{label}</label>}
       <input
         id={stableId}
+        ref={inputRef}
         type="number"
         value={draft}
         onFocus={() => setFocused(true)}
-        onChange={(e) => {
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={(e) => {
+          setFocused(false);
           const next = e.target.value;
-          setDraft(next);
-          onCommit(next);
+          if ((next ?? "") !== (value ?? "")) onCommit(next);
         }}
-        onBlur={() => setFocused(false)}
         placeholder={placeholder}
         className={`h-9 w-full rounded-lg border ${invalid ? "border-red-400" : "border-[#E2E8F0]"} focus:border-[#334155] focus:ring-2 focus:ring-slate-100 pl-2 pr-6 text-[13px] text-[#111827] bg-white ${isArabic ? "text-right" : "text-left"}`}
       />
