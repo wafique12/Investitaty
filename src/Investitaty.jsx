@@ -57,6 +57,7 @@ const INITIAL_SCHEMA = {
     riskLevels:       ["Low", "Medium", "High", "Speculative"],
     fundingSources:   ["Personal Savings", "Bank Loan", "Brokerage", "Exchange", "Partner Capital"],
     investmentMethods: ["Lump Sum", "DCA", "SIP", "Manual"],
+    investmentTargets: ["Growth", "Income", "Balanced"],
     investmentTypes: ["Income", "Growth", "Balanced", "Speculative"],
     investmentStatuses: ["Active", "Paused", "Closed"],
     transactionStatuses: ["recorded", "scheduled", "cancelled"],
@@ -269,6 +270,10 @@ const TRANSLATIONS = {
     settingsTitle: "Settings & Lookup Categories",
     settingsDesc: "Manage dropdown options used across all forms",
     portfolioTypes: "Portfolio Types",
+    investmentTargets: "Investment Target",
+    growth: "Growth",
+    incomeTarget: "Income",
+    balanced: "Balanced",
     riskLevels: "Risk Levels",
     fundingSources: "Funding Sources",
     investmentMethods: "Investment Methods",
@@ -546,6 +551,10 @@ const TRANSLATIONS = {
     settingsTitle: "الإعدادات وفئات القوائم",
     settingsDesc: "إدارة خيارات القوائم المنسدلة المستخدمة في جميع النماذج",
     portfolioTypes: "أنواع المحافظ",
+    investmentTargets: "هدف الاستثمار",
+    growth: "النمو",
+    incomeTarget: "الدخل",
+    balanced: "متوازن",
     riskLevels: "مستويات المخاطرة",
     fundingSources: "مصادر التمويل",
     investmentMethods: "طرق الاستثمار",
@@ -2423,7 +2432,7 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileO
           if (children) {
             const childActive = activeTab === "planningDashboard" || children.some((c) => c.id === activeTab);
             return <div key={id} style={{ marginBottom:"4px" }}>
-              <button onClick={() => { setActiveTab("planningDashboard"); setPlanningOpen((p) => !p); if (isMobile) setMobileOpen(false); }} style={{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"9px 12px",minHeight:"38px",borderRadius:"8px",border:"none",background:childActive?T.emeraldBg:"transparent",color:childActive?T.emerald:T.textSidebarMuted,fontSize:"0.83rem",fontWeight:childActive?600:400,cursor:"pointer",textAlign:"left",transition:"all 0.15s",marginBottom:"2px",borderLeft:childActive?`2px solid ${T.emerald}`:"2px solid transparent",justifyContent:showLabels?"space-between":"center"}}>{showLabels?<><span style={{display:"flex",alignItems:"center",gap:"10px"}}>{icon}<span>{label}</span></span>{planningOpen?<ChevronDown size={13}/>:<ChevronRight size={13}/>}</>:icon}</button>
+              <div style={{display:"flex",alignItems:"center",gap:"6px"}}><button onClick={() => { setActiveTab("planningDashboard"); if (isMobile) setMobileOpen(false); }} style={{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"9px 12px",minHeight:"38px",borderRadius:"8px",border:"none",background:childActive?T.emeraldBg:"transparent",color:childActive?T.emerald:T.textSidebarMuted,fontSize:"0.83rem",fontWeight:childActive?600:400,cursor:"pointer",textAlign:"left",transition:"all 0.15s",marginBottom:"2px",borderLeft:childActive?`2px solid ${T.emerald}`:"2px solid transparent",justifyContent:"flex-start"}}>{showLabels?<><span style={{display:"flex",alignItems:"center",gap:"10px"}}>{icon}<span>{label}</span></span></>:icon}</button>{showLabels && <button onClick={()=>setPlanningOpen((p)=>!p)} style={{border:"none",background:"transparent",color:T.textSidebarMuted,cursor:"pointer",display:"flex",alignItems:"center",padding:"4px"}}>{planningOpen?<ChevronDown size={13}/>:<ChevronRight size={13}/>}</button>}</div>
               {planningOpen && showLabels && <div style={{ marginTop:"2px" }}>{children.map((sub)=>{ const active = activeTab===sub.id; return <button key={sub.id} onClick={()=>{setActiveTab(sub.id); if (isMobile) setMobileOpen(false);}} style={{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"9px 12px 9px 32px",minHeight:"38px",borderRadius:"8px",border:"none",background:active?T.emeraldBg:"transparent",color:active?T.emerald:T.textSidebarMuted,fontSize:"0.83rem",fontWeight:active?600:400,cursor:"pointer",textAlign:"left",transition:"all 0.15s",marginBottom:"2px",borderLeft:active?`2px solid ${T.emerald}`:"2px solid transparent",justifyContent:showLabels?"flex-start":"center",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sub.label}</button>; })}</div>}
             </div>;
           }
@@ -2474,7 +2483,7 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileO
     return (
       <>
         {mobileOpen && <div onClick={()=>setMobileOpen(false)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:180 }} />}
-        <aside dir="ltr" style={{ position:"fixed",left:0,top:0,bottom:0,zIndex:200,width:"260px",background:T.bgSidebar,transform:mobileOpen?"translateX(0)":"translateX(-100%)",transition:"transform 0.2s ease",display:"flex",flexDirection:"column" }}>
+        <aside dir={isRTL ? "rtl" : "ltr"} style={{ position:"fixed",[isRTL?"right":"left"]:0,top:0,bottom:0,zIndex:200,width:"260px",background:T.bgSidebar,transform:mobileOpen?"translateX(0)":(isRTL?"translateX(100%)":"translateX(-100%)"),transition:"transform 0.2s ease",display:"flex",flexDirection:"column" }}>
           {sidebarContent}
         </aside>
       </>
@@ -3110,10 +3119,11 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
   const [editItem, setEditItem] = useState(null);
   const [modalMode, setModalMode] = useState("create");
   const [filterStatus, setFilterStatus] = useState("");
+  const [filterTarget, setFilterTarget] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [collapsedPortfolios, setCollapsedPortfolios] = useState({});
-  const EMPTY = useMemo(() => ({ name:"", country:selectedCountry?.name || "", type:"",current_price:"",risk:"",currency:"USD",status:"Active",color:T.chart[0],notes:"" }), [selectedCountry]);
+  const EMPTY = useMemo(() => ({ name:"", country:selectedCountry?.name || "", type:"", target:"",current_price:"",risk:"",currency:"USD",status:"Active",color:T.chart[0],notes:"" }), [selectedCountry]);
   const [form, setForm] = useState(EMPTY);
   const [formError, setFormError] = useState("");
   const [invalidFields, setInvalidFields] = useState({});
@@ -3143,6 +3153,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
     setFilterStatus(savedUi.filterStatus || "");
     setSearchTerm(savedUi.searchTerm || "");
     setSearchOpen(Boolean(savedUi.searchOpen || savedUi.searchTerm));
+    setFilterTarget(savedUi.filterTarget || "");
   }, []);
 
   useEffect(() => {
@@ -3162,11 +3173,12 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
     localStorage.setItem(PORTFOLIOS_COLLAPSE_STORAGE_KEY, JSON.stringify(collapsedPortfolios));
   }, [collapsedPortfolios]);
   useEffect(() => {
-    localStorage.setItem(PORTFOLIOS_UI_STORAGE_KEY, JSON.stringify({ filterStatus, searchTerm, searchOpen }));
-  }, [filterStatus, searchTerm, searchOpen]);
+    localStorage.setItem(PORTFOLIOS_UI_STORAGE_KEY, JSON.stringify({ filterStatus, filterTarget, searchTerm, searchOpen }));
+  }, [filterStatus, filterTarget, searchTerm, searchOpen]);
   const portfolios = allPortfolios.filter((p) => {
     const matchesSearch = !searchTerm.trim() || String(p.name || "").toLowerCase().includes(searchTerm.trim().toLowerCase());
     if (!matchesSearch) return false;
+    if (filterTarget && p.target !== filterTarget) return false;
     if (!filterStatus) return !p.is_hidden;
     if (filterStatus === ARCHIVED_FILTER) return Boolean(p.is_hidden);
     return !p.is_hidden && p.status === filterStatus;
@@ -3178,6 +3190,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
       type: !form.type,
       risk: !form.risk,
       status: !form.status,
+      target: !form.target,
       currency: !form.currency,
       country: !form.country,
     };
@@ -3193,7 +3206,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
     setForm(EMPTY); setShowModal(false); setEditItem(null); setModalMode("create");
   };
 
-  const openView = (p) => { setForm({name:p.name,country:p.country || "",type:p.type,current_price:p.current_price??"",risk:p.risk,currency:p.currency,status:p.status||"Active",color:p.color||T.chart[0],notes:p.notes||""}); setEditItem(p); setModalMode("view"); setFormError(""); setInvalidFields({}); setShowModal(true); };
+  const openView = (p) => { setForm({name:p.name,country:p.country || "",type:p.type,target:p.target||"",current_price:p.current_price??"",risk:p.risk,currency:p.currency,status:p.status||"Active",color:p.color||T.chart[0],notes:p.notes||""}); setEditItem(p); setModalMode("view"); setFormError(""); setInvalidFields({}); setShowModal(true); };
 
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font }}>
@@ -3222,6 +3235,9 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
       <div style={{ ...filterBarCss, justifyContent:isRTL?"flex-start":"flex-end" }}>
         <div style={{ width:"220px", maxWidth:"100%" }}>
           <Select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} options={[{ value:"", label:t.status }, ...statusOpts, { value:ARCHIVED_FILTER, label:t.archivedFilter }]} isRTL={isRTL} style={{ ...filterInputCss(isRTL), width:"100%", flex:"0 0 auto" }} />
+        </div>
+        <div style={{ width:"220px", maxWidth:"100%" }}>
+          <Select value={filterTarget} onChange={e=>setFilterTarget(e.target.value)} options={[{ value:"", label:t.investmentTargets }, ...((db?.settings?.investmentTargets||[]).map((v)=>({value:v,label:v})))]} isRTL={isRTL} style={{ ...filterInputCss(isRTL), width:"100%", flex:"0 0 auto" }} />
         </div>
       </div>
 
@@ -3334,6 +3350,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
               <ReadOnlyField label={t.name} value={form.name} />
               <ReadOnlyField label={t.country} value={form.country} />
               <ReadOnlyField label={t.type} value={form.type} />
+              <ReadOnlyField label={t.investmentTargets} value={form.target} />
               <ReadOnlyField label={t.currentPrice} value={form.current_price} />
               <ReadOnlyField label={t.risk} value={form.risk} />
               <ReadOnlyField label={t.currency} value={form.currency} />
@@ -3349,6 +3366,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
               </div>
               <div style={{ display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:"12px" }}>
                 <FormField label={t.type} required><Select value={form.type} onChange={e=>{f("type")(e.target.value);setInvalidFields(prev=>({...prev,type:false}));}} invalid={invalidFields.type} options={db?.settings?.portfolioTypes||[]} placeholder={t.selectType} isRTL={isRTL}/></FormField>
+                <FormField label={t.investmentTargets} required><Select value={form.target} onChange={e=>{f("target")(e.target.value);setInvalidFields(prev=>({...prev,target:false}));}} invalid={invalidFields.target} options={db?.settings?.investmentTargets||[]} placeholder={t.investmentTargets} isRTL={isRTL}/></FormField>
                 <FormField label={t.currentPrice}><Input type="number" value={form.current_price} onChange={e=>f("current_price")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
               </div>
               <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
@@ -3370,7 +3388,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
             </>)}
             {modalMode==="edit" && (<>
               <Btn onClick={handleSave}>{t.save}</Btn>
-              <Btn variant="secondary" onClick={()=>{ setForm({name:editItem.name,country:editItem.country || "",type:editItem.type,current_price:editItem.current_price??"",risk:editItem.risk,currency:editItem.currency,status:editItem.status||"Active",color:editItem.color||T.chart[0],notes:editItem.notes||""}); setFormError(""); setInvalidFields({}); setModalMode("view"); }}>{t.cancel}</Btn>
+              <Btn variant="secondary" onClick={()=>{ setForm({name:editItem.name,country:editItem.country || "",type:editItem.type,target:editItem.target||"",current_price:editItem.current_price??"",risk:editItem.risk,currency:editItem.currency,status:editItem.status||"Active",color:editItem.color||T.chart[0],notes:editItem.notes||""}); setFormError(""); setInvalidFields({}); setModalMode("view"); }}>{t.cancel}</Btn>
             </>)}
             {modalMode==="create" && (<>
               <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");setFormError("");setInvalidFields({});}}>{t.cancel}</Btn>
@@ -3440,6 +3458,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
       startDate: !form.startDate,
       risk: !form.risk,
       status: !form.status,
+      target: !form.target,
       investmentMethod: !form.investmentMethod,
       investmentType: !form.investmentType,
     };
@@ -3528,11 +3547,12 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
 
   const statusOpts = ((db?.settings?.investmentStatuses&&db.settings.investmentStatuses.length)?db.settings.investmentStatuses:["Active","Paused","Closed"]).map((v)=>({ value:v, label:v }));
   const methodOpts = (db?.settings?.investmentMethods || []).map((v)=>({ value:v, label:v }));
-  const investmentTypeOpts = (db?.settings?.investmentTypes || []).map((v)=>({ value:v, label:v }));
+  const investmentTypeOpts = (db?.settings?.portfolioTypes || []).map((v)=>({ value:v, label:v }));
   const [filterStartDate, setFilterStartDate] = useState("");
   const [filterEndDate, setFilterEndDate] = useState("");
   const [filterDateField, setFilterDateField] = useState("start");
   const [filterStatus, setFilterStatus] = useState("");
+  const [filterTarget, setFilterTarget] = useState("");
   const [filterPortfolio, setFilterPortfolio] = useState("");
   const [filterInvestmentMethod, setFilterInvestmentMethod] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -3641,7 +3661,11 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     setFilterPortfolio(navigationFilter.portfolioId);
     if (navigationFilter?.status) setFilterStatus(navigationFilter.status);
   }, [navigationFilter]);
+  const portfolioByIdForStock = new Map((db?.portfolios||[]).map((p)=>[p.id,p]));
   const filteredInvestments = investments.filter((inv) => {
+    const invType = String(inv.investmentType||"").toLowerCase();
+    const parentType = String(portfolioByIdForStock.get(inv.portfolioId)?.type||"").toLowerCase();
+    if (!(invType === "stocks" || parentType === "stocks")) return false;
     const startRaw = inv.startDate || inv.purchaseDate || "";
     const endRaw = inv.endDate || "";
     const normalizedTitle = (inv.name || "").toLowerCase();
@@ -4173,7 +4197,7 @@ function PlanningUnitDashboard() {
   return <div dir={isRTL?"rtl":"ltr"} style={{fontFamily:font}}>
     <h1 style={{ margin:"0 0 16px", fontSize:"1.9rem", fontWeight:800, color:"#111827" }}>Planning Dashboard</h1>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:"12px",marginBottom:"18px"}}>
-      {[{k:"Total Planned Liquidity",v:totals.liquidity.toFixed(2)},{k:"Potential ROI",v:`${totals.potentialRoi.toFixed(2)}%`},{k:"Portfolio Health",v:`${totals.health.toFixed(1)}%`}].map((m)=><div key={m.k} style={{background:"#F1F5F9",color:"#1e3a8a",borderRadius:"14px",padding:"16px",border:"1px solid #CBD5E1",boxShadow:"0 1px 2px rgba(15,23,42,0.08)"}}><div style={{fontSize:"0.77rem",opacity:.95,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{m.k}</div><div style={{fontWeight:800,fontSize:"1.22rem",marginTop:"2px"}}>{m.v}</div></div>)}
+      {[{k:"Total Planned Liquidity",v:totals.liquidity.toFixed(2)},{k:"Potential ROI",v:`${totals.potentialRoi.toFixed(2)}%`},{k:"Portfolio Health",v:`${totals.health.toFixed(1)}%`}].map((m)=><div key={m.k} style={{background:"#DCFCE7",color:"#1e3a8a",borderRadius:"14px",padding:"16px",border:"1px solid #CBD5E1",boxShadow:"0 1px 2px rgba(15,23,42,0.08)"}}><div style={{fontSize:"0.77rem",opacity:.95,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{m.k}</div><div style={{fontWeight:800,fontSize:"1.22rem",marginTop:"2px"}}>{m.v}</div></div>)}
     </div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:"14px"}}>
       <section style={{ background:"#fff", border:"1px solid #E5E7EB", boxShadow:"0 1px 3px rgba(15,23,42,0.08)", borderRadius:"12px", padding:"14px" }}><h3 style={{ margin:"0 0 8px", color:"#312E81" }}>Watchlist (Near Support)</h3>{watchRows.length?watchRows.map((r)=><ZoneRow key={r.inv.id} name={r.inv.name} current={r.current} anchor={r.supportAnchor} distance={((r.current-r.supportAnchor)/r.supportAnchor)*100} />):<EmptyPanel tone="#C7D2FE" message="All clear. No stocks are currently near support."/>}</section>
@@ -4207,6 +4231,7 @@ function StockAnalysisTab() {
   const methodOpts = (db?.settings?.investmentMethods || []).map((v)=>({ value:v, label:v }));
   const stockPortfolios = useMemo(() => portfolios.filter((p) => stockPortfolioIds.has(p.id)), [portfolios, stockPortfolioIds]);
   const [filterStatus, setFilterStatus] = useState("");
+  const [filterTarget, setFilterTarget] = useState("");
   const [filterPortfolio, setFilterPortfolio] = useState("");
   const [filterMethod, setFilterMethod] = useState("");
   const [editingInv, setEditingInv] = useState(null);
@@ -4851,6 +4876,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const [modalMode, setModalMode] = useState("create");
   const [filterPortfolio, setFilterPortfolio] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  const [filterTarget, setFilterTarget] = useState("");
   const [filterInvestment, setFilterInvestment] = useState("");
   const [filterInvestmentMethod, setFilterInvestmentMethod] = useState("");
   const [filterSmartStatus, setFilterSmartStatus] = useState("");
@@ -5654,6 +5680,7 @@ function SettingsTab() {
 
   const sections = [
     { key:"portfolioTypes",        label:t.portfolioTypes,        icon:<FolderOpen size={15}/> },
+    { key:"investmentTargets",    label:t.investmentTargets,    icon:<Tag size={15}/> },
     { key:"riskLevels",            label:t.riskLevels,            icon:<AlertCircle size={15}/> },
     { key:"fundingSources",        label:t.fundingSources,        icon:<Wallet size={15}/> },
     { key:"investmentMethods",    label:t.investmentMethods,    icon:<Landmark size={15}/> },
@@ -6409,7 +6436,11 @@ function StatisticsTab() {
   const investmentStatuses = db?.settings?.investmentStatuses?.length ? db.settings.investmentStatuses : ["Active", "Paused", "Closed"];
   const investmentMethodOpts = (db?.settings?.investmentMethods || []).map((method) => ({ value:method, label:method }));
 
+  const portfolioByIdForStock = new Map((db?.portfolios||[]).map((p)=>[p.id,p]));
   const filteredInvestments = investments.filter((inv) => {
+    const invType = String(inv.investmentType||"").toLowerCase();
+    const parentType = String(portfolioByIdForStock.get(inv.portfolioId)?.type||"").toLowerCase();
+    if (!(invType === "stocks" || parentType === "stocks")) return false;
     if (selectedInvestmentStatus && inv.status !== selectedInvestmentStatus) return false;
     if (selectedPortfolioId && inv.portfolioId !== selectedPortfolioId) return false;
     if (selectedInvestmentId && inv.id !== selectedInvestmentId) return false;
@@ -6699,6 +6730,9 @@ function StatisticsTab() {
               isRTL={isRTL}
             />
           </div>
+        </div>
+        <div style={{ width:"220px", maxWidth:"100%" }}>
+          <Select value={filterTarget} onChange={e=>setFilterTarget(e.target.value)} options={[{ value:"", label:t.investmentTargets }, ...((db?.settings?.investmentTargets||[]).map((v)=>({value:v,label:v})))]} isRTL={isRTL} style={{ ...filterInputCss(isRTL), width:"100%", flex:"0 0 auto" }} />
         </div>
       </div>
 
