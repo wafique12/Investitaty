@@ -2381,7 +2381,7 @@ function LoadingScreen({ message }) {
 // SIDEBAR
 // ═══════════════════════════════════════════════════════════════════════════════
 function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileOpen, setMobileOpen }) {
-  const { user, signOut, syncing, t, font, lang, setLang, hasPermission, currentRole, manualSync, selectedCountry, setSelectedCountry, rawDb } = useApp();
+  const { user, signOut, syncing, t, font, lang, setLang, isRTL, hasPermission, currentRole, manualSync, selectedCountry, setSelectedCountry, rawDb } = useApp();
   const canManageUsers = currentRole === "Owner" || hasPermission("assign_role") || hasPermission("block_user") || hasPermission("unblock_user");
   const countries = rawDb?.settings?.countries || [];
 
@@ -4233,8 +4233,8 @@ function PlanningUnitDashboard() {
   const watchRows = planRows.filter((r) => r.nearSupport && r.supportAnchor > 0);
   const tpRows = planRows.filter((r) => r.nearTarget && r.targetAnchor?.price > 0);
   const dangerRows = planRows.filter((r) => {
-    const nearStopLoss = r.stopLoss > 0 && r.current >= r.stopLoss && ((r.current - r.stopLoss) / r.stopLoss) <= 0.05;
-    const nearSupport = r.supportAnchor > 0 && r.current >= r.supportAnchor && ((r.current - r.supportAnchor) / r.supportAnchor) <= 0.05;
+    const nearStopLoss = r.stopLoss > 0 && r.current >= r.stopLoss && ((r.current - r.stopLoss) / r.stopLoss) <= 0.02;
+    const nearSupport = r.supportAnchor > 0 && r.current >= r.supportAnchor && ((r.current - r.supportAnchor) / r.supportAnchor) <= 0.02;
     return nearStopLoss || nearSupport;
   });
 
@@ -7286,6 +7286,7 @@ function MainApp() {
   return (
     <div style={{
       display:"flex",
+      flexDirection:isRTL?"row-reverse":"row",
       height:"100vh",
       background:T.bgApp,
       fontFamily:font,
@@ -7341,7 +7342,8 @@ function MainApp() {
         flex:1,
         overflowY:"auto",
         height:"100vh",
-        marginLeft:isMobile?0:`${desktopSidebarWidth}px`,
+        marginLeft:isMobile?0:(isRTL?0:`${desktopSidebarWidth}px`),
+        marginRight:isMobile?0:(isRTL?`${desktopSidebarWidth}px`:0),
         padding:isMobile?"16px":"32px 36px",
         maxWidth:"100%",
         display:"flex",
