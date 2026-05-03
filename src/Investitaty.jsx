@@ -2403,7 +2403,7 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileO
   const sidebarContent = (
     <>
       <div style={{ padding:showLabels?"24px 20px 18px":"16px 10px",borderBottom:`1px solid ${T.borderDark}` }}>
-        <div style={{ display:"flex",alignItems:"center",gap:"10px",justifyContent:showLabels?"flex-start":"center" }}>
+        <div style={{ display:"flex",alignItems:"center",gap:"10px",justifyContent:showLabels?(isRTL?"flex-end":"flex-start"):"center" }}>
           {!isMobile && (
             <button onClick={handleHamburger} style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", width:"28px", height:"28px", borderRadius:"6px", border:`1px solid ${T.borderDark}`, background:"transparent", color:T.textSidebar, cursor:"pointer", flexShrink:0 }}>
               <Menu size={14} />
@@ -2432,12 +2432,12 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileO
           if (children) {
             const childActive = activeTab === "planningDashboard" || children.some((c) => c.id === activeTab);
             return <div key={id} style={{ marginBottom:"4px" }}>
-              <div style={{display:"flex",alignItems:"center",gap:"6px"}}><button onClick={() => { setActiveTab("planningDashboard"); if (isMobile) setMobileOpen(false); }} style={{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"9px 12px",minHeight:"38px",borderRadius:"8px",border:"none",background:childActive?T.emeraldBg:"transparent",color:childActive?T.emerald:T.textSidebarMuted,fontSize:"0.83rem",fontWeight:childActive?600:400,cursor:"pointer",textAlign:"left",transition:"all 0.15s",marginBottom:"2px",borderLeft:childActive?`2px solid ${T.emerald}`:"2px solid transparent",justifyContent:"flex-start"}}>{showLabels?<><span style={{display:"flex",alignItems:"center",gap:"10px"}}>{icon}<span>{label}</span></span></>:icon}</button>{showLabels && <button onClick={()=>setPlanningOpen((p)=>!p)} style={{border:"none",background:"transparent",color:T.textSidebarMuted,cursor:"pointer",display:"flex",alignItems:"center",padding:"4px"}}>{planningOpen?<ChevronDown size={13}/>:<ChevronRight size={13}/>}</button>}</div>
-              {planningOpen && showLabels && <div style={{ marginTop:"2px" }}>{children.map((sub)=>{ const active = activeTab===sub.id; return <button key={sub.id} onClick={()=>{setActiveTab(sub.id); if (isMobile) setMobileOpen(false);}} style={{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"9px 12px 9px 32px",minHeight:"38px",borderRadius:"8px",border:"none",background:active?T.emeraldBg:"transparent",color:active?T.emerald:T.textSidebarMuted,fontSize:"0.83rem",fontWeight:active?600:400,cursor:"pointer",textAlign:"left",transition:"all 0.15s",marginBottom:"2px",borderLeft:active?`2px solid ${T.emerald}`:"2px solid transparent",justifyContent:showLabels?"flex-start":"center",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sub.label}</button>; })}</div>}
+              <div style={{display:"flex",alignItems:"center",gap:"6px"}}><button onClick={() => { setActiveTab("planningDashboard"); if (isMobile) setMobileOpen(false); }} style={{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"9px 12px",minHeight:"38px",borderRadius:"8px",border:"none",background:childActive?T.emeraldBg:"transparent",color:childActive?T.emerald:T.textSidebarMuted,fontSize:"0.83rem",fontWeight:childActive?600:400,cursor:"pointer",textAlign:isRTL?"right":"left",transition:"all 0.15s",marginBottom:"2px",borderLeft:isRTL?"2px solid transparent":(childActive?`2px solid ${T.emerald}`:"2px solid transparent"),borderRight:isRTL?(childActive?`2px solid ${T.emerald}`:"2px solid transparent"):"2px solid transparent",justifyContent:"flex-start"}}>{showLabels?<><span style={{display:"flex",alignItems:"center",gap:"10px"}}>{icon}<span>{label}</span></span></>:icon}</button>{showLabels && <button onClick={()=>setPlanningOpen((p)=>!p)} style={{border:"none",background:"transparent",color:T.textSidebarMuted,cursor:"pointer",display:"flex",alignItems:"center",padding:"4px"}}>{planningOpen?<ChevronDown size={13}/>:<ChevronRight size={13}/>}</button>}</div>
+              {planningOpen && showLabels && <div style={{ marginTop:"2px" }}>{children.map((sub)=>{ const active = activeTab===sub.id; return <button key={sub.id} onClick={()=>{setActiveTab(sub.id); if (isMobile) setMobileOpen(false);}} style={{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"9px 12px 9px 32px",minHeight:"38px",borderRadius:"8px",border:"none",background:active?T.emeraldBg:"transparent",color:active?T.emerald:T.textSidebarMuted,fontSize:"0.83rem",fontWeight:active?600:400,cursor:"pointer",textAlign:isRTL?"right":"left",transition:"all 0.15s",marginBottom:"2px",borderLeft:isRTL?"2px solid transparent":(active?`2px solid ${T.emerald}`:"2px solid transparent"),borderRight:isRTL?(active?`2px solid ${T.emerald}`:"2px solid transparent"):"2px solid transparent",justifyContent:showLabels?(isRTL?"flex-end":"flex-start"):"center",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sub.label}</button>; })}</div>}
             </div>;
           }
           const active = activeTab === id;
-          return <button key={id} onClick={() => { setActiveTab(id); if (isMobile) setMobileOpen(false); }} style={{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"9px 12px",borderRadius:"8px",border:"none",background:active?T.emeraldBg:"transparent",color:active?T.emerald:T.textSidebarMuted,fontSize:"0.83rem",fontWeight:active?600:400,cursor:"pointer",textAlign:"left",transition:"all 0.15s",marginBottom:"2px",borderLeft:active?`2px solid ${T.emerald}`:"2px solid transparent",justifyContent:showLabels?"flex-start":"center",}}>{icon}{showLabels && <span>{label}</span>}</button>;
+          return <button key={id} onClick={() => { setActiveTab(id); if (isMobile) setMobileOpen(false); }} style={{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"9px 12px",borderRadius:"8px",border:"none",background:active?T.emeraldBg:"transparent",color:active?T.emerald:T.textSidebarMuted,fontSize:"0.83rem",fontWeight:active?600:400,cursor:"pointer",textAlign:isRTL?"right":"left",transition:"all 0.15s",marginBottom:"2px",borderLeft:isRTL?"2px solid transparent":(active?`2px solid ${T.emerald}`:"2px solid transparent"),borderRight:isRTL?(active?`2px solid ${T.emerald}`:"2px solid transparent"):"2px solid transparent",justifyContent:showLabels?(isRTL?"flex-end":"flex-start"):"center",}}>{icon}{showLabels && <span>{label}</span>}</button>;
         })}
       </nav>
 
@@ -2491,14 +2491,15 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileO
   }
 
   return (
-    <aside dir="ltr" style={{
+    <aside dir={isRTL ? "rtl" : "ltr"} style={{
       position:"fixed",
-      left:0,
+      [isRTL?"right":"left"]:0,
       top:0,
       width:showLabels?"220px":"72px",
       height:"100vh",
       background:T.bgSidebar,
-      borderRight:"none",
+      borderRight:isRTL?"none":`1px solid ${T.borderDark}`,
+      borderLeft:isRTL?`1px solid ${T.borderDark}`:"none",
       display:"flex",
       flexDirection:"column",
       flexShrink:0,
@@ -2521,6 +2522,46 @@ const tx_of_portfolio  = (db, pid) => visible(db.transactions).filter(t=>t.portf
 const curVal = (inv, db) => (parseFloat(inv.quantity)||0) * effectiveCurrentPrice(db, inv);
 const costBasis = (inv) => (parseFloat(inv.quantity)||0)*(parseFloat(inv.purchasePrice)||0);
 const roi = (inv, db) => { const c=costBasis(inv); return c>0?((curVal(inv, db)-c)/c)*100:0; };
+
+const PlanInputField = React.memo(function PlanInputField({ label, value, onCommit, placeholder, showPercent = false, invalid = false, isEditing, isArabic }) {
+  const [draft, setDraft] = useState(value ?? "");
+
+  useEffect(() => {
+    setDraft(value ?? "");
+  }, [value]);
+
+  useEffect(() => {
+    if (!isEditing) return;
+    const t = setTimeout(() => {
+      if ((draft ?? "") !== (value ?? "")) onCommit(draft);
+    }, 140);
+    return () => clearTimeout(t);
+  }, [draft, value, isEditing, onCommit]);
+
+  if (!isEditing) {
+    return (
+      <div className="w-[88px] shrink-0">
+        {label && <div className={`text-[10px] text-slate-500 mb-1 ${isArabic ? "text-right" : "text-left"}`}>{label}</div>}
+        <div className={`h-9 px-2 flex items-center text-[13px] text-[#111827] ${isArabic ? "justify-end text-right" : "justify-start text-left"}`}>{value ? `${value}${showPercent ? "%" : ""}` : "—"}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative w-[88px] shrink-0">
+      {label && <div className={`text-[10px] text-slate-500 mb-1 ${isArabic ? "text-right" : "text-left"}`}>{label}</div>}
+      <input
+        type="number"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        placeholder={placeholder}
+        className={`h-9 w-full rounded-lg border ${invalid ? "border-red-400" : "border-[#E2E8F0]"} focus:border-[#334155] focus:ring-2 focus:ring-slate-100 pl-2 pr-6 text-[13px] text-[#111827] bg-white ${isArabic ? "text-right" : "text-left"}`}
+      />
+      {showPercent && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-500">%</span>}
+    </div>
+  );
+});
+
 const computePlanPrice = (purchasePrice, mode, rawValue, direction = "down") => {
   const price = Number(purchasePrice) || 0;
   const value = Number(rawValue) || 0;
@@ -4209,7 +4250,7 @@ function PlanningUnitDashboard() {
     </div>
     <section style={{marginTop:"14px", background:"#fff", border:"1px solid #E5E7EB", boxShadow:"0 1px 3px rgba(15,23,42,0.08)", borderRadius:"12px", padding:"14px"}}>
       <h3 style={{marginTop:0,color:"#111827"}}>DCA Action Tracker</h3>
-      <table style={{width:"100%",borderCollapse:"collapse",fontSize:"0.86rem"}}><thead><tr style={{ borderBottom:"1px solid #E5E7EB" }}><th style={{textAlign:"left",padding:"10px 8px",color:"#4B5563"}}>Stock</th><th style={{textAlign:"left",padding:"10px 8px",color:"#4B5563"}}>Triggered Levels</th><th style={{textAlign:"left",padding:"10px 8px",color:"#4B5563"}}>Current Price</th></tr></thead><tbody>{planRows.filter((r)=>r.pendingDca.length).map((r)=><tr key={r.inv.id} style={{ borderBottom:"1px solid #F1F5F9" }}><td style={{padding:"11px 8px",color:"#111827",fontWeight:600}}>{r.inv.name}</td><td style={{padding:"11px 8px",color:"#4B5563"}}>{r.pendingDca.length}</td><td style={{padding:"11px 8px",color:"#111827",fontWeight:700}}>{r.current.toFixed(2)}</td></tr>)}</tbody></table>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:"0.86rem"}}><thead><tr style={{ borderBottom:"1px solid #E5E7EB" }}><th style={{textAlign:isRTL?"right":"left",padding:"10px 8px",color:"#4B5563"}}>Stock</th><th style={{textAlign:isRTL?"right":"left",padding:"10px 8px",color:"#4B5563"}}>Triggered Levels</th><th style={{textAlign:isRTL?"right":"left",padding:"10px 8px",color:"#4B5563"}}>Current Price</th></tr></thead><tbody>{planRows.filter((r)=>r.pendingDca.length).map((r)=><tr key={r.inv.id} style={{ borderBottom:"1px solid #F1F5F9" }}><td style={{padding:"11px 8px",color:"#111827",fontWeight:600}}>{r.inv.name}</td><td style={{padding:"11px 8px",color:"#4B5563"}}>{r.pendingDca.length}</td><td style={{padding:"11px 8px",color:"#111827",fontWeight:700}}>{r.current.toFixed(2)}</td></tr>)}</tbody></table>
     </section>
   </div>;
 }
@@ -4575,35 +4616,6 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
     </div>
   );
 
-  const InputField = React.memo(function InputField({ label, value, onCommit, placeholder, showPercent = false, invalid = false }) {
-    const [draft, setDraft] = useState(value ?? "");
-    useEffect(() => { setDraft(value ?? ""); }, [value]);
-
-    if (!isEditing) {
-      return (
-        <div className="w-[88px] shrink-0">
-          {label && <div className={`text-[10px] text-slate-500 mb-1 ${isArabic ? "text-right" : "text-left"}`}>{label}</div>}
-          <div className={`h-9 px-2 flex items-center text-[13px] text-[#111827] ${isArabic ? "justify-end text-right" : "justify-start text-left"}`}>{value ? `${value}${showPercent ? "%" : ""}` : "—"}</div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="relative w-[88px] shrink-0">
-        {label && <div className={`text-[10px] text-slate-500 mb-1 ${isArabic ? "text-right" : "text-left"}`}>{label}</div>}
-        <input
-          type="number"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={() => onCommit(draft)}
-          placeholder={placeholder}
-          className={`h-9 w-full rounded-lg border ${invalid ? "border-red-400" : "border-[#E2E8F0]"} focus:border-[#334155] focus:ring-2 focus:ring-slate-100 pl-2 pr-6 text-[13px] text-[#111827] bg-white ${isArabic ? "text-right" : "text-left"}`}
-        />
-        {showPercent && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-500">%</span>}
-      </div>
-    );
-  });
-
   const StatusIcon = ({ executed, onToggle }) => (
     <div className="ml-1 flex items-center gap-1.5 shrink-0">
       <button
@@ -4626,8 +4638,8 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
   const RowItem = ({ mode, fromValue, toValue, onModeChange, onFromCommit, onToCommit, result, danger = false, showTo = true, fromInvalid = false, toInvalid = false }) => (
     <div className="flex items-end gap-2 min-w-0">
       <ToggleSwitch value={mode} onChange={onModeChange} />
-      <InputField label={labels.from} value={fromValue} onCommit={onFromCommit} placeholder={labels.fromPlaceholder} showPercent={mode === "percentage"} invalid={fromInvalid} />
-      {showTo && <InputField label={labels.to} value={toValue} onCommit={onToCommit} placeholder={labels.toPlaceholder} showPercent={mode === "percentage"} invalid={toInvalid} />}
+      <PlanInputField isEditing={isEditing} isArabic={isArabic} label={labels.from} value={fromValue} onCommit={onFromCommit} placeholder={labels.fromPlaceholder} showPercent={mode === "percentage"} invalid={fromInvalid} />
+      {showTo && <PlanInputField isEditing={isEditing} isArabic={isArabic} label={labels.to} value={toValue} onCommit={onToCommit} placeholder={labels.toPlaceholder} showPercent={mode === "percentage"} invalid={toInvalid} />}
       <span className={`ml-auto text-[13px] font-semibold shrink-0 ${danger ? "text-red-500" : "text-green-600"}`}>{result}</span>
     </div>
   );
@@ -4729,8 +4741,8 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
                     <div key={row._rowId} className="grid grid-cols-[40px_64px_88px_88px_minmax(120px,1fr)_auto_auto] items-end gap-2 mb-3">
                       <span className="w-10 text-[13px] font-semibold text-gray-900 shrink-0">L{idx + 1}</span>
                       <ToggleSwitch value={mode} onChange={(next) => updateListById("dcaLevels", row._rowId, "mode", next)} />
-                      <InputField label={labels.value} value={row.value} onCommit={(v) => updateListById("dcaLevels", row._rowId, "value", v)} placeholder={placeholderByMode(mode)} showPercent={mode === "percentage"} />
-                      <InputField label={labels.qty} value={row.allocation} onCommit={(v) => updateListById("dcaLevels", row._rowId, "allocation", v)} placeholder={labels.quantityPlaceholder} />
+                      <PlanInputField isEditing={isEditing} isArabic={isArabic} label={labels.value} value={row.value} onCommit={(v) => updateListById("dcaLevels", row._rowId, "value", v)} placeholder={placeholderByMode(mode)} showPercent={mode === "percentage"} />
+                      <PlanInputField isEditing={isEditing} isArabic={isArabic} label={labels.qty} value={row.allocation} onCommit={(v) => updateListById("dcaLevels", row._rowId, "allocation", v)} placeholder={labels.quantityPlaceholder} />
                       <span className="w-full text-[13px] font-semibold text-green-600 shrink-0 text-right">{fmtSar(calcValue)}</span>
                       <StatusIcon executed={Boolean(row.executed)} onToggle={(next) => updateListById("dcaLevels", row._rowId, "executed", next)} />
                       {isEditing && <button type="button" onClick={() => removeRowById("dcaLevels", row._rowId)} className="h-8 w-8 rounded-lg border border-gray-200 text-red-500 flex items-center justify-center hover:bg-red-50 shrink-0" data-icon-tooltip={labels.delete}><Trash2 size={14} /></button>}
@@ -4750,8 +4762,8 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
                     <div key={row._rowId} className="grid grid-cols-[40px_64px_88px_88px_minmax(120px,1fr)_auto_auto] items-end gap-2 mb-3">
                       <span className="w-10 text-[13px] font-semibold text-gray-900 shrink-0">T{idx + 1}</span>
                       <ToggleSwitch value={mode} onChange={(next) => updateListById("takeProfitTargets", row._rowId, "mode", next)} />
-                      <InputField label={labels.value} value={row.value} onCommit={(v) => updateListById("takeProfitTargets", row._rowId, "value", v)} placeholder={placeholderByMode(mode)} showPercent={mode === "percentage"} />
-                      <InputField label={labels.qty} value={row.allocation} onCommit={(v) => updateListById("takeProfitTargets", row._rowId, "allocation", v)} placeholder={labels.quantityPlaceholder} />
+                      <PlanInputField isEditing={isEditing} isArabic={isArabic} label={labels.value} value={row.value} onCommit={(v) => updateListById("takeProfitTargets", row._rowId, "value", v)} placeholder={placeholderByMode(mode)} showPercent={mode === "percentage"} />
+                      <PlanInputField isEditing={isEditing} isArabic={isArabic} label={labels.qty} value={row.allocation} onCommit={(v) => updateListById("takeProfitTargets", row._rowId, "allocation", v)} placeholder={labels.quantityPlaceholder} />
                       <span className="w-full text-[13px] font-semibold text-green-600 shrink-0 text-right">{fmtSar(calcValue)}</span>
                       <StatusIcon executed={Boolean(row.executed)} onToggle={(next) => updateListById("takeProfitTargets", row._rowId, "executed", next)} />
                       {isEditing && <button type="button" onClick={() => removeRowById("takeProfitTargets", row._rowId)} className="h-8 w-8 rounded-lg border border-gray-200 text-red-500 flex items-center justify-center hover:bg-red-50 shrink-0" data-icon-tooltip={labels.delete}><Trash2 size={14} /></button>}
@@ -6330,7 +6342,7 @@ function FundingLegendGrid({ rows, currency = "USD", textColor = "#dbeafe", valu
                 color:textColor,
                 opacity:isHidden ? 0.45 : 1,
                 textDecoration:isHidden ? "line-through" : "none",
-                textAlign:"left",
+                textAlign:isRTL?"right":"left",
               }}
             >
               <span style={{ width:"10px", height:"10px", borderRadius:"999px", background:row.color }} />
@@ -7038,12 +7050,12 @@ function UserManagementTab() {
         <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.82rem" }}>
           <thead>
             <tr style={{ background:"#f8fafc", borderBottom:`1px solid ${T.border}` }}>
-              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersName}</th>
-              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersEmail}</th>
-              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersLastLogin}</th>
-              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersRole}</th>
-              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersStatus}</th>
-              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersActions}</th>
+              <th style={{ textAlign:isRTL?"right":"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersName}</th>
+              <th style={{ textAlign:isRTL?"right":"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersEmail}</th>
+              <th style={{ textAlign:isRTL?"right":"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersLastLogin}</th>
+              <th style={{ textAlign:isRTL?"right":"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersRole}</th>
+              <th style={{ textAlign:isRTL?"right":"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersStatus}</th>
+              <th style={{ textAlign:isRTL?"right":"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersActions}</th>
             </tr>
           </thead>
           <tbody>
