@@ -2572,9 +2572,12 @@ const PlanInputField = React.memo(function PlanInputField({ id, label, value, on
           const next = e.target.value;
           selectionRef.current = { start: e.target.selectionStart, end: e.target.selectionEnd };
           setDraft(next);
-          onCommit(next);
         }}
-        onBlur={() => setFocused(false)}
+        onBlur={(e) => {
+          setFocused(false);
+          const next = e.target.value;
+          if ((next ?? "") !== (value ?? "")) onCommit(next);
+        }}
         placeholder={placeholder}
         className={`h-9 w-full rounded-lg border ${invalid ? "border-red-400" : "border-[#E2E8F0]"} focus:border-[#334155] focus:ring-2 focus:ring-slate-100 pl-2 pr-6 text-[13px] text-[#111827] bg-white ${isArabic ? "text-right" : "text-left"}`}
       />
