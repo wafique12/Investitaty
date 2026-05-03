@@ -3119,7 +3119,6 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
   const [editItem, setEditItem] = useState(null);
   const [modalMode, setModalMode] = useState("create");
   const [filterStatus, setFilterStatus] = useState("");
-  const [filterTarget, setFilterTarget] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [collapsedPortfolios, setCollapsedPortfolios] = useState({});
@@ -3367,15 +3366,18 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
               <div style={{ display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:"12px" }}>
                 <FormField label={t.type} required><Select value={form.type} onChange={e=>{f("type")(e.target.value);setInvalidFields(prev=>({...prev,type:false}));}} invalid={invalidFields.type} options={db?.settings?.portfolioTypes||[]} placeholder={t.selectType} isRTL={isRTL}/></FormField>
                 <FormField label={t.investmentTargets} required><Select value={form.target} onChange={e=>{f("target")(e.target.value);setInvalidFields(prev=>({...prev,target:false}));}} invalid={invalidFields.target} options={db?.settings?.investmentTargets||[]} placeholder={t.investmentTargets} isRTL={isRTL}/></FormField>
+              </div>
+              <div style={{ display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:"12px" }}>
                 <FormField label={t.currentPrice}><Input type="number" value={form.current_price} onChange={e=>f("current_price")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
+                <FormField label={t.currency} required><Select value={form.currency} onChange={e=>{f("currency")(e.target.value);setInvalidFields(prev=>({...prev,currency:false}));}} invalid={invalidFields.currency} options={db?.settings?.currencies||[]} placeholder={t.selectCurrency} isRTL={isRTL}/></FormField>
               </div>
               <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
                 <FormField label={t.risk} required><Select value={form.risk} onChange={e=>{f("risk")(e.target.value);setInvalidFields(prev=>({...prev,risk:false}));}} invalid={invalidFields.risk} options={db?.settings?.riskLevels||[]} placeholder={t.selectRisk} isRTL={isRTL}/></FormField>
                 <FormField label={t.status} required><Select value={form.status} onChange={e=>{f("status")(e.target.value);setInvalidFields(prev=>({...prev,status:false}));}} invalid={invalidFields.status} options={statusOpts} isRTL={isRTL}/></FormField>
               </div>
               <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
-                <FormField label={t.currency} required><Select value={form.currency} onChange={e=>{f("currency")(e.target.value);setInvalidFields(prev=>({...prev,currency:false}));}} invalid={invalidFields.currency} options={db?.settings?.currencies||[]} placeholder={t.selectCurrency} isRTL={isRTL}/></FormField>
                 <FormField label="Color"><Input type="color" value={form.color} onChange={e=>f("color")(e.target.value)} isRTL={isRTL}/></FormField>
+                <div />
               </div>
               <FormField label={t.notes}><Input value={form.notes} onChange={e=>f("notes")(e.target.value)} isRTL={isRTL} placeholder={`(${t.optional})`}/></FormField>
               {formError && <div style={{ color:T.negative, fontSize:"0.78rem", marginBottom:"10px" }}>{formError}</div>}
@@ -3661,11 +3663,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     setFilterPortfolio(navigationFilter.portfolioId);
     if (navigationFilter?.status) setFilterStatus(navigationFilter.status);
   }, [navigationFilter]);
-  const portfolioByIdForStock = new Map((db?.portfolios||[]).map((p)=>[p.id,p]));
   const filteredInvestments = investments.filter((inv) => {
-    const invType = String(inv.investmentType||"").toLowerCase();
-    const parentType = String(portfolioByIdForStock.get(inv.portfolioId)?.type||"").toLowerCase();
-    if (!(invType === "stocks" || parentType === "stocks")) return false;
     const startRaw = inv.startDate || inv.purchaseDate || "";
     const endRaw = inv.endDate || "";
     const normalizedTitle = (inv.name || "").toLowerCase();
@@ -4192,17 +4190,21 @@ function PlanningUnitDashboard() {
 
   const watchRows = planRows.filter((r) => r.nearSupport && r.supportAnchor > 0);
   const tpRows = planRows.filter((r) => r.nearTarget && r.targetAnchor?.price > 0);
-  const dangerRows = planRows.filter((r) => r.current < r.stopLoss && r.stopLoss > 0);
+  const dangerRows = planRows.filter((r) => {
+    const nearStopLoss = r.stopLoss > 0 && r.current >= r.stopLoss && ((r.current - r.stopLoss) / r.stopLoss) <= 0.02;
+    const nearSupport = r.supportAnchor > 0 && r.current >= r.supportAnchor && ((r.current - r.supportAnchor) / r.supportAnchor) <= 0.02;
+    return nearStopLoss || nearSupport;
+  });
 
   return <div dir={isRTL?"rtl":"ltr"} style={{fontFamily:font}}>
     <h1 style={{ margin:"0 0 16px", fontSize:"1.9rem", fontWeight:800, color:"#111827" }}>Planning Dashboard</h1>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:"12px",marginBottom:"18px"}}>
-      {[{k:"Total Planned Liquidity",v:totals.liquidity.toFixed(2)},{k:"Potential ROI",v:`${totals.potentialRoi.toFixed(2)}%`},{k:"Portfolio Health",v:`${totals.health.toFixed(1)}%`}].map((m)=><div key={m.k} style={{background:"#DCFCE7",color:"#1e3a8a",borderRadius:"14px",padding:"16px",border:"1px solid #CBD5E1",boxShadow:"0 1px 2px rgba(15,23,42,0.08)"}}><div style={{fontSize:"0.77rem",opacity:.95,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{m.k}</div><div style={{fontWeight:800,fontSize:"1.22rem",marginTop:"2px"}}>{m.v}</div></div>)}
+      {[{k:"Total Planned Liquidity",v:totals.liquidity.toFixed(2)},{k:"Potential ROI",v:`${totals.potentialRoi.toFixed(2)}%`},{k:"Portfolio Health",v:`${totals.health.toFixed(1)}%`}].map((m)=><div key={m.k} style={{background:"rgb(255, 255, 255)",color:"#1e3a8a",borderRadius:"14px",padding:"16px",border:"1px solid #CBD5E1",boxShadow:"0 1px 2px rgba(15,23,42,0.08)"}}><div style={{fontSize:"0.77rem",opacity:.95,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{m.k}</div><div style={{fontWeight:800,fontSize:"1.22rem",marginTop:"2px"}}>{m.v}</div></div>)}
     </div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:"14px"}}>
       <section style={{ background:"#fff", border:"1px solid #E5E7EB", boxShadow:"0 1px 3px rgba(15,23,42,0.08)", borderRadius:"12px", padding:"14px" }}><h3 style={{ margin:"0 0 8px", color:"#312E81" }}>Watchlist (Near Support)</h3>{watchRows.length?watchRows.map((r)=><ZoneRow key={r.inv.id} name={r.inv.name} current={r.current} anchor={r.supportAnchor} distance={((r.current-r.supportAnchor)/r.supportAnchor)*100} />):<EmptyPanel tone="#C7D2FE" message="All clear. No stocks are currently near support."/>}</section>
       <section style={{ background:"#fff", border:"1px solid #E5E7EB", boxShadow:"0 1px 3px rgba(15,23,42,0.08)", borderRadius:"12px", padding:"14px" }}><h3 style={{ margin:"0 0 8px", color:"#166534" }}>Take Profit (Near Targets)</h3>{tpRows.length?tpRows.map((r)=><ZoneRow key={r.inv.id} name={r.inv.name} current={r.current} anchor={r.targetAnchor.price} distance={((r.targetAnchor.price-r.current)/r.targetAnchor.price)*100} />):<EmptyPanel tone="#BBF7D0" message="All clear. No take-profit targets are near."/>}</section>
-      <section style={{ background:"#fff", border:"1px solid #E5E7EB", boxShadow:"0 1px 3px rgba(15,23,42,0.08)", borderRadius:"12px", padding:"14px" }}><h3 style={{ margin:"0 0 8px", color:"#9F1239" }}>Danger Zone</h3>{dangerRows.length?dangerRows.map((r)=><ZoneRow key={r.inv.id} name={r.inv.name} current={r.current} anchor={r.stopLoss} distance={r.dangerDistance} />):<EmptyPanel tone="#FECDD3" message="All clear. No stop-loss breaks detected."/>}</section>
+      <section style={{ background:"#fff", border:"1px solid #E5E7EB", boxShadow:"0 1px 3px rgba(15,23,42,0.08)", borderRadius:"12px", padding:"14px" }}><h3 style={{ margin:"0 0 8px", color:"#9F1239" }}>Danger Zone</h3>{dangerRows.length?dangerRows.map((r)=><ZoneRow key={r.inv.id} name={r.inv.name} current={r.current} anchor={r.stopLoss > 0 ? r.stopLoss : r.supportAnchor} distance={r.stopLoss > 0 ? ((r.current-r.stopLoss)/r.stopLoss)*100 : ((r.current-r.supportAnchor)/r.supportAnchor)*100} />):<EmptyPanel tone="#FECDD3" message="All clear. No positions are near stop-loss/support zones."/>}</section>
     </div>
     <section style={{marginTop:"14px", background:"#fff", border:"1px solid #E5E7EB", boxShadow:"0 1px 3px rgba(15,23,42,0.08)", borderRadius:"12px", padding:"14px"}}>
       <h3 style={{marginTop:0,color:"#111827"}}>DCA Action Tracker</h3>
@@ -4309,7 +4311,7 @@ function StockAnalysisTab() {
                     <td style={{ padding:"12px 10px",textAlign:"right" }}>
                       <div style={{ display:"flex",gap:"4px",justifyContent:"flex-end" }}>
                         <button data-icon-tooltip={t.addPlan} onClick={(e) => { e.stopPropagation(); setEditingInv(inv); }} style={{ background:"none",border:"none",cursor:"pointer",color:T.emerald,padding:"4px",borderRadius:"6px",display:"flex" }}><Plus size={14}/></button>
-                        <button data-icon-tooltip={planExists ? "View / Edit Plan" : t.noPlanSaved} onClick={(e) => { e.stopPropagation(); setExpandedPlanRow(isExpanded ? null : inv.id); }} style={{ background:"none",border:"none",cursor:"pointer",color:planExists ? T.info : T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}><Eye size={14}/></button>
+                        <button data-icon-tooltip={planExists ? "View / Edit Plan" : t.noPlanSaved} onClick={(e) => { e.stopPropagation(); setEditingInv(inv); }} style={{ background:"none",border:"none",cursor:"pointer",color:planExists ? T.info : T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}><Eye size={14}/></button>
                       </div>
                     </td>
                   </tr>
@@ -4317,7 +4319,13 @@ function StockAnalysisTab() {
                     <tr>
                       <td colSpan={10} style={{ padding:"0", background:T.bgApp }}>
                         <div style={{ padding:"14px 16px" }}>
-                          {planExists ? <TradingPlanInlineView investment={inv} /> : <div style={{ color:T.textMuted, fontSize:"0.82rem" }}>{t.noPlanSaved}</div>}
+                          {planExists ? (
+                            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"10px" }}>
+                              <div style={{ background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:"10px", padding:"10px" }}>
+                                <TradingPlanInlineView investment={inv} />
+                              </div>
+                            </div>
+                          ) : <div style={{ color:T.textMuted, fontSize:"0.82rem" }}>{t.noPlanSaved}</div>}
                         </div>
                       </td>
                     </tr>
