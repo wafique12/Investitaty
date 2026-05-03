@@ -2523,7 +2523,9 @@ const curVal = (inv, db) => (parseFloat(inv.quantity)||0) * effectiveCurrentPric
 const costBasis = (inv) => (parseFloat(inv.quantity)||0)*(parseFloat(inv.purchasePrice)||0);
 const roi = (inv, db) => { const c=costBasis(inv); return c>0?((curVal(inv, db)-c)/c)*100:0; };
 
-const PlanInputField = React.memo(function PlanInputField({ label, value, onCommit, placeholder, showPercent = false, invalid = false, isEditing, isArabic }) {
+const PlanInputField = React.memo(function PlanInputField({ id, label, value, onCommit, placeholder, showPercent = false, invalid = false, isEditing, isArabic }) {
+  const inputId = useId();
+  const stableId = id || inputId;
   const [draft, setDraft] = useState(value ?? "");
 
   useEffect(() => {
@@ -2534,14 +2536,14 @@ const PlanInputField = React.memo(function PlanInputField({ label, value, onComm
     if (!isEditing) return;
     const t = setTimeout(() => {
       if ((draft ?? "") !== (value ?? "")) onCommit(draft);
-    }, 140);
+    }, 300);
     return () => clearTimeout(t);
   }, [draft, value, isEditing, onCommit]);
 
   if (!isEditing) {
     return (
       <div className="w-[88px] shrink-0">
-        {label && <div className={`text-[10px] text-slate-500 mb-1 ${isArabic ? "text-right" : "text-left"}`}>{label}</div>}
+        {label && <label htmlFor={stableId} className={`text-[10px] text-slate-500 mb-1 ${isArabic ? "text-right" : "text-left"}`}>{label}</label>}
         <div className={`h-9 px-2 flex items-center text-[13px] text-[#111827] ${isArabic ? "justify-end text-right" : "justify-start text-left"}`}>{value ? `${value}${showPercent ? "%" : ""}` : "—"}</div>
       </div>
     );
@@ -2549,8 +2551,9 @@ const PlanInputField = React.memo(function PlanInputField({ label, value, onComm
 
   return (
     <div className="relative w-[88px] shrink-0">
-      {label && <div className={`text-[10px] text-slate-500 mb-1 ${isArabic ? "text-right" : "text-left"}`}>{label}</div>}
+      {label && <label htmlFor={stableId} className={`text-[10px] text-slate-500 mb-1 ${isArabic ? "text-right" : "text-left"}`}>{label}</label>}
       <input
+        id={stableId}
         type="number"
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
@@ -3702,8 +3705,8 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
 
   useEffect(() => {
     if (!navigationFilter?.portfolioId) return;
-    setFilterPortfolio(navigationFilter.portfolioId);
-    if (navigationFilter?.status) setFilterStatus(navigationFilter.status);
+    setFilterPortfolio((prev) => prev === navigationFilter.portfolioId ? prev : navigationFilter.portfolioId);
+    if (navigationFilter?.status) setFilterStatus((prev) => prev === navigationFilter.status ? prev : navigationFilter.status);
   }, [navigationFilter]);
   const filteredInvestments = investments.filter((inv) => {
     const startRaw = inv.startDate || inv.purchaseDate || "";
@@ -4638,8 +4641,8 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
   const RowItem = ({ mode, fromValue, toValue, onModeChange, onFromCommit, onToCommit, result, danger = false, showTo = true, fromInvalid = false, toInvalid = false }) => (
     <div className="flex items-end gap-2 min-w-0">
       <ToggleSwitch value={mode} onChange={onModeChange} />
-      <PlanInputField isEditing={isEditing} isArabic={isArabic} label={labels.from} value={fromValue} onCommit={onFromCommit} placeholder={labels.fromPlaceholder} showPercent={mode === "percentage"} invalid={fromInvalid} />
-      {showTo && <PlanInputField isEditing={isEditing} isArabic={isArabic} label={labels.to} value={toValue} onCommit={onToCommit} placeholder={labels.toPlaceholder} showPercent={mode === "percentage"} invalid={toInvalid} />}
+      <PlanInputField isEditing={isEditing} isArabic={isArabic} id={`row-from-${label}` } label={labels.from} value={fromValue} onCommit={onFromCommit} placeholder={labels.fromPlaceholder} showPercent={mode === "percentage"} invalid={fromInvalid} />
+      {showTo && <PlanInputField isEditing={isEditing} isArabic={isArabic} id={`row-to-${label}` } label={labels.to} value={toValue} onCommit={onToCommit} placeholder={labels.toPlaceholder} showPercent={mode === "percentage"} invalid={toInvalid} />}
       <span className={`ml-auto text-[13px] font-semibold shrink-0 ${danger ? "text-red-500" : "text-green-600"}`}>{result}</span>
     </div>
   );
@@ -4741,8 +4744,8 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
                     <div key={row._rowId} className="grid grid-cols-[40px_64px_88px_88px_minmax(120px,1fr)_auto_auto] items-end gap-2 mb-3">
                       <span className="w-10 text-[13px] font-semibold text-gray-900 shrink-0">L{idx + 1}</span>
                       <ToggleSwitch value={mode} onChange={(next) => updateListById("dcaLevels", row._rowId, "mode", next)} />
-                      <PlanInputField isEditing={isEditing} isArabic={isArabic} label={labels.value} value={row.value} onCommit={(v) => updateListById("dcaLevels", row._rowId, "value", v)} placeholder={placeholderByMode(mode)} showPercent={mode === "percentage"} />
-                      <PlanInputField isEditing={isEditing} isArabic={isArabic} label={labels.qty} value={row.allocation} onCommit={(v) => updateListById("dcaLevels", row._rowId, "allocation", v)} placeholder={labels.quantityPlaceholder} />
+                      <PlanInputField isEditing={isEditing} isArabic={isArabic} id={`dca-value-${row._rowId}`} label={labels.value} value={row.value} onCommit={(v) => updateListById("dcaLevels", row._rowId, "value", v)} placeholder={placeholderByMode(mode)} showPercent={mode === "percentage"} />
+                      <PlanInputField isEditing={isEditing} isArabic={isArabic} id={`dca-qty-${row._rowId}`} label={labels.qty} value={row.allocation} onCommit={(v) => updateListById("dcaLevels", row._rowId, "allocation", v)} placeholder={labels.quantityPlaceholder} />
                       <span className="w-full text-[13px] font-semibold text-green-600 shrink-0 text-right">{fmtSar(calcValue)}</span>
                       <StatusIcon executed={Boolean(row.executed)} onToggle={(next) => updateListById("dcaLevels", row._rowId, "executed", next)} />
                       {isEditing && <button type="button" onClick={() => removeRowById("dcaLevels", row._rowId)} className="h-8 w-8 rounded-lg border border-gray-200 text-red-500 flex items-center justify-center hover:bg-red-50 shrink-0" data-icon-tooltip={labels.delete}><Trash2 size={14} /></button>}
@@ -4762,8 +4765,8 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
                     <div key={row._rowId} className="grid grid-cols-[40px_64px_88px_88px_minmax(120px,1fr)_auto_auto] items-end gap-2 mb-3">
                       <span className="w-10 text-[13px] font-semibold text-gray-900 shrink-0">T{idx + 1}</span>
                       <ToggleSwitch value={mode} onChange={(next) => updateListById("takeProfitTargets", row._rowId, "mode", next)} />
-                      <PlanInputField isEditing={isEditing} isArabic={isArabic} label={labels.value} value={row.value} onCommit={(v) => updateListById("takeProfitTargets", row._rowId, "value", v)} placeholder={placeholderByMode(mode)} showPercent={mode === "percentage"} />
-                      <PlanInputField isEditing={isEditing} isArabic={isArabic} label={labels.qty} value={row.allocation} onCommit={(v) => updateListById("takeProfitTargets", row._rowId, "allocation", v)} placeholder={labels.quantityPlaceholder} />
+                      <PlanInputField isEditing={isEditing} isArabic={isArabic} id={`tp-value-${row._rowId}`} label={labels.value} value={row.value} onCommit={(v) => updateListById("takeProfitTargets", row._rowId, "value", v)} placeholder={placeholderByMode(mode)} showPercent={mode === "percentage"} />
+                      <PlanInputField isEditing={isEditing} isArabic={isArabic} id={`tp-qty-${row._rowId}`} label={labels.qty} value={row.allocation} onCommit={(v) => updateListById("takeProfitTargets", row._rowId, "allocation", v)} placeholder={labels.quantityPlaceholder} />
                       <span className="w-full text-[13px] font-semibold text-green-600 shrink-0 text-right">{fmtSar(calcValue)}</span>
                       <StatusIcon executed={Boolean(row.executed)} onToggle={(next) => updateListById("takeProfitTargets", row._rowId, "executed", next)} />
                       {isEditing && <button type="button" onClick={() => removeRowById("takeProfitTargets", row._rowId)} className="h-8 w-8 rounded-lg border border-gray-200 text-red-500 flex items-center justify-center hover:bg-red-50 shrink-0" data-icon-tooltip={labels.delete}><Trash2 size={14} /></button>}
@@ -6452,6 +6455,7 @@ function StatisticsTab() {
   const [selectedPortfolioId, setSelectedPortfolioId] = useState("");
   const [selectedInvestmentId, setSelectedInvestmentId] = useState("");
   const [selectedInvestmentMethod, setSelectedInvestmentMethod] = useState("");
+  const [filterTarget, setFilterTarget] = useState("");
   const [fundingInvestmentsModal, setFundingInvestmentsModal] = useState(null);
   const [fundingLegendExpanded, setFundingLegendExpanded] = useState(false);
   const [hiddenFundingSources, setHiddenFundingSources] = useState(() => new Set());
@@ -6473,6 +6477,8 @@ function StatisticsTab() {
     if (selectedPortfolioId && inv.portfolioId !== selectedPortfolioId) return false;
     if (selectedInvestmentId && inv.id !== selectedInvestmentId) return false;
     if (selectedInvestmentMethod && (inv.investmentMethod || "") !== selectedInvestmentMethod) return false;
+    const portfolioTarget = portfolioByIdForStock.get(inv.portfolioId)?.target || "";
+    if (filterTarget && portfolioTarget !== filterTarget && (inv.target || "") !== filterTarget) return false;
     return true;
   });
   const filteredInvestmentIds = new Set(filteredInvestments.map((inv) => inv.id));
@@ -6662,7 +6668,7 @@ function StatisticsTab() {
       if (next.size === prev.size) return prev;
       return next;
     });
-    setFundingLegendExpanded(false);
+    setFundingLegendExpanded((prev) => (prev ? false : prev));
   }, [fundingLegendDataKey]);
 
   const riskCapitalData = [
