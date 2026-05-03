@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext, useCallback, useRef, useMemo } from "react";
+import React, { useState, useEffect, createContext, useContext, useCallback, useRef, useMemo, useId } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import {
   X, Trash2, Check, Edit3, MoreVertical, Zap, BookOpen,
@@ -57,6 +57,8 @@ const INITIAL_SCHEMA = {
     riskLevels:       ["Low", "Medium", "High", "Speculative"],
     fundingSources:   ["Personal Savings", "Bank Loan", "Brokerage", "Exchange", "Partner Capital"],
     investmentMethods: ["Lump Sum", "DCA", "SIP", "Manual"],
+    investmentTargets: ["Growth", "Income", "Balanced"],
+    investmentTypes: ["Income", "Growth", "Balanced", "Speculative"],
     investmentStatuses: ["Active", "Paused", "Closed"],
     transactionStatuses: ["recorded", "scheduled", "cancelled"],
     transactionCategories: ["Rental Income", "Dividend", "Capital Gain", "Interest", "Maintenance", "Management Fee", "Tax", "Insurance", "Other"],
@@ -94,6 +96,7 @@ const TRANSLATIONS = {
     portfolios: "Portfolios",
     investments: "Investments",
     transactions: "Transactions",
+    stockAnalysis: "Stock Analysis",
     statistics: "Statistics",
     settings: "Settings",
     goodMorning: "Good morning",
@@ -103,6 +106,8 @@ const TRANSLATIONS = {
     totalActivePrincipal: "Total Active Principal",
     totalAnnualIncomeYear: "Total Annual Income {year}",
     expectedAnnualIncomeYear: "Expected Annual Income {year}",
+    achievedVsExpectedIncome: "Percentage of achieved income vs. expected target.",
+    expectedVsPrincipalIncome: "Expected income ratio vs total active principal.",
     totalIncome: "Total Income",
     incomeYearLabel: "Income {year}",
     collectedTransactions: "collected transactions",
@@ -180,6 +185,9 @@ const TRANSLATIONS = {
     returnLabel: "Back",
     smartBackToInvestments: "Return to Investments",
     viewTransactions: "View transactions",
+    addPlan: "Add Plan",
+    viewPlan: "View Plan",
+    noPlanSaved: "No plan saved yet.",
     viewInvestmentsTooltip: "View Investments",
     viewDetails: "View details",
     editInModal: "Edit",
@@ -218,6 +226,7 @@ const TRANSLATIONS = {
     startDate: "Start Date",
     endDate: "End Date",
     investmentMethod: "Investment Method",
+    investmentType: "Investment Type",
     year: "Year",
     month: "Month",
     allMonths: "All Months",
@@ -261,6 +270,10 @@ const TRANSLATIONS = {
     settingsTitle: "Settings & Lookup Categories",
     settingsDesc: "Manage dropdown options used across all forms",
     portfolioTypes: "Portfolio Types",
+    investmentTargets: "Investment Target",
+    growth: "Growth",
+    incomeTarget: "Income",
+    balanced: "Balanced",
     riskLevels: "Risk Levels",
     fundingSources: "Funding Sources",
     investmentMethods: "Investment Methods",
@@ -364,8 +377,12 @@ const TRANSLATIONS = {
     portfolios: "المحافظ",
     investments: "الاستثمارات",
     transactions: "المعاملات",
+    stockAnalysis: "تحليل الأسهم",
     statistics: "الإحصائيات",
     settings: "الإعدادات",
+    addPlan: "إضافة خطة",
+    viewPlan: "عرض الخطة",
+    noPlanSaved: "لا توجد خطة محفوظة بعد.",
     goodMorning: "صباح الخير",
     goodAfternoon: "مساء الخير",
     goodEvening: "طاب مساؤك",
@@ -373,6 +390,8 @@ const TRANSLATIONS = {
     totalActivePrincipal: "إجمالي أصل المبلغ النشط",
     totalAnnualIncomeYear: "إجمالي دخل السنة {year}",
     expectedAnnualIncomeYear: "إجمالي الدخل المتوقع {year}",
+    achievedVsExpectedIncome: "نسبة الدخل المُنجز مقابل الهدف المتوقع.",
+    expectedVsPrincipalIncome: "نسبة الدخل المتوقع مقابل إجمالي رأس المال النشط.",
     totalIncome: "إجمالي الدخل",
     incomeYearLabel: "دخل عام {year}",
     collectedTransactions: "معاملات محصّلة",
@@ -488,6 +507,7 @@ const TRANSLATIONS = {
     startDate: "تاريخ البداية",
     endDate: "تاريخ النهاية",
     investmentMethod: "طريقة الاستثمار",
+    investmentType: "نوع الاستثمار",
     year: "السنة",
     month: "الشهر",
     allMonths: "كل الأشهر",
@@ -531,6 +551,10 @@ const TRANSLATIONS = {
     settingsTitle: "الإعدادات وفئات القوائم",
     settingsDesc: "إدارة خيارات القوائم المنسدلة المستخدمة في جميع النماذج",
     portfolioTypes: "أنواع المحافظ",
+    investmentTargets: "هدف الاستثمار",
+    growth: "النمو",
+    incomeTarget: "الدخل",
+    balanced: "متوازن",
     riskLevels: "مستويات المخاطرة",
     fundingSources: "مصادر التمويل",
     investmentMethods: "طرق الاستثمار",
@@ -2183,7 +2207,7 @@ function KPICard({ label, value, sub, trend, accent = T.emerald, icon: Icon_, cu
           </span>
         )}
         {sub && <span style={{ fontSize:"0.72rem",color:T.textMuted }}>{sub}</span>}
-        {badge && <span style={{ fontSize:"0.72rem",color:badge.color||T.textSecondary,fontWeight:600,whiteSpace:"nowrap" }}>{badge.text}</span>}
+        {badge && <span style={{ display:"inline-flex", alignItems:"center", gap:"4px", fontSize:"0.72rem",color:badge.color||T.textSecondary,fontWeight:600,whiteSpace:"nowrap" }}>{badge.text}{badge.icon || null}</span>}
       </div>
     </Card>
   );
@@ -2357,7 +2381,7 @@ function LoadingScreen({ message }) {
 // SIDEBAR
 // ═══════════════════════════════════════════════════════════════════════════════
 function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileOpen, setMobileOpen }) {
-  const { user, signOut, syncing, t, font, lang, setLang, hasPermission, currentRole, manualSync, selectedCountry, setSelectedCountry, rawDb } = useApp();
+  const { user, signOut, syncing, t, font, lang, setLang, isRTL, hasPermission, currentRole, manualSync, selectedCountry, setSelectedCountry, rawDb } = useApp();
   const canManageUsers = currentRole === "Owner" || hasPermission("assign_role") || hasPermission("block_user") || hasPermission("unblock_user");
   const countries = rawDb?.settings?.countries || [];
 
@@ -2366,18 +2390,20 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileO
     { id:"portfolios",   label:t.portfolios,   icon:<FolderOpen size={17}/> },
     { id:"investments",  label:t.investments,  icon:<Wallet size={17}/> },
     { id:"transactions", label:t.transactions, icon:<DollarSign size={17}/> },
+    { id:"planningUnit", label:"Planning Unit", icon:<ListTree size={17}/>, children:[{ id:"stockAnalysis", label:"Stocks Analysis" }] },
     { id:"statistics",   label:t.statistics,   icon:<PieChartIcon size={17}/> },
     ...(canManageUsers ? [{ id:"users", label:"Users & Permissions", icon:<Shield size={17}/> }] : []),
     { id:"settings",     label:t.settings,     icon:<Settings size={17}/> },
   ];
 
   const showLabels = isMobile ? true : isOpen;
+  const [planningOpen, setPlanningOpen] = useState(true);
   const handleHamburger = () => setIsOpen((prev) => !prev);
 
   const sidebarContent = (
     <>
       <div style={{ padding:showLabels?"24px 20px 18px":"16px 10px",borderBottom:`1px solid ${T.borderDark}` }}>
-        <div style={{ display:"flex",alignItems:"center",gap:"10px",justifyContent:showLabels?"flex-start":"center" }}>
+        <div style={{ display:"flex",alignItems:"center",gap:"10px",justifyContent:showLabels?(isRTL?"flex-end":"flex-start"):"center" }}>
           {!isMobile && (
             <button onClick={handleHamburger} style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", width:"28px", height:"28px", borderRadius:"6px", border:`1px solid ${T.borderDark}`, background:"transparent", color:T.textSidebar, cursor:"pointer", flexShrink:0 }}>
               <Menu size={14} />
@@ -2402,23 +2428,16 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileO
       </div>
 
       <nav style={{ flex:1,padding:"10px 10px" }}>
-        {navItems.map(({ id, label, icon }) => {
+        {navItems.map(({ id, label, icon, children }) => {
+          if (children) {
+            const childActive = activeTab === "planningDashboard" || children.some((c) => c.id === activeTab);
+            return <div key={id} style={{ marginBottom:"4px" }}>
+              <div style={{display:"flex",alignItems:"center",gap:"6px"}}><button onClick={() => { setActiveTab("planningDashboard"); if (isMobile) setMobileOpen(false); }} style={{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"9px 12px",minHeight:"38px",borderRadius:"8px",border:"none",background:childActive?T.emeraldBg:"transparent",color:childActive?T.emerald:T.textSidebarMuted,fontSize:"0.83rem",fontWeight:childActive?600:400,cursor:"pointer",textAlign:isRTL?"right":"left",transition:"all 0.15s",marginBottom:"2px",borderLeft:isRTL?"2px solid transparent":(childActive?`2px solid ${T.emerald}`:"2px solid transparent"),borderRight:isRTL?(childActive?`2px solid ${T.emerald}`:"2px solid transparent"):"2px solid transparent",justifyContent:"flex-start"}}>{showLabels?<><span style={{display:"flex",alignItems:"center",gap:"10px"}}>{icon}<span>{label}</span></span></>:icon}</button>{showLabels && <button onClick={()=>setPlanningOpen((p)=>!p)} style={{border:"none",background:"transparent",color:T.textSidebarMuted,cursor:"pointer",display:"flex",alignItems:"center",padding:"4px"}}>{planningOpen?<ChevronDown size={13}/>:<ChevronRight size={13}/>}</button>}</div>
+              {planningOpen && showLabels && <div style={{ marginTop:"2px" }}>{children.map((sub)=>{ const active = activeTab===sub.id; return <button key={sub.id} onClick={()=>{setActiveTab(sub.id); if (isMobile) setMobileOpen(false);}} style={{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"9px 12px 9px 32px",minHeight:"38px",borderRadius:"8px",border:"none",background:active?T.emeraldBg:"transparent",color:active?T.emerald:T.textSidebarMuted,fontSize:"0.83rem",fontWeight:active?600:400,cursor:"pointer",textAlign:isRTL?"right":"left",transition:"all 0.15s",marginBottom:"2px",borderLeft:isRTL?"2px solid transparent":(active?`2px solid ${T.emerald}`:"2px solid transparent"),borderRight:isRTL?(active?`2px solid ${T.emerald}`:"2px solid transparent"):"2px solid transparent",justifyContent:showLabels?(isRTL?"flex-end":"flex-start"):"center",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sub.label}</button>; })}</div>}
+            </div>;
+          }
           const active = activeTab === id;
-          return (
-            <button key={id} onClick={() => { setActiveTab(id); if (isMobile) setMobileOpen(false); }} style={{
-              display:"flex",alignItems:"center",gap:"10px",width:"100%",
-              padding:"9px 12px",borderRadius:"8px",border:"none",
-              background:active?T.emeraldBg:"transparent",
-              color:active?T.emerald:T.textSidebarMuted,
-              fontSize:"0.83rem",fontWeight:active?600:400,cursor:"pointer",
-              textAlign:"left",transition:"all 0.15s",marginBottom:"2px",
-              borderLeft:active?`2px solid ${T.emerald}`:"2px solid transparent",
-              justifyContent:showLabels?"flex-start":"center",
-            }}
-            >
-              {icon}{showLabels && <span>{label}</span>}
-            </button>
-          );
+          return <button key={id} onClick={() => { setActiveTab(id); if (isMobile) setMobileOpen(false); }} style={{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"9px 12px",borderRadius:"8px",border:"none",background:active?T.emeraldBg:"transparent",color:active?T.emerald:T.textSidebarMuted,fontSize:"0.83rem",fontWeight:active?600:400,cursor:"pointer",textAlign:isRTL?"right":"left",transition:"all 0.15s",marginBottom:"2px",borderLeft:isRTL?"2px solid transparent":(active?`2px solid ${T.emerald}`:"2px solid transparent"),borderRight:isRTL?(active?`2px solid ${T.emerald}`:"2px solid transparent"):"2px solid transparent",justifyContent:showLabels?(isRTL?"flex-end":"flex-start"):"center",}}>{icon}{showLabels && <span>{label}</span>}</button>;
         })}
       </nav>
 
@@ -2464,7 +2483,7 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileO
     return (
       <>
         {mobileOpen && <div onClick={()=>setMobileOpen(false)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:180 }} />}
-        <aside dir="ltr" style={{ position:"fixed",left:0,top:0,bottom:0,zIndex:200,width:"260px",background:T.bgSidebar,transform:mobileOpen?"translateX(0)":"translateX(-100%)",transition:"transform 0.2s ease",display:"flex",flexDirection:"column" }}>
+        <aside dir={isRTL ? "rtl" : "ltr"} style={{ position:"fixed",[isRTL?"right":"left"]:0,top:0,bottom:0,zIndex:200,width:"260px",background:T.bgSidebar,transform:mobileOpen?"translateX(0)":(isRTL?"translateX(100%)":"translateX(-100%)"),transition:"transform 0.2s ease",display:"flex",flexDirection:"column" }}>
           {sidebarContent}
         </aside>
       </>
@@ -2472,14 +2491,15 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileO
   }
 
   return (
-    <aside dir="ltr" style={{
+    <aside dir={isRTL ? "rtl" : "ltr"} style={{
       position:"fixed",
-      left:0,
+      [isRTL?"right":"left"]:0,
       top:0,
       width:showLabels?"220px":"72px",
       height:"100vh",
       background:T.bgSidebar,
-      borderRight:"none",
+      borderRight:isRTL?"none":`1px solid ${T.borderDark}`,
+      borderLeft:isRTL?`1px solid ${T.borderDark}`:"none",
       display:"flex",
       flexDirection:"column",
       flexShrink:0,
@@ -2502,6 +2522,99 @@ const tx_of_portfolio  = (db, pid) => visible(db.transactions).filter(t=>t.portf
 const curVal = (inv, db) => (parseFloat(inv.quantity)||0) * effectiveCurrentPrice(db, inv);
 const costBasis = (inv) => (parseFloat(inv.quantity)||0)*(parseFloat(inv.purchasePrice)||0);
 const roi = (inv, db) => { const c=costBasis(inv); return c>0?((curVal(inv, db)-c)/c)*100:0; };
+
+const PlanInputField = React.memo(function PlanInputField({ id, label, value, onCommit, placeholder, showPercent = false, invalid = false, isEditing, isArabic }) {
+  const inputId = useId();
+  const stableId = id || inputId;
+  const inputRef = useRef(null);
+  const selectionRef = useRef({ start: null, end: null });
+  const [draft, setDraft] = useState(value ?? "");
+  const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    if (focused) return;
+    setDraft(value ?? "");
+  }, [value, focused]);
+
+  useEffect(() => {
+    if (!focused || !inputRef.current) return;
+    if (document.activeElement !== inputRef.current) {
+      inputRef.current.focus();
+      const { start, end } = selectionRef.current;
+      if (typeof start === "number" && typeof end === "number") {
+        inputRef.current.setSelectionRange(start, end);
+      }
+    }
+  }, [focused, draft]);
+
+  if (!isEditing) {
+    return (
+      <div className="w-[88px] shrink-0">
+        {label && <label htmlFor={stableId} className={`text-[10px] text-slate-500 mb-1 ${isArabic ? "text-right" : "text-left"}`}>{label}</label>}
+        <div className={`h-9 px-2 flex items-center text-[13px] text-[#111827] ${isArabic ? "justify-end text-right" : "justify-start text-left"}`}>{value ? `${value}${showPercent ? "%" : ""}` : "—"}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative w-[88px] shrink-0" key={stableId}>
+      {label && <label htmlFor={stableId} className={`text-[10px] text-slate-500 mb-1 ${isArabic ? "text-right" : "text-left"}`}>{label}</label>}
+      <input
+        id={stableId}
+        ref={inputRef}
+        type="number"
+        value={draft}
+        onFocus={(e) => {
+          setFocused(true);
+          selectionRef.current = { start: e.target.selectionStart, end: e.target.selectionEnd };
+        }}
+        onChange={(e) => {
+          const next = e.target.value;
+          selectionRef.current = { start: e.target.selectionStart, end: e.target.selectionEnd };
+          setDraft(next);
+        }}
+        onBlur={(e) => {
+          setFocused(false);
+          const next = e.target.value;
+          if ((next ?? "") !== (value ?? "")) onCommit(next);
+        }}
+        placeholder={placeholder}
+        className={`h-9 w-full rounded-lg border ${invalid ? "border-red-400" : "border-[#E2E8F0]"} focus:border-[#334155] focus:ring-2 focus:ring-slate-100 pl-2 pr-6 text-[13px] text-[#111827] bg-white ${isArabic ? "text-right" : "text-left"}`}
+      />
+      {showPercent && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-500">%</span>}
+    </div>
+  );
+});
+
+const computePlanPrice = (purchasePrice, mode, rawValue, direction = "down") => {
+  const price = Number(purchasePrice) || 0;
+  const value = Number(rawValue) || 0;
+  if (!Number.isFinite(price) || !Number.isFinite(value)) return 0;
+  if (mode === "percentage") {
+    return direction === "up" ? price + (price * value) / 100 : price - (price * value) / 100;
+  }
+  return value;
+};
+const normalizeTradingPlan = (plan = {}, purchasePrice = 0) => {
+  const supportFrom = { mode:plan?.supportFrom?.mode || "fixed", value:String(plan?.supportFrom?.value ?? "") };
+  const supportTo = { mode:plan?.supportTo?.mode || "fixed", value:String(plan?.supportTo?.value ?? "") };
+  const stopLoss = { mode:plan?.stopLoss?.mode || "fixed", value:String(plan?.stopLoss?.value ?? "") };
+  const resistanceFrom = { mode:plan?.resistanceFrom?.mode || "fixed", value:String(plan?.resistanceFrom?.value ?? "") };
+  const resistanceTo = { mode:plan?.resistanceTo?.mode || "fixed", value:String(plan?.resistanceTo?.value ?? "") };
+  const dcaLevels = Array.isArray(plan?.dcaLevels) && plan.dcaLevels.length ? plan.dcaLevels : [{ mode:"fixed", value:"", allocation:"", notes:"" }];
+  const takeProfitTargets = Array.isArray(plan?.takeProfitTargets) && plan.takeProfitTargets.length ? plan.takeProfitTargets : [{ mode:"fixed", value:"", allocation:"", notes:"" }];
+  return {
+    supportFrom,
+    supportTo,
+    stopLoss,
+    resistanceFrom,
+    resistanceTo,
+    dcaLevels: dcaLevels.map((row) => ({ mode:row?.mode || "fixed", value:String(row?.value ?? ""), allocation:String(row?.allocation ?? ""), shares:String(row?.shares ?? ""), executed:Boolean(row?.executed), notes:row?.notes || "" })),
+    takeProfitTargets: takeProfitTargets.map((row) => ({ mode:row?.mode || "fixed", value:String(row?.value ?? ""), allocation:String(row?.allocation ?? ""), shares:String(row?.shares ?? ""), executed:Boolean(row?.executed), notes:row?.notes || "" })),
+    notes: plan?.notes || "",
+    purchasePrice: Number(purchasePrice) || 0,
+  };
+};
 const isCollectedTransaction = (tx) => {
   const status = String(tx?.status || "").toLowerCase();
   return status.includes("collect") || status.includes("record") || Boolean(tx?.collectedAt || tx?.collected_at);
@@ -2684,6 +2797,8 @@ function Dashboard({ onNavigateTransactionsByStatus, onNavigateTransactionsByInv
       return category.includes("dividend") || category.includes("yield") || category.includes("توزيع") || category.includes("عائد");
     })
     .reduce((sum, tx) => sum + toBaseAmount(safeDb, parseFloat(tx.amount) || 0, portfolioCurrency(safeDb, tx.portfolioId), baseCurrency), 0);
+  const achievedIncomePct = expectedAnnualIncome > 0 ? (totalAnnualIncome / expectedAnnualIncome) * 100 : 0;
+  const expectedVsPrincipalPct = activePrincipal > 0 ? (expectedAnnualIncome / activePrincipal) * 100 : 0;
 
   const expectedCapitalGains = currentYearIncomeTransactions
     .filter((tx) => {
@@ -2838,6 +2953,11 @@ function Dashboard({ onNavigateTransactionsByStatus, onNavigateTransactionsByInv
           )}
           accent={T.positive}
           icon={ArrowUpRight}
+          badge={{
+            text: `${achievedIncomePct.toFixed(2)}%`,
+            color: T.info,
+            icon: <span data-app-tooltip={t.achievedVsExpectedIncome}><Info size={12} /></span>,
+          }}
         />
         <KPICard
           label={t.expectedAnnualIncomeYear.replace("{year}", isRTL ? currentYear.toLocaleString("ar-EG") : String(currentYear))}
@@ -2847,6 +2967,11 @@ function Dashboard({ onNavigateTransactionsByStatus, onNavigateTransactionsByInv
           sub={`${t.capitalGains}: ${fmtMoney(expectedCapitalGains, { currency:baseCurrency, decimals:2 })}`}
           accent={T.warning}
           icon={CalendarClock}
+          badge={{
+            text: `${expectedVsPrincipalPct.toFixed(2)}%`,
+            color: T.warning,
+            icon: <span data-app-tooltip={t.expectedVsPrincipalIncome}><Info size={12} /></span>,
+          }}
         />
         <KPICard label={t.totalIncome} value={transactions.filter(t=>t.type==="income").reduce((sum, tx)=>sum + toBaseAmount(safeDb, parseFloat(tx.amount)||0, portfolioCurrency(safeDb, tx.portfolioId), baseCurrency), 0)} valueDecimals={2} currency={baseCurrency} sub={`${transactions.filter(tx=>tx.type==="income").length} ${t.payments}`} accent={T.info} icon={Landmark} />
       </div>
@@ -3059,10 +3184,11 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
   const [editItem, setEditItem] = useState(null);
   const [modalMode, setModalMode] = useState("create");
   const [filterStatus, setFilterStatus] = useState("");
+  const [filterTarget, setFilterTarget] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [collapsedPortfolios, setCollapsedPortfolios] = useState({});
-  const EMPTY = useMemo(() => ({ name:"", country:selectedCountry?.name || "", type:"",current_price:"",risk:"",currency:"USD",status:"Active",color:T.chart[0],notes:"" }), [selectedCountry]);
+  const EMPTY = useMemo(() => ({ name:"", country:selectedCountry?.name || "", type:"", target:"",current_price:"",risk:"",currency:"USD",status:"Active",color:T.chart[0],notes:"" }), [selectedCountry]);
   const [form, setForm] = useState(EMPTY);
   const [formError, setFormError] = useState("");
   const [invalidFields, setInvalidFields] = useState({});
@@ -3092,6 +3218,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
     setFilterStatus(savedUi.filterStatus || "");
     setSearchTerm(savedUi.searchTerm || "");
     setSearchOpen(Boolean(savedUi.searchOpen || savedUi.searchTerm));
+    setFilterTarget(savedUi.filterTarget || "");
   }, []);
 
   useEffect(() => {
@@ -3111,11 +3238,12 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
     localStorage.setItem(PORTFOLIOS_COLLAPSE_STORAGE_KEY, JSON.stringify(collapsedPortfolios));
   }, [collapsedPortfolios]);
   useEffect(() => {
-    localStorage.setItem(PORTFOLIOS_UI_STORAGE_KEY, JSON.stringify({ filterStatus, searchTerm, searchOpen }));
-  }, [filterStatus, searchTerm, searchOpen]);
+    localStorage.setItem(PORTFOLIOS_UI_STORAGE_KEY, JSON.stringify({ filterStatus, filterTarget, searchTerm, searchOpen }));
+  }, [filterStatus, filterTarget, searchTerm, searchOpen]);
   const portfolios = allPortfolios.filter((p) => {
     const matchesSearch = !searchTerm.trim() || String(p.name || "").toLowerCase().includes(searchTerm.trim().toLowerCase());
     if (!matchesSearch) return false;
+    if (filterTarget && p.target !== filterTarget) return false;
     if (!filterStatus) return !p.is_hidden;
     if (filterStatus === ARCHIVED_FILTER) return Boolean(p.is_hidden);
     return !p.is_hidden && p.status === filterStatus;
@@ -3127,6 +3255,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
       type: !form.type,
       risk: !form.risk,
       status: !form.status,
+      target: !form.target,
       currency: !form.currency,
       country: !form.country,
     };
@@ -3142,7 +3271,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
     setForm(EMPTY); setShowModal(false); setEditItem(null); setModalMode("create");
   };
 
-  const openView = (p) => { setForm({name:p.name,country:p.country || "",type:p.type,current_price:p.current_price??"",risk:p.risk,currency:p.currency,status:p.status||"Active",color:p.color||T.chart[0],notes:p.notes||""}); setEditItem(p); setModalMode("view"); setFormError(""); setInvalidFields({}); setShowModal(true); };
+  const openView = (p) => { setForm({name:p.name,country:p.country || "",type:p.type,target:p.target||"",current_price:p.current_price??"",risk:p.risk,currency:p.currency,status:p.status||"Active",color:p.color||T.chart[0],notes:p.notes||""}); setEditItem(p); setModalMode("view"); setFormError(""); setInvalidFields({}); setShowModal(true); };
 
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font }}>
@@ -3171,6 +3300,9 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
       <div style={{ ...filterBarCss, justifyContent:isRTL?"flex-start":"flex-end" }}>
         <div style={{ width:"220px", maxWidth:"100%" }}>
           <Select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} options={[{ value:"", label:t.status }, ...statusOpts, { value:ARCHIVED_FILTER, label:t.archivedFilter }]} isRTL={isRTL} style={{ ...filterInputCss(isRTL), width:"100%", flex:"0 0 auto" }} />
+        </div>
+        <div style={{ width:"220px", maxWidth:"100%" }}>
+          <Select value={filterTarget} onChange={e=>setFilterTarget(e.target.value)} options={[{ value:"", label:t.investmentTargets }, ...((db?.settings?.investmentTargets||[]).map((v)=>({value:v,label:v})))]} isRTL={isRTL} style={{ ...filterInputCss(isRTL), width:"100%", flex:"0 0 auto" }} />
         </div>
       </div>
 
@@ -3283,6 +3415,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
               <ReadOnlyField label={t.name} value={form.name} />
               <ReadOnlyField label={t.country} value={form.country} />
               <ReadOnlyField label={t.type} value={form.type} />
+              <ReadOnlyField label={t.investmentTargets} value={form.target} />
               <ReadOnlyField label={t.currentPrice} value={form.current_price} />
               <ReadOnlyField label={t.risk} value={form.risk} />
               <ReadOnlyField label={t.currency} value={form.currency} />
@@ -3298,15 +3431,19 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
               </div>
               <div style={{ display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:"12px" }}>
                 <FormField label={t.type} required><Select value={form.type} onChange={e=>{f("type")(e.target.value);setInvalidFields(prev=>({...prev,type:false}));}} invalid={invalidFields.type} options={db?.settings?.portfolioTypes||[]} placeholder={t.selectType} isRTL={isRTL}/></FormField>
+                <FormField label={t.investmentTargets} required><Select value={form.target} onChange={e=>{f("target")(e.target.value);setInvalidFields(prev=>({...prev,target:false}));}} invalid={invalidFields.target} options={db?.settings?.investmentTargets||[]} placeholder={t.investmentTargets} isRTL={isRTL}/></FormField>
+              </div>
+              <div style={{ display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:"12px" }}>
                 <FormField label={t.currentPrice}><Input type="number" value={form.current_price} onChange={e=>f("current_price")(e.target.value)} isRTL={isRTL} placeholder="0.00"/></FormField>
+                <FormField label={t.currency} required><Select value={form.currency} onChange={e=>{f("currency")(e.target.value);setInvalidFields(prev=>({...prev,currency:false}));}} invalid={invalidFields.currency} options={db?.settings?.currencies||[]} placeholder={t.selectCurrency} isRTL={isRTL}/></FormField>
               </div>
               <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
                 <FormField label={t.risk} required><Select value={form.risk} onChange={e=>{f("risk")(e.target.value);setInvalidFields(prev=>({...prev,risk:false}));}} invalid={invalidFields.risk} options={db?.settings?.riskLevels||[]} placeholder={t.selectRisk} isRTL={isRTL}/></FormField>
                 <FormField label={t.status} required><Select value={form.status} onChange={e=>{f("status")(e.target.value);setInvalidFields(prev=>({...prev,status:false}));}} invalid={invalidFields.status} options={statusOpts} isRTL={isRTL}/></FormField>
               </div>
               <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px" }}>
-                <FormField label={t.currency} required><Select value={form.currency} onChange={e=>{f("currency")(e.target.value);setInvalidFields(prev=>({...prev,currency:false}));}} invalid={invalidFields.currency} options={db?.settings?.currencies||[]} placeholder={t.selectCurrency} isRTL={isRTL}/></FormField>
                 <FormField label="Color"><Input type="color" value={form.color} onChange={e=>f("color")(e.target.value)} isRTL={isRTL}/></FormField>
+                <div />
               </div>
               <FormField label={t.notes}><Input value={form.notes} onChange={e=>f("notes")(e.target.value)} isRTL={isRTL} placeholder={`(${t.optional})`}/></FormField>
               {formError && <div style={{ color:T.negative, fontSize:"0.78rem", marginBottom:"10px" }}>{formError}</div>}
@@ -3319,7 +3456,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
             </>)}
             {modalMode==="edit" && (<>
               <Btn onClick={handleSave}>{t.save}</Btn>
-              <Btn variant="secondary" onClick={()=>{ setForm({name:editItem.name,country:editItem.country || "",type:editItem.type,current_price:editItem.current_price??"",risk:editItem.risk,currency:editItem.currency,status:editItem.status||"Active",color:editItem.color||T.chart[0],notes:editItem.notes||""}); setFormError(""); setInvalidFields({}); setModalMode("view"); }}>{t.cancel}</Btn>
+              <Btn variant="secondary" onClick={()=>{ setForm({name:editItem.name,country:editItem.country || "",type:editItem.type,target:editItem.target||"",current_price:editItem.current_price??"",risk:editItem.risk,currency:editItem.currency,status:editItem.status||"Active",color:editItem.color||T.chart[0],notes:editItem.notes||""}); setFormError(""); setInvalidFields({}); setModalMode("view"); }}>{t.cancel}</Btn>
             </>)}
             {modalMode==="create" && (<>
               <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditItem(null);setModalMode("create");setFormError("");setInvalidFields({});}}>{t.cancel}</Btn>
@@ -3359,7 +3496,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   const [historyNotice, setHistoryNotice] = useState("");
   const [modalMode, setModalMode] = useState("create");
 
-  const EMPTY = useMemo(() => ({ portfolioId:"",name:"",quantity:"",purchasePrice:"",currentPrice:"",inheritPrice:false,purchaseDate:"",startDate:"",endDate:"",investmentMethod:"",risk:"",funding:[{source:"",amount:""}],status:"Active",notes:"" }), []);
+  const EMPTY = useMemo(() => ({ portfolioId:"",name:"",quantity:"",purchasePrice:"",currentPrice:"",inheritPrice:false,purchaseDate:"",startDate:"",endDate:"",investmentMethod:"",investmentType:"",risk:"",funding:[{source:"",amount:""}],status:"Active",notes:"" }), []);
   const [form, setForm] = useState(EMPTY);
   const f = k => v => setForm(p=>({...p,[k]:v}));
 
@@ -3389,7 +3526,9 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
       startDate: !form.startDate,
       risk: !form.risk,
       status: !form.status,
+      target: !form.target,
       investmentMethod: !form.investmentMethod,
+      investmentType: !form.investmentType,
     };
     setInvalidFields(nextInvalid);
     if (Object.values(nextInvalid).some(Boolean)) {
@@ -3422,7 +3561,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
 
   const openView = (inv) => {
     setForm({ portfolioId:inv.portfolioId,name:inv.name,quantity:inv.quantity||"",purchasePrice:inv.purchasePrice||"",
-      currentPrice:inv.currentPrice||"",inheritPrice:Boolean(inv.inheritPrice),purchaseDate:inv.purchaseDate||"",startDate:inv.startDate||"",endDate:inv.endDate||"",investmentMethod:inv.investmentMethod||"",risk:inv.risk||"",funding:(inv.funding&&inv.funding.length?inv.funding:[{source:inv.source||"",amount:""}]),status:inv.status||"Active",notes:inv.notes||"" });
+      currentPrice:inv.currentPrice||"",inheritPrice:Boolean(inv.inheritPrice),purchaseDate:inv.purchaseDate||"",startDate:inv.startDate||"",endDate:inv.endDate||"",investmentMethod:inv.investmentMethod||"",investmentType:inv.investmentType||"",risk:inv.risk||"",funding:(inv.funding&&inv.funding.length?inv.funding:[{source:inv.source||"",amount:""}]),status:inv.status||"Active",notes:inv.notes||"" });
     setEditItem(inv); setModalMode("view"); setShowModal(true);
     setHistoryEditingRowId(null);
     setHistoryDraft({});
@@ -3476,10 +3615,12 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
 
   const statusOpts = ((db?.settings?.investmentStatuses&&db.settings.investmentStatuses.length)?db.settings.investmentStatuses:["Active","Paused","Closed"]).map((v)=>({ value:v, label:v }));
   const methodOpts = (db?.settings?.investmentMethods || []).map((v)=>({ value:v, label:v }));
+  const investmentTypeOpts = (db?.settings?.portfolioTypes || []).map((v)=>({ value:v, label:v }));
   const [filterStartDate, setFilterStartDate] = useState("");
   const [filterEndDate, setFilterEndDate] = useState("");
   const [filterDateField, setFilterDateField] = useState("start");
   const [filterStatus, setFilterStatus] = useState("");
+  const [filterTarget, setFilterTarget] = useState("");
   const [filterPortfolio, setFilterPortfolio] = useState("");
   const [filterInvestmentMethod, setFilterInvestmentMethod] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -3492,6 +3633,13 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
     const walletPrice = parseFloat(portfolios.find((p)=>p.id===form.portfolioId)?.current_price) || 0;
     setForm((prev) => ({ ...prev, currentPrice: String(walletPrice) }));
   }, [form.inheritPrice, form.portfolioId, portfolios]);
+
+  useEffect(() => {
+    const selectedPortfolio = portfolios.find((p) => p.id === form.portfolioId);
+    const portfolioDefaultType = selectedPortfolio?.investmentType || selectedPortfolio?.type || "";
+    if (!portfolioDefaultType || String(form.investmentType || "").trim()) return;
+    setForm((prev) => ({ ...prev, investmentType: portfolioDefaultType }));
+  }, [form.portfolioId, form.investmentType, portfolios]);
 
   useEffect(() => () => {
     setShowModal(false);
@@ -3578,8 +3726,8 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
 
   useEffect(() => {
     if (!navigationFilter?.portfolioId) return;
-    setFilterPortfolio(navigationFilter.portfolioId);
-    if (navigationFilter?.status) setFilterStatus(navigationFilter.status);
+    setFilterPortfolio((prev) => prev === navigationFilter.portfolioId ? prev : navigationFilter.portfolioId);
+    if (navigationFilter?.status) setFilterStatus((prev) => prev === navigationFilter.status ? prev : navigationFilter.status);
   }, [navigationFilter]);
   const filteredInvestments = investments.filter((inv) => {
     const startRaw = inv.startDate || inv.purchaseDate || "";
@@ -3834,6 +3982,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
               <ReadOnlyField label={t.startDate} value={form.startDate} />
               <ReadOnlyField label={t.endDate} value={form.endDate} />
               <ReadOnlyField label={t.investmentMethod} value={form.investmentMethod} />
+              <ReadOnlyField label={t.investmentType} value={form.investmentType} />
               <ReadOnlyField label={t.risk} value={form.risk} />
               <ReadOnlyField label={t.status} value={form.status} />
               <ReadOnlyField label={t.splitFunding} value={(form.funding||[]).map((f)=>`${f.source||"—"}: ${f.amount||0}`).join(" | ")} />
@@ -3901,10 +4050,11 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                 <FormField label={t.startDate} required><Input type="date" value={form.startDate} onChange={e=>{f("startDate")(e.target.value);setInvalidFields(prev=>({...prev,startDate:false}));}} invalid={invalidFields.startDate} isRTL={isRTL}/></FormField>
                 <FormField label={t.endDate}><Input type="date" value={form.endDate} onChange={e=>f("endDate")(e.target.value)} isRTL={isRTL}/></FormField>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
                 <FormField label={t.risk} required><Select value={form.risk} onChange={e=>{f("risk")(e.target.value);setInvalidFields(prev=>({...prev,risk:false}));}} invalid={invalidFields.risk} options={db?.settings?.riskLevels||[]} placeholder={t.selectRisk} isRTL={isRTL}/></FormField>
                 <FormField label={t.status} required><Select value={form.status} onChange={e=>{f("status")(e.target.value);setInvalidFields(prev=>({...prev,status:false}));}} invalid={invalidFields.status} options={statusOpts} isRTL={isRTL}/></FormField>
                 <FormField label={t.investmentMethod} required><Select value={form.investmentMethod} onChange={e=>{f("investmentMethod")(e.target.value);setInvalidFields(prev=>({...prev,investmentMethod:false}));}} invalid={invalidFields.investmentMethod} options={methodOpts} placeholder={t.selectMethod} isRTL={isRTL}/></FormField>
+                <FormField label={t.investmentType} required><Select value={form.investmentType} onChange={e=>{f("investmentType")(e.target.value);setInvalidFields(prev=>({...prev,investmentType:false}));}} invalid={invalidFields.investmentType} options={investmentTypeOpts} placeholder={t.investmentType} isRTL={isRTL}/></FormField>
               </div>
              <FormField label={t.notes}><Input value={form.notes} onChange={e=>f("notes")(e.target.value)} isRTL={isRTL} placeholder={`(${t.optional})`}/></FormField>
             {formError && formError !== t.splitFundingMismatchError && <div style={{ color:T.negative, fontSize:"0.78rem", marginTop:"-6px", marginBottom:"10px" }}>{formError}</div>}
@@ -3926,7 +4076,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
             </>)}
             {modalMode==="edit" && (<>
               <Btn onClick={handleSave}>{t.save}</Btn>
-              <Btn variant="secondary" onClick={()=>{ setForm({ portfolioId:editItem.portfolioId,name:editItem.name,quantity:editItem.quantity||"",purchasePrice:editItem.purchasePrice||"",currentPrice:editItem.currentPrice||"",inheritPrice:Boolean(editItem.inheritPrice),purchaseDate:editItem.purchaseDate||"",startDate:editItem.startDate||"",endDate:editItem.endDate||"",investmentMethod:editItem.investmentMethod||"",risk:editItem.risk||"",funding:(editItem.funding&&editItem.funding.length?editItem.funding:[{source:editItem.source||"",amount:""}]),status:editItem.status||"Active",notes:editItem.notes||"" }); setFormError(""); setInvalidFields({}); setModalMode("view"); }}>{t.cancel}</Btn>
+              <Btn variant="secondary" onClick={()=>{ setForm({ portfolioId:editItem.portfolioId,name:editItem.name,quantity:editItem.quantity||"",purchasePrice:editItem.purchasePrice||"",currentPrice:editItem.currentPrice||"",inheritPrice:Boolean(editItem.inheritPrice),purchaseDate:editItem.purchaseDate||"",startDate:editItem.startDate||"",endDate:editItem.endDate||"",investmentMethod:editItem.investmentMethod||"",investmentType:editItem.investmentType||"",risk:editItem.risk||"",funding:(editItem.funding&&editItem.funding.length?editItem.funding:[{source:editItem.source||"",amount:""}]),status:editItem.status||"Active",notes:editItem.notes||"" }); setFormError(""); setInvalidFields({}); setModalMode("view"); }}>{t.cancel}</Btn>
             </>)}
             {modalMode==="create" && (<>
               <Btn variant="secondary" onClick={closeModal}>{t.cancel}</Btn>
@@ -4045,6 +4195,638 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   );
 }
 
+
+function PlanningUnitDashboard() {
+  const { db, isRTL, font } = useApp();
+  const investments = visible(db?.investments || []);
+  const portfolios = visible(db?.portfolios || []);
+  const stockPortfolioIds = useMemo(() => new Set(
+    portfolios.filter((p) => {
+      const type = String(p?.type || "").toLowerCase();
+      return type.includes("stock") || type.includes("etf");
+    }).map((p) => p.id)
+  ), [portfolios]);
+
+  const planRows = useMemo(() => investments
+    .filter((inv) => stockPortfolioIds.has(inv.portfolioId) && inv.tradingPlan)
+    .map((inv) => {
+      const purchase = Number(inv.purchasePrice) || 0;
+      const current = Number(inv.currentPrice) || purchase;
+      const qty = Number(inv.quantity) || 0;
+      const plan = normalizeTradingPlan(inv.tradingPlan || {}, purchase);
+      const supportLow = computePlanPrice(purchase, plan.supportTo?.mode || "percentage", plan.supportTo?.value, "down");
+      const supportHigh = computePlanPrice(purchase, plan.supportFrom?.mode || "percentage", plan.supportFrom?.value, "down");
+      const resistanceFrom = computePlanPrice(purchase, plan.resistanceFrom?.mode || "percentage", plan.resistanceFrom?.value, "up");
+      const stopLoss = computePlanPrice(purchase, plan.stopLoss?.mode || "percentage", plan.stopLoss?.value, "down");
+      const nearSupport = supportHigh > 0 && Math.abs(current - supportHigh) / supportHigh <= 0.02;
+      const nearTarget = (plan.takeProfitTargets || []).some((t) => {
+        const targetPrice = computePlanPrice(purchase, t.mode || "percentage", t.value, "up");
+        return targetPrice > 0 && current <= targetPrice && (targetPrice - current) / targetPrice <= 0.02;
+      });
+      const pendingDca = (plan.dcaLevels || []).filter((d) => !d.executed).filter((d) => current <= computePlanPrice(purchase, d.mode || "percentage", d.value, "down"));
+      const pendingTargets = (plan.takeProfitTargets || []).filter((t) => !t.executed).filter((t) => current >= computePlanPrice(purchase, t.mode || "percentage", t.value, "up"));
+      const supportAnchor = supportHigh;
+      const targetAnchor = (plan.takeProfitTargets || []).reduce((best, t) => {
+        const targetPrice = computePlanPrice(purchase, t.mode || "percentage", t.value, "up");
+        if (!(targetPrice > 0)) return best;
+        const distance = Math.abs((targetPrice - current) / targetPrice);
+        if (!best || distance < best.distance) return { price: targetPrice, distance };
+        return best;
+      }, null);
+      const dangerDistance = stopLoss > 0 ? ((stopLoss - current) / stopLoss) * 100 : 0;
+      return { inv, purchase, current, qty, plan, nearSupport, nearTarget, pendingDca, pendingTargets, supportLow, supportHigh, resistanceFrom, stopLoss, supportAnchor, targetAnchor, dangerDistance };
+    }), [investments, stockPortfolioIds]);
+
+  const totals = useMemo(() => {
+    const liquidity = planRows.reduce((sum, row) => sum + row.pendingDca.reduce((acc, d) => acc + (Number(d.allocation) || 0), 0), 0);
+    const potentialRoi = planRows.length ? (planRows.reduce((sum, row) => {
+      const target = row.pendingTargets[0] || row.plan.takeProfitTargets?.[0];
+      const price = target ? computePlanPrice(row.purchase, target.mode || "percentage", target.value, "up") : row.current;
+      return sum + ((price - row.purchase) / (row.purchase || 1)) * 100;
+    }, 0) / planRows.length) : 0;
+    const healthy = planRows.filter((r) => r.current >= r.supportLow && r.supportLow > 0).length;
+    const health = planRows.length ? (healthy / planRows.length) * 100 : 0;
+    return { liquidity, potentialRoi, health };
+  }, [planRows]);
+
+  if (!planRows.length) return <Card><div style={{ padding:"28px", textAlign:"center", color:"#4B5563" }}><div style={{ fontSize:"1.4rem", marginBottom:"6px" }}>◌</div>لم يتم العثور على خطط مفعلة. توجه إلى وحدة التحليل الفني لبدء التخطيط.</div></Card>;
+
+  const EmptyPanel = ({ message, tone }) => <div style={{ border:`1px dashed ${tone}`, borderRadius:"12px", padding:"16px", color:"#4B5563", textAlign:"center", background:"#F8FAFC" }}>✓ {message}</div>;
+  const ZoneRow = ({ name, current, anchor, distance }) => <div style={{ padding:"12px 0", borderBottom:`1px solid ${T.border}`, display:"flex", flexDirection:"column", alignItems:isRTL ? "flex-end" : "flex-start", gap:"6px" }}><div style={{ color:"#111827", fontWeight:700, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:"100%" }}>{name}</div><div style={{ display:"flex", gap:"10px", fontSize:"0.84rem", flexWrap:"wrap" }}><span style={{ color:"#111827", fontWeight:700 }}>Current: {current.toFixed(2)}</span><span style={{ color:"#4B5563" }}>Zone: {anchor.toFixed(2)}</span><span style={{ color:"#4B5563" }}>{Math.abs(distance).toFixed(2)}% away</span></div></div>;
+
+  const watchRows = planRows.filter((r) => r.nearSupport && r.supportAnchor > 0);
+  const tpRows = planRows.filter((r) => r.nearTarget && r.targetAnchor?.price > 0);
+  const dangerRows = planRows.filter((r) => {
+    const nearStopLoss = r.stopLoss > 0 && r.current >= r.stopLoss && ((r.current - r.stopLoss) / r.stopLoss) <= 0.02;
+    const nearSupport = r.supportAnchor > 0 && r.current >= r.supportAnchor && ((r.current - r.supportAnchor) / r.supportAnchor) <= 0.02;
+    return nearStopLoss || nearSupport;
+  });
+
+  return <div dir={isRTL?"rtl":"ltr"} style={{fontFamily:font}}>
+    <h1 style={{ margin:"0 0 16px", fontSize:"1.9rem", fontWeight:800, color:"#111827" }}>Planning Dashboard</h1>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:"12px",marginBottom:"18px"}}>
+      {[{k:"Total Planned Liquidity",v:totals.liquidity.toFixed(2)},{k:"Potential ROI",v:`${totals.potentialRoi.toFixed(2)}%`},{k:"Portfolio Health",v:`${totals.health.toFixed(1)}%`}].map((m)=><div key={m.k} style={{background:"rgb(255, 255, 255)",color:"#1e3a8a",borderRadius:"14px",padding:"16px",border:"1px solid #CBD5E1",boxShadow:"0 1px 2px rgba(15,23,42,0.08)"}}><div style={{fontSize:"0.77rem",opacity:.95,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{m.k}</div><div style={{fontWeight:800,fontSize:"1.22rem",marginTop:"2px"}}>{m.v}</div></div>)}
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:"14px"}}>
+      <section style={{ background:"#fff", border:"1px solid #E5E7EB", boxShadow:"0 1px 3px rgba(15,23,42,0.08)", borderRadius:"12px", padding:"14px" }}><h3 style={{ margin:"0 0 8px", color:"#312E81" }}>Watchlist (Near Support)</h3>{watchRows.length?watchRows.map((r)=><ZoneRow key={r.inv.id} name={r.inv.name} current={r.current} anchor={r.supportAnchor} distance={((r.current-r.supportAnchor)/r.supportAnchor)*100} />):<EmptyPanel tone="#C7D2FE" message="All clear. No stocks are currently near support."/>}</section>
+      <section style={{ background:"#fff", border:"1px solid #E5E7EB", boxShadow:"0 1px 3px rgba(15,23,42,0.08)", borderRadius:"12px", padding:"14px" }}><h3 style={{ margin:"0 0 8px", color:"#166534" }}>Take Profit (Near Targets)</h3>{tpRows.length?tpRows.map((r)=><ZoneRow key={r.inv.id} name={r.inv.name} current={r.current} anchor={r.targetAnchor.price} distance={((r.targetAnchor.price-r.current)/r.targetAnchor.price)*100} />):<EmptyPanel tone="#BBF7D0" message="All clear. No take-profit targets are near."/>}</section>
+      <section style={{ background:"#fff", border:"1px solid #E5E7EB", boxShadow:"0 1px 3px rgba(15,23,42,0.08)", borderRadius:"12px", padding:"14px" }}><h3 style={{ margin:"0 0 8px", color:"#9F1239" }}>Danger Zone</h3>{dangerRows.length?dangerRows.map((r)=><ZoneRow key={r.inv.id} name={r.inv.name} current={r.current} anchor={r.stopLoss > 0 ? r.stopLoss : r.supportAnchor} distance={r.stopLoss > 0 ? ((r.current-r.stopLoss)/r.stopLoss)*100 : ((r.current-r.supportAnchor)/r.supportAnchor)*100} />):<EmptyPanel tone="#FECDD3" message="All clear. No positions are near stop-loss/support zones."/>}</section>
+    </div>
+    <section style={{marginTop:"14px", background:"#fff", border:"1px solid #E5E7EB", boxShadow:"0 1px 3px rgba(15,23,42,0.08)", borderRadius:"12px", padding:"14px"}}>
+      <h3 style={{marginTop:0,color:"#111827"}}>DCA Action Tracker</h3>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:"0.86rem"}}><thead><tr style={{ borderBottom:"1px solid #E5E7EB" }}><th style={{textAlign:isRTL?"right":"left",padding:"10px 8px",color:"#4B5563"}}>Stock</th><th style={{textAlign:isRTL?"right":"left",padding:"10px 8px",color:"#4B5563"}}>Triggered Levels</th><th style={{textAlign:isRTL?"right":"left",padding:"10px 8px",color:"#4B5563"}}>Current Price</th></tr></thead><tbody>{planRows.filter((r)=>r.pendingDca.length).map((r)=><tr key={r.inv.id} style={{ borderBottom:"1px solid #F1F5F9" }}><td style={{padding:"11px 8px",color:"#111827",fontWeight:600}}>{r.inv.name}</td><td style={{padding:"11px 8px",color:"#4B5563"}}>{r.pendingDca.length}</td><td style={{padding:"11px 8px",color:"#111827",fontWeight:700}}>{r.current.toFixed(2)}</td></tr>)}</tbody></table>
+    </section>
+  </div>;
+}
+
+function StockAnalysisTab() {
+  const { db, patchItem, t, isRTL, font } = useApp();
+  const investments = visible(db?.investments || []);
+  const portfolios = visible(db?.portfolios || []);
+  const stockPortfolioIds = useMemo(() => new Set(
+    portfolios
+      .filter((p) => {
+        const type = String(p?.type || "").toLowerCase();
+        return type.includes("stock") || type.includes("etf");
+      })
+      .map((p) => p.id)
+  ), [portfolios]);
+  const stockInvestments = useMemo(
+    () => investments.filter((inv) => stockPortfolioIds.has(inv.portfolioId) && !inv.is_hidden),
+    [investments, stockPortfolioIds]
+  );
+  const statusOpts = ((db?.settings?.investmentStatuses && db.settings.investmentStatuses.length) ? db.settings.investmentStatuses : ["Active","Paused","Closed"]).map((v)=>({ value:v, label:v }));
+  const methodOpts = (db?.settings?.investmentMethods || []).map((v)=>({ value:v, label:v }));
+  const stockPortfolios = useMemo(() => portfolios.filter((p) => stockPortfolioIds.has(p.id)), [portfolios, stockPortfolioIds]);
+  const [filterStatus, setFilterStatus] = useState("");
+  const [filterTarget, setFilterTarget] = useState("");
+  const [filterPortfolio, setFilterPortfolio] = useState("");
+  const [filterMethod, setFilterMethod] = useState("");
+  const [editingInv, setEditingInv] = useState(null);
+  const [expandedPlanRow, setExpandedPlanRow] = useState(null);
+
+  const filteredInvestments = useMemo(() => stockInvestments.filter((inv) => {
+    const statusMatch = !filterStatus || inv.status === filterStatus;
+    const portfolioMatch = !filterPortfolio || inv.portfolioId === filterPortfolio;
+    const methodMatch = !filterMethod || (inv.investmentMethod || "") === filterMethod;
+    return statusMatch && portfolioMatch && methodMatch;
+  }), [stockInvestments, filterStatus, filterPortfolio, filterMethod]);
+
+  return (
+    <div dir={isRTL ? "rtl" : "ltr"} style={{ fontFamily:font }}>
+      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"24px",gap:"12px",flexWrap:"wrap" }}>
+        <div>
+          <h2 style={{ margin:0,fontSize:"1.4rem",fontWeight:700,color:T.textPrimary }}>{t.stockAnalysis}</h2>
+          <div style={{ fontSize:"0.8rem",color:T.textMuted,marginTop:"2px" }}>{filteredInvestments.length} {t.investments.toLowerCase()}</div>
+        </div>
+      </div>
+      <div style={{ ...filterBarCss, justifyContent:"flex-start" }}>
+        <Select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} options={[{ value:"", label:t.investmentStatuses }, ...statusOpts]} isRTL={isRTL} style={{ ...filterInputCss(isRTL), flex:"0 0 auto", width:"fit-content", minWidth:"120px", maxWidth:"150px" }} />
+        <SearchableSingleSelect
+          options={stockPortfolios.map((p)=>({ value:p.id, label:p.name }))}
+          value={filterPortfolio}
+          onChange={setFilterPortfolio}
+          placeholder={t.allPortfolios}
+          searchPlaceholder={t.allPortfolios}
+          font={font}
+          minWidth="220px"
+          variant="lightFilter"
+          isRTL={isRTL}
+        />
+        <Select value={filterMethod} onChange={e=>setFilterMethod(e.target.value)} options={[{ value:"", label:t.investmentMethod }, ...methodOpts]} isRTL={isRTL} style={{ ...filterInputCss(isRTL), flex:"0 0 auto", width:"fit-content", minWidth:"165px", maxWidth:"210px" }} />
+      </div>
+      <Card style={{ overflow:"hidden" }}>
+        <div className="overflow-x-auto">
+          <table style={{ width:"100%",minWidth:"1080px",borderCollapse:"collapse",fontSize:"0.85rem" }}>
+            <thead>
+              <tr style={{ background:T.bgApp }}>
+                {[
+                  { key:t.name, tip:t.name },
+                  { key:t.startDate, tip:t.startDate },
+                  { key:t.endDate, tip:t.endDate },
+                  { key:t.investmentMethod, tip:t.investmentMethod },
+                  { key:t.principal, tip:t.principal },
+                  { key:t.currentValue, tip:t.currentValue },
+                  { key:t.roi, tip:t.roi },
+                  { key:t.currentPrice, tip:t.currentPrice },
+                  { key:t.status, tip:t.status },
+                  { key:t.settings, tip:t.settings },
+                ].map((h,i)=><th key={i} data-app-tooltip={h.tip} style={{ padding:"10px 14px",textAlign:isRTL?"right":"left",fontSize:"0.7rem",fontWeight:600,color:T.textMuted,whiteSpace:"nowrap",borderBottom:`1px solid ${T.border}` }}>{h.key}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {filteredInvestments.length === 0 && (
+                <tr><td colSpan={10} style={{ padding:"18px", textAlign:"center", color:T.textMuted }}>{t.noRecords}</td></tr>
+              )}
+              {filteredInvestments.map((inv) => {
+                const roiVal = roi(inv, db);
+                const planExists = Boolean(inv.tradingPlan);
+                const isExpanded = expandedPlanRow === inv.id;
+                return (
+                  <React.Fragment key={inv.id}>
+                  <tr style={{ borderBottom:`1px solid ${T.border}`, cursor:"pointer" }} onClick={() => setExpandedPlanRow(isExpanded ? null : inv.id)}>
+                    <td style={{ padding:"12px 14px",color:T.textPrimary,fontWeight:500 }}>{inv.name || "—"}</td>
+                    <td style={{ padding:"12px 14px",color:T.textSecondary }}>{inv.startDate || inv.purchaseDate || "—"}</td>
+                    <td style={{ padding:"12px 14px",color:T.textSecondary }}>{inv.endDate || "—"}</td>
+                    <td style={{ padding:"12px 14px",color:T.textSecondary }}>{inv.investmentMethod || "—"}</td>
+                    <td style={{ padding:"12px 14px",color:T.textSecondary }}>{fmtMoney(costBasis(inv), { currency:portfolioCurrency(db, inv.portfolioId) })}</td>
+                    <td style={{ padding:"12px 14px",color:T.textPrimary,fontWeight:600 }}>{fmtMoney(curVal(inv, db), { currency:portfolioCurrency(db, inv.portfolioId) })}</td>
+                    <td style={{ padding:"12px 14px" }}><span style={{ fontWeight:600,color:roiVal>=0?T.positive:T.negative }}>{roiVal>=0?"+":""}{roiVal.toFixed(3)}%</span></td>
+                    <td style={{ padding:"12px 14px",color:T.textSecondary }}>{fmtMoney(effectiveCurrentPrice(db, inv), { currency:portfolioCurrency(db, inv.portfolioId) })}</td>
+                    <td style={{ padding:"12px 14px" }}><Chip color={statusColor(inv.status)}>{inv.status}</Chip></td>
+                    <td style={{ padding:"12px 10px",textAlign:"right" }}>
+                      <div style={{ display:"flex",gap:"4px",justifyContent:"flex-end" }}>
+                        <button data-icon-tooltip={t.addPlan} onClick={(e) => { e.stopPropagation(); setEditingInv(inv); }} style={{ background:"none",border:"none",cursor:"pointer",color:T.emerald,padding:"4px",borderRadius:"6px",display:"flex" }}><Plus size={14}/></button>
+                        <button data-icon-tooltip={planExists ? t.viewPlan : t.noPlanSaved} onClick={(e) => { e.stopPropagation(); setEditingInv({ ...inv, __fromView:true }); }} style={{ background:"none",border:"none",cursor:"pointer",color:planExists ? T.info : T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}><Eye size={14}/></button>
+                      </div>
+                    </td>
+                  </tr>
+                  {isExpanded && (
+                    <tr>
+                      <td colSpan={10} style={{ padding:"0", background:T.bgApp }}>
+                        <div style={{ padding:"14px 16px" }}>
+                          {planExists ? (
+                            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"10px" }}>
+                              <div style={{ background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:"10px", padding:"10px" }}>
+                                <TradingPlanInlineView investment={inv} />
+                              </div>
+                            </div>
+                          ) : <div style={{ color:T.textMuted, fontSize:"0.82rem" }}>{t.noPlanSaved}</div>}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+      {editingInv && (
+        <TradingPlanModal
+          investment={editingInv}
+          mode={editingInv?.__fromView ? "view" : "edit"}
+          onClose={() => setEditingInv(null)}
+          onSave={(plan) => {
+            patchItem("investments", editingInv.id, { tradingPlan:{ ...plan, updatedAt:new Date().toISOString() } });
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
+  const { isRTL, patchItem } = useApp();
+  const isArabic = Boolean(isRTL);
+  const initiallyView = mode === "view";
+  const [isEditing, setIsEditing] = useState(!initiallyView);
+  const [errors, setErrors] = useState({});
+  const [saveError, setSaveError] = useState("");
+
+  const labels = isArabic
+    ? {
+      title: "خطة التداول",
+      save: "حفظ الخطة",
+      update: "حفظ",
+      editPlan: "تعديل الخطة",
+      noPlanModalMessage: "هذا الاستثمار ليس له خطة تداول حالياً.",
+      createNewPlan: "إنشاء خطة جديدة",
+      price: "السعر الحالي",
+      purchase: "سعر الشراء",
+      total: "القيمة الإجمالية",
+      roi: "ROI",
+      technical: "المناطق الفنية",
+      support: "الدعم",
+      resistance: "المقاومة",
+      stopLoss: "وقف الخسارة",
+      fromPlaceholder: "من",
+      toPlaceholder: "إلى",
+      valuePlaceholder: "قيمة",
+      percentagePlaceholder: "نسبة",
+      quantityPlaceholder: "الكمية",
+      dca: "خطة التجميع (DCA)",
+      exit: "استراتيجية التخارج",
+      addLevel: "+ مستوى",
+      addTarget: "+ هدف",
+      fixedTip: "قيمة ثابتة",
+      percentTip: "نسبة مئوية",
+      delete: "حذف",
+      executed: "منفذ",
+      pending: "معلق",
+      edit: "تعديل",
+      close: "إغلاق",
+      from: "من",
+      to: "إلى",
+      value: "القيمة",
+      qty: "الكمية",
+      noPlan: "لا يوجد خطة تداول لهذا السهم",
+      addPlan: "إضافة خطة",
+    }
+    : {
+      title: "Trading Plan",
+      save: "Save Plan",
+      update: "Save",
+      editPlan: "Edit Plan",
+      noPlanModalMessage: "This investment currently has no trading plan.",
+      createNewPlan: "Create New Plan",
+      price: "Current Price",
+      purchase: "Purchase Price",
+      total: "Total Value",
+      roi: "ROI",
+      technical: "TECHNICAL ZONES",
+      support: "Support",
+      resistance: "Resistance",
+      stopLoss: "Stop Loss",
+      fromPlaceholder: "From",
+      toPlaceholder: "To",
+      valuePlaceholder: "Value",
+      percentagePlaceholder: "Percentage",
+      quantityPlaceholder: "Qty",
+      dca: "ACCUMULATION PLAN (DCA)",
+      exit: "EXIT STRATEGY",
+      addLevel: "+ Level",
+      addTarget: "+ Target",
+      fixedTip: "Fixed Value",
+      percentTip: "Percentage",
+      delete: "Delete",
+      executed: "Executed",
+      pending: "Pending",
+      edit: "Edit",
+      close: "Close",
+      from: "From",
+      to: "To",
+      value: "Value",
+      qty: "Qty",
+      noPlan: "No trading plan for this stock",
+      addPlan: "Add Plan",
+    };
+  const helpText = isArabic
+    ? {
+      support: "المنطقة التي يصعب على السهم كسرها هبوطاً، وتعد فرصة شراء قوية.",
+      resistance: "مناطق القمم التاريخية التي يصعب اختراقها، ويفضل البيع عندها.",
+      stopLoss: "السعر الذي تخرج عنده فوراً لحماية رأس مالك من خسائر أكبر.",
+      dca: "الشراء على مراحل لتحسين متوسط التكلفة بدلاً من الدخول دفعة واحدة.",
+      exit: "المحطات التي تجني عندها الأرباح وتخرج من الصفقة تدريجياً.",
+    }
+    : {
+      support: "A price zone that is difficult to break downward and often considered a strong buy area.",
+      resistance: "Historical peak zones that are hard to break through and are often preferred for selling.",
+      stopLoss: "The price where you exit immediately to protect capital from larger losses.",
+      dca: "Buying in stages to improve average cost instead of entering all at once.",
+      exit: "Profit-taking checkpoints where you scale out of the position gradually.",
+    };
+
+  const purchasePrice = Number(investment?.purchasePrice) || 0;
+  const currentPrice = Number(investment?.currentPrice) || purchasePrice;
+  const quantity = Number(investment?.quantity) || 0;
+  const totalValue = currentPrice * quantity;
+  const roiPct = purchasePrice > 0 ? ((currentPrice - purchasePrice) / purchasePrice) * 100 : 0;
+  const namePart = investment?.name || (isArabic ? "الأصل" : "Asset");
+  const codePart = investment?.symbol || investment?.ticker || investment?.code || "";
+
+  const rowIdRef = useRef(0);
+  const nextRowId = () => {
+    rowIdRef.current += 1;
+    return `row-${rowIdRef.current}`;
+  };
+  const withRowIds = (rows = []) => rows.map((row) => ({ ...row, _rowId: row._rowId || nextRowId() }));
+
+  const [form, setForm] = useState(() => {
+    const seeded = normalizeTradingPlan(investment?.tradingPlan || {}, purchasePrice);
+    return {
+      ...seeded,
+      supportFrom: seeded.supportFrom?.value ? seeded.supportFrom : { mode: "percentage", value: "3" },
+      supportTo: seeded.supportTo?.value ? seeded.supportTo : { mode: "percentage", value: "5" },
+      resistanceFrom: seeded.resistanceFrom?.value ? seeded.resistanceFrom : { mode: "percentage", value: "6" },
+      resistanceTo: seeded.resistanceTo?.value ? seeded.resistanceTo : { mode: "percentage", value: "9" },
+      stopLoss: seeded.stopLoss?.value ? seeded.stopLoss : { mode: "percentage", value: "8" },
+      dcaLevels: withRowIds((seeded.dcaLevels || []).length ? seeded.dcaLevels : [{ mode: "percentage", value: "2", allocation: "20", executed: false }]),
+      takeProfitTargets: withRowIds((seeded.takeProfitTargets || []).length ? seeded.takeProfitTargets : [{ mode: "percentage", value: "8", allocation: "10", executed: false }]),
+    };
+  });
+
+  const fmtSar = (v) => {
+    const n = Number(v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return isArabic ? `${n} ﷼` : `SAR ${n}`;
+  };
+
+  const calc = (m, v, direction) => computePlanPrice(purchasePrice, m, v, direction);
+  const hasSavedTradingPlan = useMemo(() => {
+    const plan = investment?.tradingPlan;
+    if (!plan || typeof plan !== "object") return false;
+    const hasZones = ["supportFrom", "supportTo", "resistanceFrom", "resistanceTo", "stopLoss"].some((k) => {
+      const val = plan?.[k]?.value;
+      return val !== undefined && val !== null && String(val).trim() !== "";
+    });
+    const hasDca = Array.isArray(plan.dcaLevels) && plan.dcaLevels.some((r) => String(r?.value ?? "").trim() !== "");
+    const hasTp = Array.isArray(plan.takeProfitTargets) && plan.takeProfitTargets.some((r) => String(r?.value ?? "").trim() !== "");
+    return hasZones || hasDca || hasTp;
+  }, [investment?.tradingPlan]);
+  const updateCore = (k, field, value) => setForm((p) => ({ ...p, [k]: { ...p[k], [field]: value } }));
+  const updateListById = (key, rowId, field, value) => setForm((p) => ({ ...p, [key]: p[key].map((r) => (r._rowId === rowId ? { ...r, [field]: value } : r)) }));
+  const removeRowById = (key, rowId) => setForm((p) => ({ ...p, [key]: p[key].filter((r) => r._rowId !== rowId) }));
+  const placeholderByMode = (mode) => (mode === "percentage" ? labels.percentagePlaceholder : labels.valuePlaceholder);
+
+  const cleanForSave = () => ({
+    ...form,
+    dcaLevels: (form.dcaLevels || []).map(({ _rowId, ...rest }) => rest),
+    takeProfitTargets: (form.takeProfitTargets || []).map(({ _rowId, ...rest }) => rest),
+  });
+
+  const validateRequired = () => {
+    const nextErrors = {};
+    const required = [
+      ["supportFrom", form.supportFrom?.value],
+      ["supportTo", form.supportTo?.value],
+      ["resistanceFrom", form.resistanceFrom?.value],
+      ["resistanceTo", form.resistanceTo?.value],
+      ["stopLoss", form.stopLoss?.value],
+    ];
+    required.forEach(([k, v]) => {
+      if (v === undefined || v === null || String(v).trim() === "") nextErrors[k] = true;
+    });
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length) {
+      setSaveError(isArabic ? "الرجاء تعبئة جميع حقول الدعم والمقاومة ووقف الخسارة قبل الحفظ." : "Please complete Support, Resistance, and Stop Loss fields before saving.");
+      return false;
+    }
+    setSaveError("");
+    return true;
+  };
+
+  const handleSavePlan = () => {
+    if (!validateRequired()) return;
+    const payload = { ...cleanForSave(), updatedAt: new Date().toISOString() };
+    if (investment?.id && patchItem) {
+      patchItem("investments", investment.id, { tradingPlan: payload });
+    } else {
+      onSave?.(payload);
+    }
+    setIsEditing(false);
+  };
+
+  const Card = ({ title, children }) => (
+    <section className="bg-white border border-[#E2E8F0] rounded-[10px] p-4 mb-3 overflow-hidden">
+      <h4 className="text-[12px] tracking-[0.08em] text-slate-500 font-semibold mb-3">{title}</h4>
+      {children}
+    </section>
+  );
+
+  const InnerCard = ({ title, children }) => (
+    <div className="bg-white border border-[#E2E8F0] rounded-[10px] p-4 mb-3 last:mb-0 overflow-hidden">
+      <h5 className="text-[13px] font-semibold text-gray-900 mb-3">{title}</h5>
+      {children}
+    </div>
+  );
+  const TitleWithInfo = ({ label, info }) => (
+    <span style={{ display:"inline-flex", alignItems:"center", gap:"6px" }}>
+      <span>{label}</span>
+      <span
+        data-app-tooltip={info}
+        style={{ width:"15px", height:"15px", borderRadius:"999px", border:"1px solid #94a3b8", color:"#64748b", fontSize:"10px", display:"inline-flex", alignItems:"center", justifyContent:"center", cursor:"help", flexShrink:0 }}
+      >i</span>
+    </span>
+  );
+
+  const ToggleSwitch = ({ value, onChange }) => (
+    <div className="relative w-16 h-9 rounded-full bg-slate-100 overflow-hidden shrink-0 border border-[#E2E8F0]" data-icon-tooltip={value === "percentage" ? labels.percentTip : labels.fixedTip}>
+      <div className={`absolute top-0 bottom-0 w-1/2 bg-[#334155] transition-all ${value === "fixed" ? "left-0" : "left-1/2"}`} />
+      <div className="relative z-10 grid grid-cols-2 h-full">
+        <button type="button" disabled={!isEditing} onClick={() => onChange("fixed")} className={`text-[13px] font-semibold ${value === "fixed" ? "text-white" : "text-[#334155]"}`}>$</button>
+        <button type="button" disabled={!isEditing} onClick={() => onChange("percentage")} className={`text-[13px] font-semibold ${value === "percentage" ? "text-white" : "text-[#334155]"}`}>%</button>
+      </div>
+    </div>
+  );
+
+  const StatusIcon = ({ executed, onToggle }) => (
+    <div className="ml-1 flex items-center gap-1.5 shrink-0">
+      <button
+        type="button"
+        disabled={!isEditing}
+        onClick={() => onToggle(true)}
+        data-icon-tooltip={labels.executed}
+        className={`h-7 w-7 rounded-full border flex items-center justify-center shrink-0 ${executed ? "bg-emerald-100 border-emerald-300 text-emerald-700" : "bg-white border-[#E2E8F0] text-gray-400"}`}
+      ><CheckCircle2 size={13} /></button>
+      <button
+        type="button"
+        disabled={!isEditing}
+        onClick={() => onToggle(false)}
+        data-icon-tooltip={labels.pending}
+        className={`h-7 w-7 rounded-full border flex items-center justify-center shrink-0 ${!executed ? "bg-slate-100 border-slate-300 text-slate-700" : "bg-white border-[#E2E8F0] text-gray-400"}`}
+      ><CalendarClock size={13} /></button>
+    </div>
+  );
+
+  const RowItem = ({ rowIdPrefix, mode, fromValue, toValue, onModeChange, onFromCommit, onToCommit, result, danger = false, showTo = true, fromInvalid = false, toInvalid = false }) => (
+    <div className="flex items-end gap-2 min-w-0">
+      <ToggleSwitch value={mode} onChange={onModeChange} />
+      <PlanInputField isEditing={isEditing} isArabic={isArabic} id={`${rowIdPrefix}-from`} label={labels.from} value={fromValue} onCommit={onFromCommit} placeholder={labels.fromPlaceholder} showPercent={mode === "percentage"} invalid={fromInvalid} />
+      {showTo && <PlanInputField isEditing={isEditing} isArabic={isArabic} id={`${rowIdPrefix}-to`} label={labels.to} value={toValue} onCommit={onToCommit} placeholder={labels.toPlaceholder} showPercent={mode === "percentage"} invalid={toInvalid} />}
+      <span className={`ml-auto text-[13px] font-semibold shrink-0 ${danger ? "text-red-500" : "text-green-600"}`}>{result}</span>
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 z-[90] bg-gray-900/60 flex items-center justify-center p-6">
+      <div dir={isArabic ? "rtl" : "ltr"} className="w-full max-w-[1160px] max-h-[92vh] overflow-y-auto rounded-2xl bg-white border border-gray-200 p-6 md:p-8 shadow-2xl">
+        <header className="flex items-center justify-between gap-4 mb-5">
+          <h2 className="text-[20px] font-semibold text-gray-900">{`${labels.title} - ${namePart}${codePart ? ` - ${codePart}` : ""}`}</h2>
+          <div className="flex items-center gap-2 shrink-0">
+            {isEditing
+              ? <button type="button" onClick={handleSavePlan} className="h-9 px-4 rounded-lg bg-[#1E293B] text-white text-[13px] font-semibold hover:bg-[#334155]">{labels.save}</button>
+              : <button type="button" onClick={() => setIsEditing(true)} className="h-9 px-3 rounded-lg border border-slate-300 text-[#334155] text-[13px] font-semibold bg-slate-100 hover:bg-slate-200 inline-flex items-center gap-1" data-icon-tooltip={labels.edit}><Edit3 size={14} />{labels.editPlan}</button>}
+            <button type="button" onClick={onClose} className="h-9 w-9 rounded-lg border border-[#E2E8F0] bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50" aria-label={labels.close}><X size={16} /></button>
+          </div>
+        </header>
+        {saveError && <div className="mb-3 text-[12px] text-red-600">{saveError}</div>}
+
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 mb-6">
+          {[
+            { key: labels.price, value: fmtSar(currentPrice) },
+            { key: labels.purchase, value: fmtSar(purchasePrice) },
+            { key: labels.total, value: fmtSar(totalValue) },
+            { key: labels.roi, value: `${roiPct >= 0 ? "+" : ""}${roiPct.toFixed(2)}%`, color: roiPct >= 0 ? "text-green-600" : "text-red-500" },
+          ].map((item) => (
+            <div key={item.key} className="text-center min-w-0 flex-1">
+              <div className="text-[11px] text-gray-500 mb-0.5">{item.key}</div>
+              <div className={`text-[14px] font-semibold ${item.color || "text-gray-900"}`}>{item.value}</div>
+            </div>
+          ))}
+        </div>
+
+        <main className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {initiallyView && !isEditing && !hasSavedTradingPlan ? (
+            <div className="lg:col-span-2">
+              <div className="bg-white border border-[#E2E8F0] rounded-[10px] p-8 text-center">
+                <p className="text-[14px] text-[#111827] mb-4">{labels.noPlanModalMessage}</p>
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(true)}
+                  className="h-9 px-4 rounded-lg bg-[#1E293B] text-white text-[13px] font-semibold hover:bg-[#334155]"
+                >
+                  {labels.createNewPlan}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+          <div>
+            <Card title={labels.technical}>
+              <InnerCard title={<TitleWithInfo label={labels.support} info={helpText.support} />}>
+                <RowItem
+                  rowIdPrefix="support"
+                  mode={form.supportFrom?.mode || "percentage"}
+                  fromValue={form.supportFrom?.value || ""}
+                  toValue={form.supportTo?.value || ""}
+                  onModeChange={(next) => { updateCore("supportFrom", "mode", next); updateCore("supportTo", "mode", next); }}
+                  onFromCommit={(v) => updateCore("supportFrom", "value", v)}
+                  onToCommit={(v) => updateCore("supportTo", "value", v)}
+                  fromInvalid={Boolean(errors.supportFrom)}
+                  toInvalid={Boolean(errors.supportTo)}
+                  result={`${fmtSar(calc(form.supportFrom?.mode || "percentage", form.supportFrom?.value, "down"))} → ${fmtSar(calc(form.supportTo?.mode || "percentage", form.supportTo?.value, "down"))}`}
+                />
+              </InnerCard>
+              <InnerCard title={<TitleWithInfo label={labels.resistance} info={helpText.resistance} />}>
+                <RowItem
+                  rowIdPrefix="resistance"
+                  mode={form.resistanceFrom?.mode || "percentage"}
+                  fromValue={form.resistanceFrom?.value || ""}
+                  toValue={form.resistanceTo?.value || ""}
+                  onModeChange={(next) => { updateCore("resistanceFrom", "mode", next); updateCore("resistanceTo", "mode", next); }}
+                  onFromCommit={(v) => updateCore("resistanceFrom", "value", v)}
+                  onToCommit={(v) => updateCore("resistanceTo", "value", v)}
+                  fromInvalid={Boolean(errors.resistanceFrom)}
+                  toInvalid={Boolean(errors.resistanceTo)}
+                  result={`${fmtSar(calc(form.resistanceFrom?.mode || "percentage", form.resistanceFrom?.value, "up"))} → ${fmtSar(calc(form.resistanceTo?.mode || "percentage", form.resistanceTo?.value, "up"))}`}
+                />
+              </InnerCard>
+              <InnerCard title={<TitleWithInfo label={labels.stopLoss} info={helpText.stopLoss} />}>
+                <RowItem
+                  rowIdPrefix="stoploss"
+                  mode={form.stopLoss?.mode || "percentage"}
+                  fromValue={form.stopLoss?.value || ""}
+                  onModeChange={(next) => updateCore("stopLoss", "mode", next)}
+                  onFromCommit={(v) => updateCore("stopLoss", "value", v)}
+                  fromInvalid={Boolean(errors.stopLoss)}
+                  result={fmtSar(calc(form.stopLoss?.mode || "percentage", form.stopLoss?.value, "down"))}
+                  danger
+                  showTo={false}
+                />
+              </InnerCard>
+            </Card>
+          </div>
+
+          <div>
+            <Card title={<TitleWithInfo label={labels.dca} info={helpText.dca} />}>
+              <div className="space-y-3">
+                {form.dcaLevels.map((row, idx) => {
+                  const mode = row.mode || "percentage";
+                  const calcValue = calc(mode, row.value, "down");
+                  return (
+                    <div key={row._rowId} className="grid grid-cols-[40px_64px_88px_88px_minmax(120px,1fr)_auto_auto] items-end gap-2 mb-3">
+                      <span className="w-10 text-[13px] font-semibold text-gray-900 shrink-0">L{idx + 1}</span>
+                      <ToggleSwitch value={mode} onChange={(next) => updateListById("dcaLevels", row._rowId, "mode", next)} />
+                      <PlanInputField isEditing={isEditing} isArabic={isArabic} id={`dca-value-${row._rowId}`} label={labels.value} value={row.value} onCommit={(v) => updateListById("dcaLevels", row._rowId, "value", v)} placeholder={placeholderByMode(mode)} showPercent={mode === "percentage"} />
+                      <PlanInputField isEditing={isEditing} isArabic={isArabic} id={`dca-qty-${row._rowId}`} label={labels.qty} value={row.allocation} onCommit={(v) => updateListById("dcaLevels", row._rowId, "allocation", v)} placeholder={labels.quantityPlaceholder} />
+                      <span className="w-full text-[13px] font-semibold text-green-600 shrink-0 text-right">{fmtSar(calcValue)}</span>
+                      <StatusIcon executed={Boolean(row.executed)} onToggle={(next) => updateListById("dcaLevels", row._rowId, "executed", next)} />
+                      {isEditing && <button type="button" onClick={() => removeRowById("dcaLevels", row._rowId)} className="h-8 w-8 rounded-lg border border-gray-200 text-red-500 flex items-center justify-center hover:bg-red-50 shrink-0" data-icon-tooltip={labels.delete}><Trash2 size={14} /></button>}
+                    </div>
+                  );
+                })}
+              </div>
+              {isEditing && <button type="button" onClick={() => setForm((p) => ({ ...p, dcaLevels: [...p.dcaLevels, { _rowId: nextRowId(), mode: "percentage", value: "", allocation: "", executed: false }] }))} className="mt-4 h-8 px-3 rounded-lg border border-gray-300 text-gray-700 text-[13px] font-semibold bg-white hover:bg-gray-50">{labels.addLevel}</button>}
+            </Card>
+
+            <Card title={<TitleWithInfo label={labels.exit} info={helpText.exit} />}>
+              <div className="space-y-3">
+                {form.takeProfitTargets.map((row, idx) => {
+                  const mode = row.mode || "percentage";
+                  const calcValue = calc(mode, row.value, "up");
+                  return (
+                    <div key={row._rowId} className="grid grid-cols-[40px_64px_88px_88px_minmax(120px,1fr)_auto_auto] items-end gap-2 mb-3">
+                      <span className="w-10 text-[13px] font-semibold text-gray-900 shrink-0">T{idx + 1}</span>
+                      <ToggleSwitch value={mode} onChange={(next) => updateListById("takeProfitTargets", row._rowId, "mode", next)} />
+                      <PlanInputField isEditing={isEditing} isArabic={isArabic} id={`tp-value-${row._rowId}`} label={labels.value} value={row.value} onCommit={(v) => updateListById("takeProfitTargets", row._rowId, "value", v)} placeholder={placeholderByMode(mode)} showPercent={mode === "percentage"} />
+                      <PlanInputField isEditing={isEditing} isArabic={isArabic} id={`tp-qty-${row._rowId}`} label={labels.qty} value={row.allocation} onCommit={(v) => updateListById("takeProfitTargets", row._rowId, "allocation", v)} placeholder={labels.quantityPlaceholder} />
+                      <span className="w-full text-[13px] font-semibold text-green-600 shrink-0 text-right">{fmtSar(calcValue)}</span>
+                      <StatusIcon executed={Boolean(row.executed)} onToggle={(next) => updateListById("takeProfitTargets", row._rowId, "executed", next)} />
+                      {isEditing && <button type="button" onClick={() => removeRowById("takeProfitTargets", row._rowId)} className="h-8 w-8 rounded-lg border border-gray-200 text-red-500 flex items-center justify-center hover:bg-red-50 shrink-0" data-icon-tooltip={labels.delete}><Trash2 size={14} /></button>}
+                    </div>
+                  );
+                })}
+              </div>
+              {isEditing && <button type="button" onClick={() => setForm((p) => ({ ...p, takeProfitTargets: [...p.takeProfitTargets, { _rowId: nextRowId(), mode: "percentage", value: "", allocation: "", executed: false }] }))} className="mt-4 h-8 px-3 rounded-lg border border-gray-300 text-gray-700 text-[13px] font-semibold bg-white hover:bg-gray-50">{labels.addTarget}</button>}
+            </Card>
+          </div>
+            </>
+          )}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+function TradingPlanInlineView({ investment }) {
+  const { isRTL } = useApp();
+  const plan = normalizeTradingPlan(investment?.tradingPlan || {}, Number(investment?.purchasePrice) || 0);
+  const purchase = Number(investment?.purchasePrice) || 0;
+  const asPrice = (entry, direction) => computePlanPrice(purchase, entry?.mode || "fixed", entry?.value, direction).toFixed(2);
+  const sectionTitleStyle = { margin:"0 0 6px", fontSize:"0.78rem", color:"#334155", textTransform:"uppercase", letterSpacing:"0.04em", fontWeight:700 };
+  const itemStyle = { fontSize:"0.82rem", color:"#0f172a", lineHeight:1.6 };
+  return (
+    <div dir={isRTL ? "rtl" : "ltr"} style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"10px" }}>
+      <div><h4 style={sectionTitleStyle}>Support</h4><div style={itemStyle}>From: {asPrice(plan.supportFrom, "down")} · To: {asPrice(plan.supportTo, "down")}</div></div>
+      <div><h4 style={sectionTitleStyle}>Resistance</h4><div style={itemStyle}>From: {asPrice(plan.resistanceFrom, "up")} · To: {asPrice(plan.resistanceTo, "up")}</div></div>
+      <div><h4 style={sectionTitleStyle}>DCA</h4><div style={itemStyle}>{(plan.dcaLevels || []).filter((d) => String(d?.value || "").trim()).map((d, idx) => `L${idx + 1}: ${computePlanPrice(purchase, d.mode || "fixed", d.value, "down").toFixed(2)} (${d.allocation || 0}%)`).join(" | ") || "—"}</div></div>
+      <div><h4 style={sectionTitleStyle}>Exit Strategy</h4><div style={itemStyle}>{(plan.takeProfitTargets || []).filter((t) => String(t?.value || "").trim()).map((t, idx) => `T${idx + 1}: ${computePlanPrice(purchase, t.mode || "fixed", t.value, "up").toFixed(2)} (${t.allocation || 0}%)`).join(" | ") || "—"}</div></div>
+    </div>
+  );
+}
+
+
 function QuickPriceField({ inv }) {
   const { patchItem } = useApp();
   const [val, setVal] = useState(inv.currentPrice||"");
@@ -4148,6 +4930,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const [modalMode, setModalMode] = useState("create");
   const [filterPortfolio, setFilterPortfolio] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  const [filterTarget, setFilterTarget] = useState("");
   const [filterInvestment, setFilterInvestment] = useState("");
   const [filterInvestmentMethod, setFilterInvestmentMethod] = useState("");
   const [filterSmartStatus, setFilterSmartStatus] = useState("");
@@ -4951,6 +5734,7 @@ function SettingsTab() {
 
   const sections = [
     { key:"portfolioTypes",        label:t.portfolioTypes,        icon:<FolderOpen size={15}/> },
+    { key:"investmentTargets",    label:t.investmentTargets,    icon:<Tag size={15}/> },
     { key:"riskLevels",            label:t.riskLevels,            icon:<AlertCircle size={15}/> },
     { key:"fundingSources",        label:t.fundingSources,        icon:<Wallet size={15}/> },
     { key:"investmentMethods",    label:t.investmentMethods,    icon:<Landmark size={15}/> },
@@ -5557,6 +6341,7 @@ function LegendList({ rows, currency = "USD", textColor = "#cbd5e1", valueColor 
 
 
 function FundingLegendGrid({ rows, currency = "USD", textColor = "#dbeafe", valueColor = "#bfdbfe", hiddenNames = new Set(), onToggle = () => {}, isExpanded = false, onToggleExpand = () => {}, showAllLabel = "Show all", showLessLabel = "Show less", maxVisibleCount = 6 }) {
+  const { isRTL } = useApp();
   const visibleRows = isExpanded ? rows : rows.slice(0, maxVisibleCount);
   const hasMore = rows.length > maxVisibleCount;
 
@@ -5585,7 +6370,7 @@ function FundingLegendGrid({ rows, currency = "USD", textColor = "#dbeafe", valu
                 color:textColor,
                 opacity:isHidden ? 0.45 : 1,
                 textDecoration:isHidden ? "line-through" : "none",
-                textAlign:"left",
+                textAlign:isRTL?"right":"left",
               }}
             >
               <span style={{ width:"10px", height:"10px", borderRadius:"999px", background:row.color }} />
@@ -5694,6 +6479,7 @@ function StatisticsTab() {
   const [selectedPortfolioId, setSelectedPortfolioId] = useState("");
   const [selectedInvestmentId, setSelectedInvestmentId] = useState("");
   const [selectedInvestmentMethod, setSelectedInvestmentMethod] = useState("");
+  const [filterTarget, setFilterTarget] = useState("");
   const [fundingInvestmentsModal, setFundingInvestmentsModal] = useState(null);
   const [fundingLegendExpanded, setFundingLegendExpanded] = useState(false);
   const [hiddenFundingSources, setHiddenFundingSources] = useState(() => new Set());
@@ -5706,11 +6492,17 @@ function StatisticsTab() {
   const investmentStatuses = db?.settings?.investmentStatuses?.length ? db.settings.investmentStatuses : ["Active", "Paused", "Closed"];
   const investmentMethodOpts = (db?.settings?.investmentMethods || []).map((method) => ({ value:method, label:method }));
 
+  const portfolioByIdForStock = new Map((db?.portfolios||[]).map((p)=>[p.id,p]));
   const filteredInvestments = investments.filter((inv) => {
+    const invType = String(inv.investmentType||"").toLowerCase();
+    const parentType = String(portfolioByIdForStock.get(inv.portfolioId)?.type||"").toLowerCase();
+    if (!(invType === "stocks" || parentType === "stocks")) return false;
     if (selectedInvestmentStatus && inv.status !== selectedInvestmentStatus) return false;
     if (selectedPortfolioId && inv.portfolioId !== selectedPortfolioId) return false;
     if (selectedInvestmentId && inv.id !== selectedInvestmentId) return false;
     if (selectedInvestmentMethod && (inv.investmentMethod || "") !== selectedInvestmentMethod) return false;
+    const portfolioTarget = portfolioByIdForStock.get(inv.portfolioId)?.target || "";
+    if (filterTarget && portfolioTarget !== filterTarget && (inv.target || "") !== filterTarget) return false;
     return true;
   });
   const filteredInvestmentIds = new Set(filteredInvestments.map((inv) => inv.id));
@@ -5900,7 +6692,7 @@ function StatisticsTab() {
       if (next.size === prev.size) return prev;
       return next;
     });
-    setFundingLegendExpanded(false);
+    setFundingLegendExpanded((prev) => (prev ? false : prev));
   }, [fundingLegendDataKey]);
 
   const riskCapitalData = [
@@ -5922,12 +6714,12 @@ function StatisticsTab() {
 
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font, background:"#0f172a", borderRadius:"14px", padding:"16px" }}>
-      <div style={{ marginBottom:"18px", display:"flex", justifyContent:"space-between", gap:"10px", alignItems:"flex-end", flexWrap:"wrap" }}>
-        <div>
+      <div style={{ marginBottom:"18px", display:"flex", justifyContent:"space-between", gap:"6px", alignItems:"flex-start", flexWrap:"wrap" }}>
+        <div style={{ minWidth:"120px" }}>
           <h2 style={{ margin:0, fontSize:"1.45rem", color:"#f8fafc" }}>{t.statistics}</h2>
           <div style={{ marginTop:"4px", fontSize:"0.82rem", color:"#94a3b8" }}>{t.statisticsCenter}</div>
         </div>
-        <div style={{ display:"flex", alignItems:"flex-end", gap:"8px", flexWrap:"wrap" }}>
+        <div style={{ display:"flex", alignItems:"flex-end", justifyContent:"flex-start", gap:"8px", flexWrap:"wrap", marginInlineStart:isRTL?0:"8px", marginInlineEnd:isRTL?"8px":0, flex:"1 1 760px" }}>
           <div>
             <label style={{ display:"block", marginBottom:"6px", fontSize:"0.74rem", color:"#94a3b8" }}>{t.yearFilter}</label>
             <SearchableMultiYearSelect options={yearlyRows} selectedYears={selectedYears} onChange={setSelectedYears} t={t} font={font} isRTL={isRTL} />
@@ -5990,6 +6782,20 @@ function StatisticsTab() {
               onChange={setSelectedInvestmentMethod}
               placeholder={t.investmentMethod}
               searchPlaceholder={t.investmentMethod}
+              font={font}
+              minWidth="220px"
+              variant="statsFilter"
+              isRTL={isRTL}
+            />
+          </div>
+          <div>
+            <label style={{ display:"block", marginBottom:"6px", fontSize:"0.74rem", color:"#94a3b8" }}>{t.investmentTargets}</label>
+            <SearchableSingleSelect
+              options={(db?.settings?.investmentTargets||[]).map((v)=>({ value:v, label:v }))}
+              value={filterTarget}
+              onChange={setFilterTarget}
+              placeholder={t.investmentTargets}
+              searchPlaceholder={t.investmentTargets}
               font={font}
               minWidth="220px"
               variant="statsFilter"
@@ -6286,12 +7092,12 @@ function UserManagementTab() {
         <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.82rem" }}>
           <thead>
             <tr style={{ background:"#f8fafc", borderBottom:`1px solid ${T.border}` }}>
-              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersName}</th>
-              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersEmail}</th>
-              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersLastLogin}</th>
-              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersRole}</th>
-              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersStatus}</th>
-              <th style={{ textAlign:"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersActions}</th>
+              <th style={{ textAlign:isRTL?"right":"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersName}</th>
+              <th style={{ textAlign:isRTL?"right":"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersEmail}</th>
+              <th style={{ textAlign:isRTL?"right":"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersLastLogin}</th>
+              <th style={{ textAlign:isRTL?"right":"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersRole}</th>
+              <th style={{ textAlign:isRTL?"right":"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersStatus}</th>
+              <th style={{ textAlign:isRTL?"right":"left", padding:"12px 14px", color:T.textSecondary, fontWeight:600 }}>{t.usersActions}</th>
             </tr>
           </thead>
           <tbody>
@@ -6389,6 +7195,9 @@ function MainApp() {
   const [activeTab, setActiveTab] = useState(() => {
     const postLoginTarget = sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY);
     if (postLoginTarget) return postLoginTarget;
+    const path = window.location.pathname;
+    if (path === "/planning-unit/dashboard") return "planningDashboard";
+    if (path === "/planning-unit/analysis") return "stockAnalysis";
     return localStorage.getItem(TAB_STORAGE_KEY) || "dashboard";
   });
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -6417,6 +7226,8 @@ function MainApp() {
 
   useEffect(() => {
     localStorage.setItem(TAB_STORAGE_KEY, activeTab);
+    const path = activeTab === "planningDashboard" ? "/planning-unit/dashboard" : activeTab === "stockAnalysis" ? "/planning-unit/analysis" : "/";
+    if (window.location.pathname !== path) window.history.replaceState({}, "", path);
   }, [activeTab]);
 
   useEffect(() => {
@@ -6502,9 +7313,11 @@ function MainApp() {
 
   const tabs = {
     dashboard:    <Dashboard onNavigateTransactionsByStatus={(filter) => { setTxNavigationFilter(filter); setActiveTab("transactions"); }} onNavigateTransactionsByInvestment={goToTransactionsFromDashboardCashFlow} />,
+    planningDashboard: <PlanningUnitDashboard />,
     portfolios:   <PortfoliosTab onQuickAddInvestment={quickAddInvestment} onViewInvestments={goToInvestmentsForPortfolio} />,
     investments:  <InvestmentsTab onQuickAddTransaction={quickAddTransaction} onViewTransactions={goToTransactionsForInvestment} modalPrefill={investmentPrefill} navigationFilter={investmentNavigationFilter} onModalPrefillConsumed={() => setInvestmentPrefill(null)} showPortfolioBack={showPortfolioBackInInvestments || sessionStorage.getItem("investments_from_portfolio_link_v1") === "1"} onPortfolioBack={handlePortfolioBackFromInvestments} />,
     transactions: <TransactionsTab showSmartBack={smartBackVisible} onSmartBack={handleSmartBack} onBackToDashboard={() => setActiveTab("dashboard")} navigationFilter={txNavigationFilter} modalPrefill={transactionPrefill} />,
+    stockAnalysis: <StockAnalysisTab />,
     statistics:   <StatisticsTab />,
     users:        canManageUsers ? <UserManagementTab /> : <Dashboard />,
     settings:     <SettingsTab />,
@@ -6515,6 +7328,7 @@ function MainApp() {
   return (
     <div style={{
       display:"flex",
+      flexDirection:isRTL?"row-reverse":"row",
       height:"100vh",
       background:T.bgApp,
       fontFamily:font,
@@ -6570,7 +7384,8 @@ function MainApp() {
         flex:1,
         overflowY:"auto",
         height:"100vh",
-        marginLeft:isMobile?0:`${desktopSidebarWidth}px`,
+        marginLeft:isMobile?0:(isRTL?0:`${desktopSidebarWidth}px`),
+        marginRight:isMobile?0:(isRTL?`${desktopSidebarWidth}px`:0),
         padding:isMobile?"16px":"32px 36px",
         maxWidth:"100%",
         display:"flex",
