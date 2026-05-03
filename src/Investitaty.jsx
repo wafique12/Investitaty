@@ -2527,6 +2527,7 @@ const PlanInputField = React.memo(function PlanInputField({ id, label, value, on
   const inputId = useId();
   const stableId = id || inputId;
   const inputRef = useRef(null);
+  const selectionRef = useRef({ start: null, end: null });
   const [draft, setDraft] = useState(value ?? "");
   const [focused, setFocused] = useState(false);
 
@@ -2536,20 +2537,15 @@ const PlanInputField = React.memo(function PlanInputField({ id, label, value, on
   }, [value, focused]);
 
   useEffect(() => {
-    if (!focused) return;
-    const timer = setTimeout(() => {
-      if ((draft ?? "") !== (value ?? "")) onCommit(draft);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [draft, value, focused, onCommit]);
-
-  useEffect(() => {
-    if (focused && inputRef.current && document.activeElement !== inputRef.current) {
+    if (!focused || !inputRef.current) return;
+    if (document.activeElement !== inputRef.current) {
       inputRef.current.focus();
-      const len = inputRef.current.value?.length || 0;
-      inputRef.current.setSelectionRange(len, len);
+      const { start, end } = selectionRef.current;
+      if (typeof start === "number" && typeof end === "number") {
+        inputRef.current.setSelectionRange(start, end);
+      }
     }
-  }, [focused]);
+  }, [focused, draft]);
 
   if (!isEditing) {
     return (
@@ -2568,13 +2564,17 @@ const PlanInputField = React.memo(function PlanInputField({ id, label, value, on
         ref={inputRef}
         type="number"
         value={draft}
-        onFocus={() => setFocused(true)}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={(e) => {
-          setFocused(false);
-          const next = e.target.value;
-          if ((next ?? "") !== (value ?? "")) onCommit(next);
+        onFocus={(e) => {
+          setFocused(true);
+          selectionRef.current = { start: e.target.selectionStart, end: e.target.selectionEnd };
         }}
+        onChange={(e) => {
+          const next = e.target.value;
+          selectionRef.current = { start: e.target.selectionStart, end: e.target.selectionEnd };
+          setDraft(next);
+          onCommit(next);
+        }}
+        onBlur={() => setFocused(false)}
         placeholder={placeholder}
         className={`h-9 w-full rounded-lg border ${invalid ? "border-red-400" : "border-[#E2E8F0]"} focus:border-[#334155] focus:ring-2 focus:ring-slate-100 pl-2 pr-6 text-[13px] text-[#111827] bg-white ${isArabic ? "text-right" : "text-left"}`}
       />
