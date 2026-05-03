@@ -3119,6 +3119,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
   const [editItem, setEditItem] = useState(null);
   const [modalMode, setModalMode] = useState("create");
   const [filterStatus, setFilterStatus] = useState("");
+  const [filterTarget, setFilterTarget] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [collapsedPortfolios, setCollapsedPortfolios] = useState({});
@@ -4191,8 +4192,8 @@ function PlanningUnitDashboard() {
   const watchRows = planRows.filter((r) => r.nearSupport && r.supportAnchor > 0);
   const tpRows = planRows.filter((r) => r.nearTarget && r.targetAnchor?.price > 0);
   const dangerRows = planRows.filter((r) => {
-    const nearStopLoss = r.stopLoss > 0 && r.current >= r.stopLoss && ((r.current - r.stopLoss) / r.stopLoss) <= 0.02;
-    const nearSupport = r.supportAnchor > 0 && r.current >= r.supportAnchor && ((r.current - r.supportAnchor) / r.supportAnchor) <= 0.02;
+    const nearStopLoss = r.stopLoss > 0 && r.current >= r.stopLoss && ((r.current - r.stopLoss) / r.stopLoss) <= 0.05;
+    const nearSupport = r.supportAnchor > 0 && r.current >= r.supportAnchor && ((r.current - r.supportAnchor) / r.supportAnchor) <= 0.05;
     return nearStopLoss || nearSupport;
   });
 
@@ -4311,7 +4312,7 @@ function StockAnalysisTab() {
                     <td style={{ padding:"12px 10px",textAlign:"right" }}>
                       <div style={{ display:"flex",gap:"4px",justifyContent:"flex-end" }}>
                         <button data-icon-tooltip={t.addPlan} onClick={(e) => { e.stopPropagation(); setEditingInv(inv); }} style={{ background:"none",border:"none",cursor:"pointer",color:T.emerald,padding:"4px",borderRadius:"6px",display:"flex" }}><Plus size={14}/></button>
-                        <button data-icon-tooltip={planExists ? "View / Edit Plan" : t.noPlanSaved} onClick={(e) => { e.stopPropagation(); setEditingInv(inv); }} style={{ background:"none",border:"none",cursor:"pointer",color:planExists ? T.info : T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}><Eye size={14}/></button>
+                        <button data-icon-tooltip={planExists ? t.viewPlan : t.noPlanSaved} onClick={(e) => { e.stopPropagation(); setEditingInv({ ...inv, __fromView:true }); }} style={{ background:"none",border:"none",cursor:"pointer",color:planExists ? T.info : T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}><Eye size={14}/></button>
                       </div>
                     </td>
                   </tr>
@@ -4340,10 +4341,10 @@ function StockAnalysisTab() {
       {editingInv && (
         <TradingPlanModal
           investment={editingInv}
+          mode={editingInv?.__fromView ? "view" : "edit"}
           onClose={() => setEditingInv(null)}
           onSave={(plan) => {
             patchItem("investments", editingInv.id, { tradingPlan:{ ...plan, updatedAt:new Date().toISOString() } });
-            setEditingInv(null);
           }}
         />
       )}
@@ -4363,7 +4364,10 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
     ? {
       title: "خطة التداول",
       save: "حفظ الخطة",
-      update: "تحديث الخطة",
+      update: "حفظ",
+      editPlan: "تعديل الخطة",
+      noPlanModalMessage: "هذا الاستثمار ليس له خطة تداول حالياً.",
+      createNewPlan: "إنشاء خطة جديدة",
       price: "السعر الحالي",
       purchase: "سعر الشراء",
       total: "القيمة الإجمالية",
@@ -4398,7 +4402,10 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
     : {
       title: "Trading Plan",
       save: "Save Plan",
-      update: "Update Plan",
+      update: "Save",
+      editPlan: "Edit Plan",
+      noPlanModalMessage: "This investment currently has no trading plan.",
+      createNewPlan: "Create New Plan",
       price: "Current Price",
       purchase: "Purchase Price",
       total: "Total Value",
@@ -4633,7 +4640,7 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
           <div className="flex items-center gap-2 shrink-0">
             {isEditing
               ? <button type="button" onClick={handleSavePlan} className="h-9 px-4 rounded-lg bg-[#1E293B] text-white text-[13px] font-semibold hover:bg-[#334155]">{labels.save}</button>
-              : <button type="button" onClick={() => setIsEditing(true)} className="h-9 px-3 rounded-lg border border-slate-300 text-[#334155] text-[13px] font-semibold bg-slate-100 hover:bg-slate-200 inline-flex items-center gap-1" data-icon-tooltip={labels.edit}><Edit3 size={14} />{labels.update}</button>}
+              : <button type="button" onClick={() => setIsEditing(true)} className="h-9 px-3 rounded-lg border border-slate-300 text-[#334155] text-[13px] font-semibold bg-slate-100 hover:bg-slate-200 inline-flex items-center gap-1" data-icon-tooltip={labels.edit}><Edit3 size={14} />{labels.editPlan}</button>}
             <button type="button" onClick={onClose} className="h-9 w-9 rounded-lg border border-[#E2E8F0] bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50" aria-label={labels.close}><X size={16} /></button>
           </div>
         </header>
@@ -4657,13 +4664,13 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
           {initiallyView && !isEditing && !hasSavedTradingPlan ? (
             <div className="lg:col-span-2">
               <div className="bg-white border border-[#E2E8F0] rounded-[10px] p-8 text-center">
-                <p className="text-[14px] text-[#111827] mb-4">{labels.noPlan}</p>
+                <p className="text-[14px] text-[#111827] mb-4">{labels.noPlanModalMessage}</p>
                 <button
                   type="button"
                   onClick={() => setIsEditing(true)}
                   className="h-9 px-4 rounded-lg bg-[#1E293B] text-white text-[13px] font-semibold hover:bg-[#334155]"
                 >
-                  {labels.addPlan}
+                  {labels.createNewPlan}
                 </button>
               </div>
             </div>
