@@ -2527,18 +2527,12 @@ const PlanInputField = React.memo(function PlanInputField({ id, label, value, on
   const inputId = useId();
   const stableId = id || inputId;
   const [draft, setDraft] = useState(value ?? "");
+  const [focused, setFocused] = useState(false);
 
   useEffect(() => {
+    if (focused) return;
     setDraft(value ?? "");
-  }, [value]);
-
-  useEffect(() => {
-    if (!isEditing) return;
-    const t = setTimeout(() => {
-      if ((draft ?? "") !== (value ?? "")) onCommit(draft);
-    }, 300);
-    return () => clearTimeout(t);
-  }, [draft, value, isEditing, onCommit]);
+  }, [value, focused]);
 
   if (!isEditing) {
     return (
@@ -2557,6 +2551,11 @@ const PlanInputField = React.memo(function PlanInputField({ id, label, value, on
         type="number"
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => {
+          setFocused(false);
+          if ((draft ?? "") !== (value ?? "")) onCommit(draft);
+        }}
         placeholder={placeholder}
         className={`h-9 w-full rounded-lg border ${invalid ? "border-red-400" : "border-[#E2E8F0]"} focus:border-[#334155] focus:ring-2 focus:ring-slate-100 pl-2 pr-6 text-[13px] text-[#111827] bg-white ${isArabic ? "text-right" : "text-left"}`}
       />
@@ -6693,12 +6692,12 @@ function StatisticsTab() {
 
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font, background:"#0f172a", borderRadius:"14px", padding:"16px" }}>
-      <div style={{ marginBottom:"18px", display:"flex", justifyContent:"space-between", gap:"10px", alignItems:"flex-end", flexWrap:"wrap" }}>
-        <div>
+      <div style={{ marginBottom:"18px", display:"flex", justifyContent:"space-between", gap:"12px", alignItems:"center", flexWrap:"wrap" }}>
+        <div style={{ minWidth:"220px" }}>
           <h2 style={{ margin:0, fontSize:"1.45rem", color:"#f8fafc" }}>{t.statistics}</h2>
           <div style={{ marginTop:"4px", fontSize:"0.82rem", color:"#94a3b8" }}>{t.statisticsCenter}</div>
         </div>
-        <div style={{ display:"flex", alignItems:"flex-end", gap:"8px", flexWrap:"wrap" }}>
+        <div style={{ display:"flex", alignItems:"flex-end", justifyContent:"flex-start", gap:"8px", flexWrap:"wrap", marginInlineStart:isRTL?0:"12px", marginInlineEnd:isRTL?"12px":0, flex:"1 1 760px" }}>
           <div>
             <label style={{ display:"block", marginBottom:"6px", fontSize:"0.74rem", color:"#94a3b8" }}>{t.yearFilter}</label>
             <SearchableMultiYearSelect options={yearlyRows} selectedYears={selectedYears} onChange={setSelectedYears} t={t} font={font} isRTL={isRTL} />
