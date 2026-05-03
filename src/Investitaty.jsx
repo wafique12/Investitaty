@@ -6314,6 +6314,7 @@ function LegendList({ rows, currency = "USD", textColor = "#cbd5e1", valueColor 
 
 
 function FundingLegendGrid({ rows, currency = "USD", textColor = "#dbeafe", valueColor = "#bfdbfe", hiddenNames = new Set(), onToggle = () => {}, isExpanded = false, onToggleExpand = () => {}, showAllLabel = "Show all", showLessLabel = "Show less", maxVisibleCount = 6 }) {
+  const { isRTL } = useApp();
   const visibleRows = isExpanded ? rows : rows.slice(0, maxVisibleCount);
   const hasMore = rows.length > maxVisibleCount;
 
