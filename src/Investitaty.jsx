@@ -1,4 +1,4 @@
-import React, { useState, useEffect, createContext, useContext, useCallback, useRef, useMemo } from "react";
+import React, { useState, useEffect, createContext, useContext, useCallback, useRef, useMemo, useId } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import {
   X, Trash2, Check, Edit3, MoreVertical, Zap, BookOpen,
@@ -4638,11 +4638,11 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
     </div>
   );
 
-  const RowItem = ({ mode, fromValue, toValue, onModeChange, onFromCommit, onToCommit, result, danger = false, showTo = true, fromInvalid = false, toInvalid = false }) => (
+  const RowItem = ({ rowIdPrefix, mode, fromValue, toValue, onModeChange, onFromCommit, onToCommit, result, danger = false, showTo = true, fromInvalid = false, toInvalid = false }) => (
     <div className="flex items-end gap-2 min-w-0">
       <ToggleSwitch value={mode} onChange={onModeChange} />
-      <PlanInputField isEditing={isEditing} isArabic={isArabic} id={`row-from-${label}` } label={labels.from} value={fromValue} onCommit={onFromCommit} placeholder={labels.fromPlaceholder} showPercent={mode === "percentage"} invalid={fromInvalid} />
-      {showTo && <PlanInputField isEditing={isEditing} isArabic={isArabic} id={`row-to-${label}` } label={labels.to} value={toValue} onCommit={onToCommit} placeholder={labels.toPlaceholder} showPercent={mode === "percentage"} invalid={toInvalid} />}
+      <PlanInputField isEditing={isEditing} isArabic={isArabic} id={`${rowIdPrefix}-from`} label={labels.from} value={fromValue} onCommit={onFromCommit} placeholder={labels.fromPlaceholder} showPercent={mode === "percentage"} invalid={fromInvalid} />
+      {showTo && <PlanInputField isEditing={isEditing} isArabic={isArabic} id={`${rowIdPrefix}-to`} label={labels.to} value={toValue} onCommit={onToCommit} placeholder={labels.toPlaceholder} showPercent={mode === "percentage"} invalid={toInvalid} />}
       <span className={`ml-auto text-[13px] font-semibold shrink-0 ${danger ? "text-red-500" : "text-green-600"}`}>{result}</span>
     </div>
   );
@@ -4695,6 +4695,7 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
             <Card title={labels.technical}>
               <InnerCard title={<TitleWithInfo label={labels.support} info={helpText.support} />}>
                 <RowItem
+                  rowIdPrefix="support"
                   mode={form.supportFrom?.mode || "percentage"}
                   fromValue={form.supportFrom?.value || ""}
                   toValue={form.supportTo?.value || ""}
@@ -4708,6 +4709,7 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
               </InnerCard>
               <InnerCard title={<TitleWithInfo label={labels.resistance} info={helpText.resistance} />}>
                 <RowItem
+                  rowIdPrefix="resistance"
                   mode={form.resistanceFrom?.mode || "percentage"}
                   fromValue={form.resistanceFrom?.value || ""}
                   toValue={form.resistanceTo?.value || ""}
@@ -4721,6 +4723,7 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
               </InnerCard>
               <InnerCard title={<TitleWithInfo label={labels.stopLoss} info={helpText.stopLoss} />}>
                 <RowItem
+                  rowIdPrefix="stoploss"
                   mode={form.stopLoss?.mode || "percentage"}
                   fromValue={form.stopLoss?.value || ""}
                   onModeChange={(next) => updateCore("stopLoss", "mode", next)}
@@ -6764,9 +6767,20 @@ function StatisticsTab() {
               isRTL={isRTL}
             />
           </div>
-        </div>
-        <div style={{ width:"220px", maxWidth:"100%" }}>
-          <Select value={filterTarget} onChange={e=>setFilterTarget(e.target.value)} options={[{ value:"", label:t.investmentTargets }, ...((db?.settings?.investmentTargets||[]).map((v)=>({value:v,label:v})))]} isRTL={isRTL} style={{ ...filterInputCss(isRTL), width:"100%", flex:"0 0 auto" }} />
+          <div>
+            <label style={{ display:"block", marginBottom:"6px", fontSize:"0.74rem", color:"#94a3b8" }}>{t.investmentTargets}</label>
+            <SearchableSingleSelect
+              options={(db?.settings?.investmentTargets||[]).map((v)=>({ value:v, label:v }))}
+              value={filterTarget}
+              onChange={setFilterTarget}
+              placeholder={t.investmentTargets}
+              searchPlaceholder={t.investmentTargets}
+              font={font}
+              minWidth="220px"
+              variant="statsFilter"
+              isRTL={isRTL}
+            />
+          </div>
         </div>
       </div>
 
