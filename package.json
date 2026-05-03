@@ -16,5 +16,5 @@
     "build": "vite build",
     "preview": "vite preview"
   },
-  "environment": "Development"
+  "environment": "Production"
 }
