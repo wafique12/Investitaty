@@ -2526,13 +2526,12 @@ const roi = (inv, db) => { const c=costBasis(inv); return c>0?((curVal(inv, db)-
 const PlanInputField = React.memo(function PlanInputField({ id, label, value, onCommit, placeholder, showPercent = false, invalid = false, isEditing, isArabic }) {
   const inputId = useId();
   const stableId = id || inputId;
-  const inputRef = useRef(null);
+  const [draft, setDraft] = useState(value ?? "");
   const [focused, setFocused] = useState(false);
 
   useEffect(() => {
     if (focused) return;
-    if (!inputRef.current) return;
-    inputRef.current.value = value ?? "";
+    setDraft(value ?? "");
   }, [value, focused]);
 
   if (!isEditing) {
@@ -2549,15 +2548,15 @@ const PlanInputField = React.memo(function PlanInputField({ id, label, value, on
       {label && <label htmlFor={stableId} className={`text-[10px] text-slate-500 mb-1 ${isArabic ? "text-right" : "text-left"}`}>{label}</label>}
       <input
         id={stableId}
-        ref={inputRef}
         type="number"
-        defaultValue={value ?? ""}
+        value={draft}
         onFocus={() => setFocused(true)}
-        onBlur={(e) => {
-          setFocused(false);
+        onChange={(e) => {
           const next = e.target.value;
-          if ((next ?? "") !== (value ?? "")) onCommit(next);
+          setDraft(next);
+          onCommit(next);
         }}
+        onBlur={() => setFocused(false)}
         placeholder={placeholder}
         className={`h-9 w-full rounded-lg border ${invalid ? "border-red-400" : "border-[#E2E8F0]"} focus:border-[#334155] focus:ring-2 focus:ring-slate-100 pl-2 pr-6 text-[13px] text-[#111827] bg-white ${isArabic ? "text-right" : "text-left"}`}
       />
@@ -6695,7 +6694,7 @@ function StatisticsTab() {
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font, background:"#0f172a", borderRadius:"14px", padding:"16px" }}>
       <div style={{ marginBottom:"18px", display:"flex", justifyContent:"space-between", gap:"6px", alignItems:"flex-start", flexWrap:"wrap" }}>
-        <div style={{ minWidth:"220px" }}>
+        <div style={{ minWidth:"120px" }}>
           <h2 style={{ margin:0, fontSize:"1.45rem", color:"#f8fafc" }}>{t.statistics}</h2>
           <div style={{ marginTop:"4px", fontSize:"0.82rem", color:"#94a3b8" }}>{t.statisticsCenter}</div>
         </div>
