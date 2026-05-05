@@ -3526,7 +3526,6 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
       startDate: !form.startDate,
       risk: !form.risk,
       status: !form.status,
-      target: !form.target,
       investmentMethod: !form.investmentMethod,
       investmentType: !form.investmentType,
     };
