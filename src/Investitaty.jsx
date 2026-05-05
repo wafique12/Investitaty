@@ -3265,8 +3265,15 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
       return;
     }
     setFormError("");
-    if (editItem) { patchItem("portfolios",editItem.id,form); }
-    else { addItem("portfolios",form); }
+     if (editItem) {
+      const updatedPortfolio = { ...editItem, ...form };
+      patchItem("portfolios",editItem.id,form);
+      setEditItem(updatedPortfolio);
+      setInvalidFields({});
+      setModalMode("view");
+      return;
+    }
+    addItem("portfolios",form);
     setInvalidFields({});
     setForm(EMPTY); setShowModal(false); setEditItem(null); setModalMode("create");
   };
@@ -3544,16 +3551,19 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
       const storedInvestment = investments.find((inv) => inv.id === editItem.id) || editItem;
       const purchaseChanged = !isSamePriceValue(storedInvestment?.purchasePrice, payload.purchasePrice);
       const currentChanged = !isSamePriceValue(storedInvestment?.currentPrice, payload.currentPrice);
+      const updatedInvestment = { ...editItem, ...payload };
       patchItem("investments",editItem.id,payload);
       if (purchaseChanged || currentChanged) createPriceHistoryEntry(editItem, payload.purchasePrice, payload.currentPrice);
+      setEditItem(updatedInvestment);
+      setInvalidFields({});
+      setModalMode("view");
+      return;
     }
-    else {
-      const createdInvestment = addItem("investments", payload);
-      const initialCurrentPrice = payload.inheritPrice
-        ? String(portfolioCurrentPrice(db, payload.portfolioId))
-        : payload.currentPrice;
-      createPriceHistoryEntry(createdInvestment, payload.purchasePrice, initialCurrentPrice);
-    }
+    const createdInvestment = addItem("investments", payload);
+    const initialCurrentPrice = payload.inheritPrice
+      ? String(portfolioCurrentPrice(db, payload.portfolioId))
+      : payload.currentPrice;
+    createPriceHistoryEntry(createdInvestment, payload.purchasePrice, initialCurrentPrice);
     setInvalidFields({});
     setForm(EMPTY); closeModal();
   };
@@ -5156,8 +5166,15 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
       collected_at: form.collectedAt || "",
     };
 
-    if (editItem) { patchItem("transactions",editItem.id,payload); }
-    else { addItem("transactions",payload); }
+    if (editItem) {
+      const updatedTransaction = { ...editItem, ...payload };
+      patchItem("transactions",editItem.id,payload);
+      setEditItem(updatedTransaction);
+      setInvalidFields({});
+      setModalMode("view");
+      return;
+    }
+    addItem("transactions",payload);
     setInvalidFields({});
     setForm(EMPTY); setShowModal(false); setEditItem(null); setModalMode("create");
   };
