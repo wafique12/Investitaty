@@ -6508,16 +6508,13 @@ function StatisticsTab() {
   const investmentStatuses = db?.settings?.investmentStatuses?.length ? db.settings.investmentStatuses : ["Active", "Paused", "Closed"];
   const investmentMethodOpts = (db?.settings?.investmentMethods || []).map((method) => ({ value:method, label:method }));
 
-  const portfolioByIdForStock = new Map((db?.portfolios||[]).map((p)=>[p.id,p]));
+  const portfolioByIdForFilters = new Map((db?.portfolios||[]).map((p)=>[p.id,p]));
   const filteredInvestments = investments.filter((inv) => {
-    const invType = String(inv.investmentType||"").toLowerCase();
-    const parentType = String(portfolioByIdForStock.get(inv.portfolioId)?.type||"").toLowerCase();
-    if (!(invType === "stocks" || parentType === "stocks")) return false;
     if (selectedInvestmentStatus && inv.status !== selectedInvestmentStatus) return false;
     if (selectedPortfolioId && inv.portfolioId !== selectedPortfolioId) return false;
     if (selectedInvestmentId && inv.id !== selectedInvestmentId) return false;
     if (selectedInvestmentMethod && (inv.investmentMethod || "") !== selectedInvestmentMethod) return false;
-    const portfolioTarget = portfolioByIdForStock.get(inv.portfolioId)?.target || "";
+    const portfolioTarget = portfolioByIdForFilters.get(inv.portfolioId)?.target || "";
     if (filterTarget && portfolioTarget !== filterTarget && (inv.target || "") !== filterTarget) return false;
     return true;
   });
