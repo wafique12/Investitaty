@@ -1,6 +1,6 @@
 {
   "name": "investitaty",
-  "version": "1.6.2",
+  "version": "1.6.3",
   "private": true,
   "dependencies": {
     "react": "^18.2.0",
