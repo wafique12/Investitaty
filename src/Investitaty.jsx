@@ -142,6 +142,7 @@ const TRANSLATIONS = {
     investmentVolumeRiskMatrix: "Investment Volume vs Risk Matrix",
     annualProfitsByRiskLevel: "Annual Profits by Risk Level",
     annualProfitsByStatus: "Annual Profits by Transaction Status",
+    totalProfitsPerMonth: "Total Profits per Month",
     lossAnalysisMatrix: "Capital Profits/Loss Analysis Matrix",
     assetAllocationOverview: "Asset Allocation Overview",
     centralizedCategoryAnalytics: "Centralized Item/Category Analytics",
@@ -426,6 +427,7 @@ const TRANSLATIONS = {
     investmentVolumeRiskMatrix: "مصفوفة حجم الاستثمار مقابل المخاطرة",
     annualProfitsByRiskLevel: "الأرباح السنوية حسب المخاطرة",
     annualProfitsByStatus: "الأرباح السنوية حسب حالة المعاملة",
+    totalProfitsPerMonth: "مجمل الأرباح بالشهر",
     lossAnalysisMatrix: "مصفوفة تحليل أرباح/خسائر رأس المال",
     assetAllocationOverview: "نظرة توزيع الأصول",
     centralizedCategoryAnalytics: "تحليلات العناصر/الفئات المركزية",
@@ -2792,10 +2794,6 @@ function Dashboard({ onNavigateTransactionsByStatus, onNavigateTransactionsByInv
   });
 
   const expectedAnnualIncome = currentYearIncomeTransactions
-    .filter((tx) => {
-      const category = String(tx.category || "").toLowerCase();
-      return category.includes("dividend") || category.includes("yield") || category.includes("توزيع") || category.includes("عائد");
-    })
     .reduce((sum, tx) => sum + toBaseAmount(safeDb, parseFloat(tx.amount) || 0, portfolioCurrency(safeDb, tx.portfolioId), baseCurrency), 0);
   const achievedIncomePct = expectedAnnualIncome > 0 ? (totalAnnualIncome / expectedAnnualIncome) * 100 : 0;
   const expectedVsPrincipalPct = activePrincipal > 0 ? (expectedAnnualIncome / activePrincipal) * 100 : 0;
@@ -4380,15 +4378,7 @@ function StockAnalysisTab() {
           <h2 style={{ margin:0,fontSize:"1.4rem",fontWeight:700,color:T.textPrimary }}>{t.stockAnalysis}</h2>
           <div style={{ fontSize:"0.8rem",color:T.textMuted,marginTop:"2px" }}>{filteredInvestments.length} {t.investments.toLowerCase()}</div>
         </div>
-        <button
-          type="button"
-          onClick={() => setCreationStep(1)}
-          data-icon-tooltip={t.addPlan}
-          aria-label={t.addPlan}
-          style={{ width:"38px",height:"38px",borderRadius:"10px",border:`1px solid ${T.border}`,background:T.emerald,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:"0 8px 18px rgba(16,185,129,0.22)" }}
-        >
-          <Plus size={18} />
-        </button>
+        <Btn icon={<Plus size={15}/>} onClick={() => setCreationStep(1)}>{t.addPlan}</Btn>
       </div>
       <div style={{ ...filterBarCss, justifyContent:"flex-start" }}>
         <Select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} options={[{ value:"", label:t.investmentStatuses }, ...statusOpts]} isRTL={isRTL} style={{ ...filterInputCss(isRTL), flex:"0 0 auto", width:"fit-content", minWidth:"120px", maxWidth:"150px" }} />
@@ -6816,6 +6806,19 @@ function StatisticsTab() {
   const riskProfitTotal = riskProfitChartData.reduce((s,d)=>s+d.value,0);
   riskProfitChartData.forEach((row) => { row.pct = riskProfitTotal ? (row.value/riskProfitTotal)*100 : 0; });
 
+  const monthLabels = isRTL
+    ? ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"]
+    : ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const monthlyProfitTotals = Array(12).fill(0);
+  filteredTransactions.forEach((tx) => {
+    if (tx.type !== "income" || tx.status === "cancelled") return;
+    const parsed = new Date(statusAttributionDate(tx) || tx.date || tx.created_at || Date.now());
+    if (Number.isNaN(parsed.getTime()) || parsed.getFullYear() !== currentYear) return;
+    monthlyProfitTotals[parsed.getMonth()] += toBaseAmount(db, parseFloat(tx.amount) || 0, portfolioCurrency(db, tx.portfolioId), primaryCurrency);
+  });
+  const monthlyProfitData = monthlyProfitTotals.map((value, idx) => ({ month:monthLabels[idx], value }));
+  const hasMonthlyProfitData = monthlyProfitData.some((row) => row.value > 0);
+
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font, background:"#0f172a", borderRadius:"14px", padding:"16px" }}>
       <div style={{ marginBottom:"18px", display:"flex", justifyContent:"space-between", gap:"6px", alignItems:"flex-start", flexWrap:"wrap" }}>
@@ -6967,6 +6970,23 @@ function StatisticsTab() {
               ) : <div style={{ display:"grid", placeItems:"center", height:"100%", color:"#64748b" }}>{t.noAllocation}</div>}
             </div>
             <LegendList rows={riskProfitChartData} currency={primaryCurrency} />
+          </div>
+        </Card>
+
+        <Card style={{ padding:"14px", background:"#111c33", border:"1px solid rgba(148,163,184,0.24)" }}>
+          <h3 style={{ margin:"0 0 10px", color:"#f8fafc", fontSize:"0.88rem" }}>{t.totalProfitsPerMonth}</h3>
+          <div style={{ height:"240px" }}>
+            {hasMonthlyProfitData ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyProfitData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" />
+                  <XAxis dataKey="month" stroke="#94a3b8" tick={{ fill:"#94a3b8", fontSize:11 }} />
+                  <YAxis stroke="#94a3b8" tick={{ fill:"#94a3b8", fontSize:11 }} />
+                  <Tooltip formatter={(value) => fmtMoney(value, { currency:primaryCurrency })} />
+                  <Bar dataKey="value" fill={T.emerald} radius={[6,6,0,0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : <div style={{ display:"grid", placeItems:"center", height:"100%", color:"#64748b" }}>{t.noAllocation}</div>}
           </div>
         </Card>
 
