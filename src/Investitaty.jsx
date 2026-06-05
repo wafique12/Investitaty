@@ -189,6 +189,7 @@ const TRANSLATIONS = {
     viewTransactions: "View transactions",
     addPlan: "Add Plan",
     viewPlan: "View Plan",
+    deletePlan: "Delete Plan",
     noPlanSaved: "No plan saved yet.",
     viewInvestmentsTooltip: "View Investments",
     viewDetails: "View details",
@@ -384,6 +385,7 @@ const TRANSLATIONS = {
     settings: "الإعدادات",
     addPlan: "إضافة خطة",
     viewPlan: "عرض الخطة",
+    deletePlan: "حذف الخطة",
     noPlanSaved: "لا توجد خطة محفوظة بعد.",
     goodMorning: "صباح الخير",
     goodAfternoon: "مساء الخير",
@@ -3477,11 +3479,34 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
 }
 
 
-function ReadOnlyField({ label, value }) {
+function ReadOnlyField({ label, value, children }) {
   return (
     <div style={{ padding:"10px", border:`1px solid ${T.border}`, borderRadius:"10px", background:T.bgApp }}>
       <div style={{ fontSize:"0.72rem", color:T.textMuted, marginBottom:"6px", fontWeight:700 }}>{label}</div>
-      <div style={{ fontSize:"0.86rem", color:T.textPrimary, wordBreak:"break-word" }}>{value || "—"}</div>
+      <div style={{ fontSize:"0.86rem", color:T.textPrimary, wordBreak:"break-word" }}>{children ?? (value || "—")}</div>
+    </div>
+  );
+}
+
+function SplitFundingTags({ funding = [], currency = "USD" }) {
+  const normalized = Array.isArray(funding)
+    ? funding
+    : String(funding || "")
+      .split("|")
+      .map((part) => {
+        const [source, ...amountParts] = part.split(":");
+        return { source:source?.trim(), amount:amountParts.join(":").trim() };
+      });
+  const rows = normalized.filter((item) => String(item?.source || item?.amount || "").trim());
+  if (!rows.length) return "—";
+  return (
+    <div style={{ display:"flex", flexWrap:"wrap", gap:"6px" }}>
+      {rows.map((item, idx) => (
+        <span key={`${item.source || "split"}-${idx}`} style={{ display:"inline-flex", alignItems:"center", gap:"6px", padding:"5px 9px", borderRadius:"999px", background:"rgba(16,185,129,0.12)", border:"1px solid rgba(16,185,129,0.22)", color:"#047857", fontSize:"0.76rem", fontWeight:700 }}>
+          <span>{item.source || "—"}</span>
+          <span style={{ color:T.textSecondary, fontWeight:600 }}>{item.amount ? fmtMoney(item.amount, { currency }) : "—"}</span>
+        </span>
+      ))}
     </div>
   );
 }
@@ -3994,7 +4019,9 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
               <ReadOnlyField label={t.investmentType} value={form.investmentType} />
               <ReadOnlyField label={t.risk} value={form.risk} />
               <ReadOnlyField label={t.status} value={form.status} />
-              <ReadOnlyField label={t.splitFunding} value={(form.funding||[]).map((f)=>`${f.source||"—"}: ${f.amount||0}`).join(" | ")} />
+              <ReadOnlyField label={t.splitFunding}>
+                <SplitFundingTags funding={form.funding || []} currency={portfolioCurrency(db, form.portfolioId)} />
+              </ReadOnlyField>
               <ReadOnlyField label={t.notes} value={form.notes} />
               <ReadOnlyField label="Created At" value={editItem?.created_at} />
             </div>
@@ -4373,6 +4400,16 @@ function StockAnalysisTab() {
     setCreationStep(2);
   };
 
+  const handleDeletePlan = (inv) => {
+    if (!window.confirm(t.deletePlan || (isRTL ? "حذف الخطة" : "Delete Plan"))) return;
+    if (inv.__planScope === "portfolio") {
+      patchItem("portfolios", inv.portfolioId, { tradingPlan:null });
+    } else {
+      patchItem("investments", inv.id, { tradingPlan:null });
+    }
+    if (expandedPlanRow === inv.id) setExpandedPlanRow(null);
+  };
+
   return (
     <div dir={isRTL ? "rtl" : "ltr"} style={{ fontFamily:font }}>
       <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"24px",gap:"12px",flexWrap:"wrap" }}>
@@ -4439,6 +4476,7 @@ function StockAnalysisTab() {
                     <td style={{ padding:"12px 10px",textAlign:"right" }}>
                       <div style={{ display:"flex",gap:"4px",justifyContent:"flex-end" }}>
                         <button data-icon-tooltip={t.viewPlan} onClick={(e) => { e.stopPropagation(); setEditingInv({ ...inv, tradingPlan: planForView, __fromView:true, __portfolioPlan: inv.__planScope === "portfolio", __portfolioId: inv.portfolioId }); }} style={{ background:"none",border:"none",cursor:"pointer",color:T.info,padding:"4px",borderRadius:"6px",display:"flex" }}><Eye size={14}/></button>
+                        <button data-icon-tooltip={t.deletePlan} onClick={(e) => { e.stopPropagation(); handleDeletePlan(inv); }} style={{ background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }} onMouseEnter={e=>e.currentTarget.style.color=T.negative} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><Trash2 size={14}/></button>
                       </div>
                     </td>
                   </tr>
