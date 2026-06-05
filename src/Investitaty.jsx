@@ -143,6 +143,7 @@ const TRANSLATIONS = {
     annualProfitsByRiskLevel: "Annual Profits by Risk Level",
     annualProfitsByStatus: "Annual Profits by Transaction Status",
     totalProfitsPerMonth: "Total Profits per Month",
+    totalProfits: "Total Profits",
     lossAnalysisMatrix: "Capital Profits/Loss Analysis Matrix",
     assetAllocationOverview: "Asset Allocation Overview",
     centralizedCategoryAnalytics: "Centralized Item/Category Analytics",
@@ -428,6 +429,7 @@ const TRANSLATIONS = {
     annualProfitsByRiskLevel: "الأرباح السنوية حسب المخاطرة",
     annualProfitsByStatus: "الأرباح السنوية حسب حالة المعاملة",
     totalProfitsPerMonth: "مجمل الأرباح بالشهر",
+    totalProfits: "مجمل الأرباح",
     lossAnalysisMatrix: "مصفوفة تحليل أرباح/خسائر رأس المال",
     assetAllocationOverview: "نظرة توزيع الأصول",
     centralizedCategoryAnalytics: "تحليلات العناصر/الفئات المركزية",
@@ -6571,7 +6573,7 @@ function FundingSourceBreakdownTable({ rows, currency, onOpenInvestments }) {
 
 function StatisticsTab() {
   const { db, t, isRTL, font, selectedCountry } = useApp();
-  const [selectedYears, setSelectedYears] = useState([]);
+  const [selectedYears, setSelectedYears] = useState(() => [String(new Date().getFullYear())]);
   const [selectedInvestmentStatus, setSelectedInvestmentStatus] = useState("");
   const [selectedPortfolioId, setSelectedPortfolioId] = useState("");
   const [selectedInvestmentId, setSelectedInvestmentId] = useState("");
@@ -6623,6 +6625,7 @@ function StatisticsTab() {
     return years;
   });
   const yearlyRows = [...new Set([
+    currentYear,
     ...lifecycleYears,
     ...filteredTransactions.map((tx) => new Date(tx.date || tx.created_at || Date.now()).getFullYear()),
     ...priceHistory
@@ -6809,15 +6812,20 @@ function StatisticsTab() {
   const monthLabels = isRTL
     ? ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"]
     : ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const selectedMonthlyYears = selectedYears.length ? selectedYears.map(Number).filter(Number.isFinite) : yearlyRows;
+  const selectedMonthlyYearSet = new Set(selectedMonthlyYears);
+  const selectedMonthlyPeriodLabel = selectedYears.length ? selectedYears.join(", ") : t.allYears;
   const monthlyProfitTotals = Array(12).fill(0);
   filteredTransactions.forEach((tx) => {
     if (tx.type !== "income" || tx.status === "cancelled") return;
     const parsed = new Date(statusAttributionDate(tx) || tx.date || tx.created_at || Date.now());
-    if (Number.isNaN(parsed.getTime()) || parsed.getFullYear() !== currentYear) return;
+    if (Number.isNaN(parsed.getTime()) || !selectedMonthlyYearSet.has(parsed.getFullYear())) return;
     monthlyProfitTotals[parsed.getMonth()] += toBaseAmount(db, parseFloat(tx.amount) || 0, portfolioCurrency(db, tx.portfolioId), primaryCurrency);
   });
   const monthlyProfitData = monthlyProfitTotals.map((value, idx) => ({ month:monthLabels[idx], value }));
   const hasMonthlyProfitData = monthlyProfitData.some((row) => row.value > 0);
+  const monthlyProfitRows = monthlyProfitData.map((row, idx) => ({ key:`monthly-profit-${idx}`, values:[row.month, row.value] }));
+  monthlyProfitRows.push({ key:"monthly-profit-total", isTotal:true, values:[t.totalLabel, monthlyProfitTotals.reduce((sum, value) => sum + value, 0)] });
 
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font, background:"#0f172a", borderRadius:"14px", padding:"16px" }}>
@@ -6974,7 +6982,7 @@ function StatisticsTab() {
         </Card>
 
         <Card style={{ padding:"14px", background:"#111c33", border:"1px solid rgba(148,163,184,0.24)" }}>
-          <h3 style={{ margin:"0 0 10px", color:"#f8fafc", fontSize:"0.88rem" }}>{t.totalProfitsPerMonth}</h3>
+          <h3 style={{ margin:"0 0 10px", color:"#f8fafc", fontSize:"0.88rem" }}>{t.totalProfitsPerMonth} · {selectedMonthlyPeriodLabel}</h3>
           <div style={{ height:"240px" }}>
             {hasMonthlyProfitData ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -7048,6 +7056,14 @@ function StatisticsTab() {
           currency={primaryCurrency}
           headers={[t.yearLabel, ...statuses, t.totalLabel]}
           rows={statusRows}
+        />
+      </AccordionSection>
+
+      <AccordionSection title={`${t.totalProfitsPerMonth} · ${selectedMonthlyPeriodLabel}`} icon={<BarChart2 size={14} color="#94a3b8" />}>
+        <StatisticsMatrixTable
+          currency={primaryCurrency}
+          headers={[t.month, t.totalProfits]}
+          rows={monthlyProfitRows}
         />
       </AccordionSection>
 
