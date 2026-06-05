@@ -96,7 +96,7 @@ const TRANSLATIONS = {
     portfolios: "Portfolios",
     investments: "Investments",
     transactions: "Transactions",
-    stockAnalysis: "Stock Analysis",
+    stockAnalysis: "Trading Plan Center",
     statistics: "Statistics",
     settings: "Settings",
     goodMorning: "Good morning",
@@ -377,7 +377,7 @@ const TRANSLATIONS = {
     portfolios: "المحافظ",
     investments: "الاستثمارات",
     transactions: "المعاملات",
-    stockAnalysis: "تحليل الأسهم",
+    stockAnalysis: "مركز خطط التداول",
     statistics: "الإحصائيات",
     settings: "الإعدادات",
     addPlan: "إضافة خطة",
@@ -2390,7 +2390,7 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileO
     { id:"portfolios",   label:t.portfolios,   icon:<FolderOpen size={17}/> },
     { id:"investments",  label:t.investments,  icon:<Wallet size={17}/> },
     { id:"transactions", label:t.transactions, icon:<DollarSign size={17}/> },
-    { id:"planningUnit", label:"Planning Unit", icon:<ListTree size={17}/>, children:[{ id:"stockAnalysis", label:"Stocks Analysis" }] },
+    { id:"planningUnit", label:"Planning Unit", icon:<ListTree size={17}/>, children:[{ id:"stockAnalysis", label:t.stockAnalysis }] },
     { id:"statistics",   label:t.statistics,   icon:<PieChartIcon size={17}/> },
     ...(canManageUsers ? [{ id:"users", label:"Users & Permissions", icon:<Shield size={17}/> }] : []),
     { id:"settings",     label:t.settings,     icon:<Settings size={17}/> },
@@ -4288,38 +4288,90 @@ function PlanningUnitDashboard() {
   </div>;
 }
 
+function hasActiveTradingPlan(plan) {
+  if (!plan || typeof plan !== "object" || plan.isActive === false || plan.active === false || plan.status === "inactive") return false;
+  const hasZones = ["supportFrom", "supportTo", "resistanceFrom", "resistanceTo", "stopLoss"].some((k) => {
+    const val = plan?.[k]?.value;
+    return val !== undefined && val !== null && String(val).trim() !== "";
+  });
+  const hasDca = Array.isArray(plan.dcaLevels) && plan.dcaLevels.some((r) => String(r?.value ?? "").trim() !== "");
+  const hasTp = Array.isArray(plan.takeProfitTargets) && plan.takeProfitTargets.some((r) => String(r?.value ?? "").trim() !== "");
+  return hasZones || hasDca || hasTp;
+}
+
 function StockAnalysisTab() {
   const { db, patchItem, t, isRTL, font } = useApp();
   const investments = visible(db?.investments || []);
   const portfolios = visible(db?.portfolios || []);
-  const stockPortfolioIds = useMemo(() => new Set(
-    portfolios
-      .filter((p) => {
-        const type = String(p?.type || "").toLowerCase();
-        return type.includes("stock") || type.includes("etf");
-      })
-      .map((p) => p.id)
-  ), [portfolios]);
-  const stockInvestments = useMemo(
-    () => investments.filter((inv) => stockPortfolioIds.has(inv.portfolioId) && !inv.is_hidden),
-    [investments, stockPortfolioIds]
+  const portfolioById = useMemo(() => new Map(portfolios.map((p) => [p.id, p])), [portfolios]);
+  const planInvestments = useMemo(
+    () => investments
+      .filter((inv) => hasActiveTradingPlan(inv.tradingPlan) || hasActiveTradingPlan(portfolioById.get(inv.portfolioId)?.tradingPlan))
+      .map((inv) => {
+        const portfolioPlan = portfolioById.get(inv.portfolioId)?.tradingPlan;
+        const ownPlan = hasActiveTradingPlan(inv.tradingPlan);
+        return {
+          ...inv,
+          __effectiveTradingPlan: ownPlan ? inv.tradingPlan : portfolioPlan,
+          __planScope: ownPlan ? "investment" : "portfolio",
+        };
+      }),
+    [investments, portfolioById]
   );
   const statusOpts = ((db?.settings?.investmentStatuses && db.settings.investmentStatuses.length) ? db.settings.investmentStatuses : ["Active","Paused","Closed"]).map((v)=>({ value:v, label:v }));
   const methodOpts = (db?.settings?.investmentMethods || []).map((v)=>({ value:v, label:v }));
-  const stockPortfolios = useMemo(() => portfolios.filter((p) => stockPortfolioIds.has(p.id)), [portfolios, stockPortfolioIds]);
   const [filterStatus, setFilterStatus] = useState("");
-  const [filterTarget, setFilterTarget] = useState("");
   const [filterPortfolio, setFilterPortfolio] = useState("");
   const [filterMethod, setFilterMethod] = useState("");
   const [editingInv, setEditingInv] = useState(null);
   const [expandedPlanRow, setExpandedPlanRow] = useState(null);
+  const [creationStep, setCreationStep] = useState(0);
+  const [selectedPortfolioId, setSelectedPortfolioId] = useState("");
+  const [selectedInvestmentId, setSelectedInvestmentId] = useState("");
+  const [selectionError, setSelectionError] = useState("");
 
-  const filteredInvestments = useMemo(() => stockInvestments.filter((inv) => {
+  const investmentOptionsForPortfolio = useMemo(
+    () => investments.filter((inv) => inv.portfolioId === selectedPortfolioId),
+    [investments, selectedPortfolioId]
+  );
+
+  const filteredInvestments = useMemo(() => planInvestments.filter((inv) => {
     const statusMatch = !filterStatus || inv.status === filterStatus;
     const portfolioMatch = !filterPortfolio || inv.portfolioId === filterPortfolio;
     const methodMatch = !filterMethod || (inv.investmentMethod || "") === filterMethod;
     return statusMatch && portfolioMatch && methodMatch;
-  }), [stockInvestments, filterStatus, filterPortfolio, filterMethod]);
+  }), [planInvestments, filterStatus, filterPortfolio, filterMethod]);
+
+  const closeCreationFlow = () => {
+    setCreationStep(0);
+    setSelectedPortfolioId("");
+    setSelectedInvestmentId("");
+    setSelectionError("");
+  };
+
+  const startPlanDetails = () => {
+    if (!selectedPortfolioId) {
+      setSelectionError(isRTL ? "اختر محفظة للمتابعة." : "Select a portfolio to continue.");
+      return;
+    }
+    const selectedPortfolio = portfolioById.get(selectedPortfolioId);
+    const selectedInvestment = investments.find((inv) => inv.id === selectedInvestmentId);
+    if (selectedInvestment) {
+      setEditingInv(selectedInvestment);
+    } else if (selectedPortfolio) {
+      setEditingInv({
+        __portfolioPlan: true,
+        __portfolioId: selectedPortfolio.id,
+        name: selectedPortfolio.name,
+        symbol: selectedPortfolio.type,
+        purchasePrice: selectedPortfolio.current_price || selectedPortfolio.currentPrice || 0,
+        currentPrice: selectedPortfolio.current_price || selectedPortfolio.currentPrice || 0,
+        quantity: 1,
+        tradingPlan: selectedPortfolio.tradingPlan,
+      });
+    }
+    setCreationStep(2);
+  };
 
   return (
     <div dir={isRTL ? "rtl" : "ltr"} style={{ fontFamily:font }}>
@@ -4328,11 +4380,20 @@ function StockAnalysisTab() {
           <h2 style={{ margin:0,fontSize:"1.4rem",fontWeight:700,color:T.textPrimary }}>{t.stockAnalysis}</h2>
           <div style={{ fontSize:"0.8rem",color:T.textMuted,marginTop:"2px" }}>{filteredInvestments.length} {t.investments.toLowerCase()}</div>
         </div>
+        <button
+          type="button"
+          onClick={() => setCreationStep(1)}
+          data-icon-tooltip={t.addPlan}
+          aria-label={t.addPlan}
+          style={{ width:"38px",height:"38px",borderRadius:"10px",border:`1px solid ${T.border}`,background:T.emerald,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:"0 8px 18px rgba(16,185,129,0.22)" }}
+        >
+          <Plus size={18} />
+        </button>
       </div>
       <div style={{ ...filterBarCss, justifyContent:"flex-start" }}>
         <Select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} options={[{ value:"", label:t.investmentStatuses }, ...statusOpts]} isRTL={isRTL} style={{ ...filterInputCss(isRTL), flex:"0 0 auto", width:"fit-content", minWidth:"120px", maxWidth:"150px" }} />
         <SearchableSingleSelect
-          options={stockPortfolios.map((p)=>({ value:p.id, label:p.name }))}
+          options={portfolios.map((p)=>({ value:p.id, label:p.name }))}
           value={filterPortfolio}
           onChange={setFilterPortfolio}
           placeholder={t.allPortfolios}
@@ -4369,7 +4430,7 @@ function StockAnalysisTab() {
               )}
               {filteredInvestments.map((inv) => {
                 const roiVal = roi(inv, db);
-                const planExists = Boolean(inv.tradingPlan);
+                const planForView = inv.__effectiveTradingPlan;
                 const isExpanded = expandedPlanRow === inv.id;
                 return (
                   <React.Fragment key={inv.id}>
@@ -4385,8 +4446,7 @@ function StockAnalysisTab() {
                     <td style={{ padding:"12px 14px" }}><Chip color={statusColor(inv.status)}>{inv.status}</Chip></td>
                     <td style={{ padding:"12px 10px",textAlign:"right" }}>
                       <div style={{ display:"flex",gap:"4px",justifyContent:"flex-end" }}>
-                        <button data-icon-tooltip={t.addPlan} onClick={(e) => { e.stopPropagation(); setEditingInv(inv); }} style={{ background:"none",border:"none",cursor:"pointer",color:T.emerald,padding:"4px",borderRadius:"6px",display:"flex" }}><Plus size={14}/></button>
-                        <button data-icon-tooltip={planExists ? t.viewPlan : t.noPlanSaved} onClick={(e) => { e.stopPropagation(); setEditingInv({ ...inv, __fromView:true }); }} style={{ background:"none",border:"none",cursor:"pointer",color:planExists ? T.info : T.textMuted,padding:"4px",borderRadius:"6px",display:"flex" }}><Eye size={14}/></button>
+                        <button data-icon-tooltip={t.viewPlan} onClick={(e) => { e.stopPropagation(); setEditingInv({ ...inv, tradingPlan: planForView, __fromView:true, __portfolioPlan: inv.__planScope === "portfolio", __portfolioId: inv.portfolioId }); }} style={{ background:"none",border:"none",cursor:"pointer",color:T.info,padding:"4px",borderRadius:"6px",display:"flex" }}><Eye size={14}/></button>
                       </div>
                     </td>
                   </tr>
@@ -4394,13 +4454,11 @@ function StockAnalysisTab() {
                     <tr>
                       <td colSpan={10} style={{ padding:"0", background:T.bgApp }}>
                         <div style={{ padding:"14px 16px" }}>
-                          {planExists ? (
-                            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"10px" }}>
-                              <div style={{ background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:"10px", padding:"10px" }}>
-                                <TradingPlanInlineView investment={inv} />
-                              </div>
+                          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"10px" }}>
+                            <div style={{ background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:"10px", padding:"10px" }}>
+                              <TradingPlanInlineView investment={{ ...inv, tradingPlan: planForView }} />
                             </div>
-                          ) : <div style={{ color:T.textMuted, fontSize:"0.82rem" }}>{t.noPlanSaved}</div>}
+                          </div>
                         </div>
                       </td>
                     </tr>
@@ -4412,13 +4470,46 @@ function StockAnalysisTab() {
           </table>
         </div>
       </Card>
+      {creationStep === 1 && (
+        <Modal title={isRTL ? "اختيار نطاق خطة التداول" : "Select Trading Plan Scope"} onClose={closeCreationFlow} maxWidth="560px">
+          <div style={{ display:"grid", gap:"16px" }}>
+            <FormField label={t.portfolios} required>
+              <Select
+                value={selectedPortfolioId}
+                onChange={(e) => { setSelectedPortfolioId(e.target.value); setSelectedInvestmentId(""); setSelectionError(""); }}
+                options={[{ value:"", label:isRTL ? "اختر محفظة" : "Select Portfolio" }, ...portfolios.map((p) => ({ value:p.id, label:p.name }))]}
+                isRTL={isRTL}
+                invalid={Boolean(selectionError)}
+              />
+            </FormField>
+            <FormField label={`${t.investments} (${isRTL ? "اختياري" : "Optional"})`}>
+              <Select
+                value={selectedInvestmentId}
+                onChange={(e) => setSelectedInvestmentId(e.target.value)}
+                disabled={!selectedPortfolioId}
+                options={[{ value:"", label:isRTL ? "خطة على مستوى المحفظة" : "Portfolio-level plan" }, ...investmentOptionsForPortfolio.map((inv) => ({ value:inv.id, label:inv.name || "—" }))]}
+                isRTL={isRTL}
+              />
+            </FormField>
+            {selectionError && <div style={{ color:T.negative, fontSize:"0.82rem" }}>{selectionError}</div>}
+            <div style={{ display:"flex", justifyContent:"flex-end", gap:"8px", marginTop:"4px" }}>
+              <button type="button" onClick={closeCreationFlow} style={{ height:"36px", padding:"0 14px", borderRadius:"9px", border:`1px solid ${T.border}`, background:"#fff", color:T.textSecondary, cursor:"pointer" }}>{isRTL ? "إلغاء" : "Cancel"}</button>
+              <button type="button" onClick={startPlanDetails} style={{ height:"36px", padding:"0 16px", borderRadius:"9px", border:"none", background:T.textPrimary, color:"#fff", fontWeight:600, cursor:"pointer" }}>{isRTL ? "التالي" : "Next"}</button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {editingInv && (
         <TradingPlanModal
           investment={editingInv}
           mode={editingInv?.__fromView ? "view" : "edit"}
-          onClose={() => setEditingInv(null)}
+          onClose={() => { setEditingInv(null); if (creationStep === 2) closeCreationFlow(); }}
           onSave={(plan) => {
-            patchItem("investments", editingInv.id, { tradingPlan:{ ...plan, updatedAt:new Date().toISOString() } });
+            if (editingInv.__portfolioPlan && editingInv.__portfolioId) {
+              patchItem("portfolios", editingInv.__portfolioId, { tradingPlan:{ ...plan, updatedAt:new Date().toISOString() } });
+            } else {
+              patchItem("investments", editingInv.id, { tradingPlan:{ ...plan, updatedAt:new Date().toISOString() } });
+            }
           }}
         />
       )}
@@ -4608,10 +4699,10 @@ function TradingPlanModal({ investment, onClose, onSave, mode = "edit" }) {
   const handleSavePlan = () => {
     if (!validateRequired()) return;
     const payload = { ...cleanForSave(), updatedAt: new Date().toISOString() };
-    if (investment?.id && patchItem) {
+    if (onSave) {
+      onSave(payload);
+    } else if (investment?.id && patchItem) {
       patchItem("investments", investment.id, { tradingPlan: payload });
-    } else {
-      onSave?.(payload);
     }
     setIsEditing(false);
   };
