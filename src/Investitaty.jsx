@@ -238,6 +238,9 @@ const TRANSLATIONS = {
     amount: "Amount",
     date: "Date",
     depositedDate: "Deposited Date",
+    remainingTime: "Remaining Time",
+    more: "More...",
+    actions: "Actions",
     collectedDate: "Collected Date",
     transactionType: "Type",
     income: "Income",
@@ -541,6 +544,9 @@ const TRANSLATIONS = {
     archive: "أرشفة",
     markDeposited: "تحديد كمودَع",
     markCollected: "تحديد كمحصّل",
+    remainingTime: "الوقت المتبقي",
+    more: "المزيد...",
+    actions: "الإجراءات",
     markScheduled: "تحديد كمجدول",
     cancelItem: "إلغاء",
     portfolio: "المحفظة",
@@ -2675,6 +2681,23 @@ const toDateOnly = (value) => {
   parsed.setHours(0, 0, 0, 0);
   return parsed;
 };
+
+const getTransactionExecutionDate = (tx) => tx?.dueDate || tx?.due_date || tx?.date || tx?.created_at;
+const transactionRemainingDays = (tx) => {
+  const due = toDateOnly(getTransactionExecutionDate(tx));
+  if (!due) return Number.POSITIVE_INFINITY;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.ceil((due - today) / 86400000);
+};
+const formatTransactionRemainingTime = (tx, t = {}) => {
+  const days = transactionRemainingDays(tx);
+  if (!Number.isFinite(days)) return "—";
+  if (days < 0) return t.smartStatusLate || "Late";
+  if (days === 0) return t.today || "Today";
+  if (days === 1) return t.tomorrow || "Tomorrow";
+  return `In ${days} ${t.days || "days"}`;
+};
 const isSamePriceValue = (left, right) => {
   const leftNum = Number(left);
   const rightNum = Number(right);
@@ -2851,8 +2874,7 @@ function Dashboard({ onNavigateTransactionsByStatus, onNavigateTransactionsByInv
   // Upcoming: scheduled transactions sorted by dueDate
   const upcoming = transactions
     .filter(tx=>tx.status==="scheduled"&&tx.dueDate)
-    .sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate))
-    .slice(0,5);
+    .sort((a,b)=>transactionRemainingDays(a)-transactionRemainingDays(b));
 
   // Funding source distribution chart + modal dataset
   const fundingDistribution = [...new Set([...(safeDb?.settings?.fundingSources || []), ...investments.flatMap((inv) => (inv.funding || []).map((f) => f.source).filter(Boolean))])]
@@ -3019,16 +3041,15 @@ function Dashboard({ onNavigateTransactionsByStatus, onNavigateTransactionsByInv
               <div style={{ display:"flex",flexDirection:"column",gap:"0" }}>
                 {upcoming.map((tx,i)=>{
                   const today = new Date();
-                  const due = new Date(tx.dueDate);
                   const dueDateOnly = toDateOnly(tx?.dueDate || tx?.due_date);
                   const depositedDateOnly = toDateOnly(tx?.depositedAt || tx?.deposited_at);
                   const collectedDateOnly = toDateOnly(tx?.collectedAt || tx?.collected_at);
                   const completionDateOnly = depositedDateOnly || collectedDateOnly;
                   const duePassed = dueDateOnly ? dueDateOnly < new Date(today.getFullYear(), today.getMonth(), today.getDate()) : false;
                   const isLate = duePassed && (!completionDateOnly || completionDateOnly > dueDateOnly);
-                  const diff = Math.ceil((due-today)/(1000*60*60*24));
+                  const diff = transactionRemainingDays(tx);
                   const badgeColor = isLate ? T.negative : (diff<=7?T.warning:T.positive);
-                  const badgeLabel = isLate ? t.smartStatusLate : (diff===0?t.today:`${Math.max(diff,0)}${t.days}`);
+                  const badgeLabel = formatTransactionRemainingTime(tx, t);
                   const inv = (db.investments||[]).find(i=>i.id===tx.investmentId);
                   const investmentName = inv?.name || tx.investmentName || "";
                   return (
@@ -3061,6 +3082,11 @@ function Dashboard({ onNavigateTransactionsByStatus, onNavigateTransactionsByInv
               </div>
             )
           }
+          <button
+            type="button"
+            onClick={() => onNavigateTransactionsByInvestment?.({ sortBy:"remainingTime", sortDirection:"asc", stamp: Date.now() })}
+            style={{ marginTop:"10px", background:"none", border:"none", padding:"6px 0 0", color:T.info, fontSize:"0.78rem", fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}
+          >{t.more || "More..."}</button>
         </Card>
 
         {/* Funding source distribution */}
@@ -5077,6 +5103,8 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const autoOpenedTxRef = useRef("");
   const appliedNavigationRef = useRef("");
   const [viewOpenedFromDashboard, setViewOpenedFromDashboard] = useState(false);
+  const [sortConfig, setSortConfig] = useState({ key:"date", direction:"desc" });
+  const [modalActionsOpen, setModalActionsOpen] = useState(false);
 
   const EMPTY = { portfolioId:"",investmentId:"",category:"",amount:"",date:"",dueDate:"",depositedAt:"",collectedAt:"",type:"income",status:"recorded",notes:"" };
   const [form, setForm] = useState(EMPTY);
@@ -5197,7 +5225,25 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
     const endMatch = !parsedEndDate || (parsedTxDate && parsedTxDate < parsedEndDate);
     return portfolioMatch && statusMatch && investmentMatch && methodMatch && smartStatusMatch && startMatch && endMatch;
   });
-  const sorted = [...filtered].sort((a,b)=>new Date(b.date||b.created_at||0)-new Date(a.date||a.created_at||0));
+  const getSortValue = (tx, key) => {
+    if (key === "remainingTime") return transactionRemainingDays(tx);
+    if (key === "depositedAt") return toDateOnly(tx.depositedAt || tx.deposited_at)?.getTime() ?? Number.POSITIVE_INFINITY;
+    if (key === "collectedAt") return toDateOnly(tx.collectedAt || tx.collected_at)?.getTime() ?? Number.POSITIVE_INFINITY;
+    return toDateOnly(tx.date || tx.created_at)?.getTime() ?? Number.POSITIVE_INFINITY;
+  };
+  const sorted = [...filtered].sort((a,b)=>{
+    const direction = sortConfig.direction === "asc" ? 1 : -1;
+    const left = getSortValue(a, sortConfig.key);
+    const right = getSortValue(b, sortConfig.key);
+    if (left === right) return new Date(b.date||b.created_at||0)-new Date(a.date||a.created_at||0);
+    return (left > right ? 1 : -1) * direction;
+  });
+  const toggleSort = (key) => {
+    setSortConfig((prev) => prev.key === key
+      ? { key, direction:prev.direction === "asc" ? "desc" : "asc" }
+      : { key, direction:key === "date" ? "desc" : "asc" });
+  };
+  const sortIndicator = (key) => sortConfig.key === key ? (sortConfig.direction === "asc" ? " ↑" : " ↓") : "";
   const totalRecords = sorted.length;
   const resolvedPageSize = pageSize === PAGE_SIZE_ALL ? Math.max(totalRecords, 1) : Number(pageSize) || 50;
   const totalPages = Math.max(1, Math.ceil(totalRecords / resolvedPageSize));
@@ -5304,6 +5350,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
     setForm({ portfolioId:tx.portfolioId||"",investmentId:tx.investmentId||"",category:tx.category||"",
       amount:tx.amount||"",date:tx.date||"",dueDate:tx.dueDate||tx.due_date||"",depositedAt:tx.depositedAt||tx.deposited_at||"",collectedAt:tx.collectedAt||tx.collected_at||"",type:tx.type||"income",status:tx.status||"recorded",notes:tx.notes||"" });
     setViewOpenedFromDashboard(false);
+    setModalActionsOpen(false);
     setEditItem(tx); setModalMode("view"); setFormError(""); setInvalidFields({}); setShowModal(true);
   };
   const closeTransactionModal = () => {
@@ -5313,6 +5360,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
     setFormError("");
     setInvalidFields({});
     setViewOpenedFromDashboard(false);
+    setModalActionsOpen(false);
   };
 
   const totalInc = txIncome(filtered);
@@ -5358,6 +5406,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
     setModalMode("create");
     setFormError("");
     setInvalidFields({});
+    setModalActionsOpen(false);
     setShowModal(true);
   }, [modalPrefill]);
 
@@ -5390,6 +5439,9 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
     setFilterStartDate(navigationFilter.startDate ? String(navigationFilter.startDate) : "");
     setFilterEndDate(navigationFilter.endDate ? String(navigationFilter.endDate) : "");
     setFilterDateField(normalizedDateField);
+    if (["date", "depositedAt", "collectedAt", "remainingTime"].includes(navigationFilter.sortBy)) {
+      setSortConfig({ key:navigationFilter.sortBy, direction:navigationFilter.sortDirection === "desc" ? "desc" : "asc" });
+    }
 
     if (navigationFilter.transactionId) {
       const navKey = `${navigationFilter.stamp || "nostamp"}:${navigationFilter.transactionId}`;
@@ -5412,11 +5464,32 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [filterPortfolio, filterStatus, filterInvestment, filterInvestmentMethod, filterSmartStatus, filterStartDate, filterEndDate, pageSize]);
+  }, [filterPortfolio, filterStatus, filterInvestment, filterInvestmentMethod, filterSmartStatus, filterStartDate, filterEndDate, pageSize, sortConfig]);
 
   useEffect(() => {
     setGoToPageInput(String(safePage));
   }, [safePage]);
+
+  const markTransactionDeposited = (tx = editItem) => {
+    const txId = tx?.id;
+    if (!txId) return;
+    const todayDate = new Date().toISOString().slice(0, 10);
+    const patch = { status:"Deposited", deposited_at:todayDate, depositedAt:todayDate };
+    patchItem("transactions", txId, patch);
+    setEditItem((prev) => prev?.id === txId ? { ...prev, ...patch } : prev);
+    setForm((prev) => ({ ...prev, status:"Deposited", depositedAt:todayDate }));
+    setModalActionsOpen(false);
+  };
+  const markTransactionCollected = (tx = editItem) => {
+    const txId = tx?.id;
+    if (!txId) return;
+    const todayDate = new Date().toISOString().slice(0, 10);
+    const patch = { status:"Collected", collected_at:todayDate, collectedAt:todayDate };
+    patchItem("transactions", txId, patch);
+    setEditItem((prev) => prev?.id === txId ? { ...prev, ...patch } : prev);
+    setForm((prev) => ({ ...prev, status:"Collected", collectedAt:todayDate }));
+    setModalActionsOpen(false);
+  };
 
   return (
     <div dir={isRTL?"rtl":"ltr"} style={{ fontFamily:font }}>
@@ -5522,11 +5595,30 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
           ? <div style={{ padding:"32px" }}><EmptyState text={t.noRecords}/></div>
           : (
             <div className="overflow-x-auto">
-            <table style={{ width:"100%",minWidth:"920px",borderCollapse:"collapse",fontSize:"0.85rem" }}>
+            <table style={{ width:"100%",minWidth:"1040px",borderCollapse:"collapse",fontSize:"0.85rem" }}>
               <thead>
                 <tr style={{ background:T.bgApp }}>
-                  {[t.date,t.category,t.portfolio,t.investment,t.amount,t.transactionType,t.status,t.smartStatusLabel,t.depositedDate,t.collectedDate,""].map((h,i)=>(
-                    <th key={i} style={{ padding:"10px 14px",textAlign:isRTL?"right":"left",fontSize:"0.7rem",fontWeight:600,color:T.textMuted,borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap" }}>{h}</th>
+                  {[
+                    { label:t.date, sortKey:"date" },
+                    { label:t.category },
+                    { label:t.portfolio },
+                    { label:t.investment },
+                    { label:t.amount },
+                    { label:t.transactionType },
+                    { label:t.status },
+                    { label:t.smartStatusLabel },
+                    { label:t.remainingTime || "Remaining Time", sortKey:"remainingTime" },
+                    { label:t.depositedDate, sortKey:"depositedAt" },
+                    { label:t.collectedDate, sortKey:"collectedAt" },
+                    { label:"" },
+                  ].map((h,i)=>(
+                    <th key={i} style={{ padding:"10px 14px",textAlign:isRTL?"right":"left",fontSize:"0.7rem",fontWeight:600,color:T.textMuted,borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap" }}>
+                      {h.sortKey ? (
+                        <button type="button" onClick={() => toggleSort(h.sortKey)} style={{ background:"none", border:"none", padding:0, color:"inherit", font:"inherit", fontWeight:600, cursor:"pointer" }}>
+                          {h.label}{sortIndicator(h.sortKey)}
+                        </button>
+                      ) : h.label}
+                    </th>
                   ))}
                 </tr>
               </thead>
@@ -5574,6 +5666,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
                         })()}
                       </td>
                       <td style={{ padding:"11px 14px",textAlign:isRTL?"right":"left" }}>{txSmartStatus ? <Chip color={smartStatusColor(txSmartStatus)}>{smartStatusLabel(txSmartStatus)}</Chip> : "—"}</td>
+                      <td style={{ padding:"11px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{formatTransactionRemainingTime(tx, t)}</td>
                       <td style={{ padding:"11px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{formatDateDisplay(tx.depositedAt || tx.deposited_at) || "—"}</td>
                       <td style={{ padding:"11px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{formatDateDisplay(tx.collectedAt || tx.collected_at) || "—"}</td>
                       <td style={{ padding:"11px 10px",position:"relative" }} onClick={e=>e.stopPropagation()}>
@@ -5736,6 +5829,15 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
           {formError && <div style={{ color:T.negative, fontSize:"0.78rem", marginBottom:"10px" }}>{formError}</div>}
           <div style={{ display:"flex",justifyContent:"flex-end",gap:"10px",marginTop:"8px" }}>
             {modalMode==="view" && (<>
+              <div style={{ position:"relative" }}>
+                <Btn variant="secondary" onClick={() => setModalActionsOpen((open) => !open)}>{t.actions || "Actions"}</Btn>
+                {modalActionsOpen && (
+                  <div style={{ position:"absolute", right:0, bottom:"calc(100% + 6px)", zIndex:13000, background:T.bgCard, border:`1px solid ${T.border}`, borderRadius:"10px", minWidth:"180px", boxShadow:"0 8px 28px rgba(0,0,0,0.15)", overflow:"hidden" }}>
+                    <button type="button" onClick={() => markTransactionDeposited(editItem)} style={{ display:"block", width:"100%", padding:"9px 14px", background:"none", border:"none", color:T.info, fontSize:"0.78rem", fontWeight:500, cursor:"pointer", textAlign:isRTL?"right":"left" }}>{t.markDeposited || "Mark as Deposited"}</button>
+                    <button type="button" onClick={() => markTransactionCollected(editItem)} style={{ display:"block", width:"100%", padding:"9px 14px", background:"none", border:"none", color:T.positive, fontSize:"0.78rem", fontWeight:500, cursor:"pointer", textAlign:isRTL?"right":"left" }}>{t.markCollected || "Mark as Collected"}</button>
+                  </div>
+                )}
+              </div>
               <Btn onClick={()=>setModalMode("edit")}>{t.editInModal}</Btn>
               <Btn variant="secondary" onClick={() => {
                 if (viewOpenedFromDashboard) {
