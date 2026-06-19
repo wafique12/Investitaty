@@ -356,7 +356,7 @@ const TRANSLATIONS = {
     backupPreviewActive: "Previewing",
     sessionExpiredSecurity: "Session expired for your security",
     syncFailed: "Sync failed. Changes may not be saved.",
-    days: "Days",
+    days: "d",
     overdue: "Overdue",
     today: "Today",
     deployed: "deployed",
@@ -2725,7 +2725,7 @@ const formatTransactionRemainingTime = (tx, t = {}) => {
   const days = transactionRemainingDays(tx);
   if (!Number.isFinite(days)) return "—";
   if (days < 0) return t.smartStatusLate || "Late";
-  return `${Math.max(days, 0)} ${t.days || "Days"}`;
+  return `${Math.max(days, 0)}${t.days || "d"}`;
 };
 const remainingTimeBadgeColor = (tx) => {
   if (isTransactionDone(tx)) return T.positive;
@@ -5265,10 +5265,10 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
     const endMatch = !parsedEndDate || (parsedTxDate && parsedTxDate < parsedEndDate);
     return portfolioMatch && statusMatch && investmentMatch && methodMatch && smartStatusMatch && startMatch && endMatch;
   });
-  const getRemainingSortParts = (tx) => {
-    if (isLateRemainingTransaction(tx)) return { group:0, days:transactionRemainingDays(tx) };
-    if (isTransactionDone(tx)) return { group:2, days:Number.POSITIVE_INFINITY };
-    return { group:1, days:transactionRemainingDays(tx) };
+  const getRemainingSortValue = (tx) => {
+    if (isLateRemainingTransaction(tx)) return Number.NEGATIVE_INFINITY;
+    if (isTransactionDone(tx)) return Number.POSITIVE_INFINITY;
+    return transactionRemainingDays(tx);
   };
   const getSortValue = (tx, key) => {
     if (key === "depositedAt") return toDateOnly(tx.depositedAt || tx.deposited_at)?.getTime() ?? Number.POSITIVE_INFINITY;
@@ -5277,11 +5277,10 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   };
   const sorted = [...filtered].sort((a,b)=>{
     if (sortConfig.key === "remainingTime") {
-      const left = getRemainingSortParts(a);
-      const right = getRemainingSortParts(b);
-      if (left.group !== right.group) return left.group - right.group;
       const direction = sortConfig.direction === "asc" ? 1 : -1;
-      if (left.days !== right.days) return (left.days > right.days ? 1 : -1) * direction;
+      const left = getRemainingSortValue(a);
+      const right = getRemainingSortValue(b);
+      if (left !== right) return (left > right ? 1 : -1) * direction;
       return new Date(b.date||b.created_at||0)-new Date(a.date||a.created_at||0);
     }
     const direction = sortConfig.direction === "asc" ? 1 : -1;
