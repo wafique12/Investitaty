@@ -241,6 +241,8 @@ const TRANSLATIONS = {
     remainingTime: "Remaining Time",
     more: "More...",
     actions: "Actions",
+    done: "Done",
+    hideLate: "Hide Late",
     collectedDate: "Collected Date",
     transactionType: "Type",
     income: "Income",
@@ -547,6 +549,8 @@ const TRANSLATIONS = {
     remainingTime: "الوقت المتبقي",
     more: "المزيد...",
     actions: "الإجراءات",
+    done: "منتهي",
+    hideLate: "إخفاء المتأخر",
     markScheduled: "تحديد كمجدول",
     cancelItem: "إلغاء",
     portfolio: "المحفظة",
@@ -2409,7 +2413,7 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileO
   ];
 
   const showLabels = isMobile ? true : isOpen;
-  const [planningOpen, setPlanningOpen] = useState(true);
+  const [planningHover, setPlanningHover] = useState(false);
   const handleHamburger = () => setIsOpen((prev) => !prev);
 
   const sidebarContent = (
@@ -2443,13 +2447,24 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileO
         {navItems.map(({ id, label, icon, children }) => {
           if (children) {
             const childActive = activeTab === "planningDashboard" || children.some((c) => c.id === activeTab);
-            return <div key={id} style={{ marginBottom:"4px" }}>
-              <div style={{display:"flex",alignItems:"center",gap:"6px"}}><button onClick={() => { setActiveTab("planningDashboard"); if (isMobile) setMobileOpen(false); }} style={{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"9px 12px",minHeight:"38px",borderRadius:"8px",border:"none",background:childActive?T.emeraldBg:"transparent",color:childActive?T.emerald:T.textSidebarMuted,fontSize:"0.83rem",fontWeight:childActive?600:400,cursor:"pointer",textAlign:isRTL?"right":"left",transition:"all 0.15s",marginBottom:"2px",borderLeft:isRTL?"2px solid transparent":(childActive?`2px solid ${T.emerald}`:"2px solid transparent"),borderRight:isRTL?(childActive?`2px solid ${T.emerald}`:"2px solid transparent"):"2px solid transparent",justifyContent:"flex-start"}}>{showLabels?<><span style={{display:"flex",alignItems:"center",gap:"10px"}}>{icon}<span>{label}</span></span></>:icon}</button>{showLabels && <button onClick={()=>setPlanningOpen((p)=>!p)} style={{border:"none",background:"transparent",color:T.textSidebarMuted,cursor:"pointer",display:"flex",alignItems:"center",padding:"4px"}}>{planningOpen?<ChevronDown size={13}/>:<ChevronRight size={13}/>}</button>}</div>
-              {planningOpen && showLabels && <div style={{ marginTop:"2px" }}>{children.map((sub)=>{ const active = activeTab===sub.id; return <button key={sub.id} onClick={()=>{setActiveTab(sub.id); if (isMobile) setMobileOpen(false);}} style={{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"9px 12px 9px 32px",minHeight:"38px",borderRadius:"8px",border:"none",background:active?T.emeraldBg:"transparent",color:active?T.emerald:T.textSidebarMuted,fontSize:"0.83rem",fontWeight:active?600:400,cursor:"pointer",textAlign:isRTL?"right":"left",transition:"all 0.15s",marginBottom:"2px",borderLeft:isRTL?"2px solid transparent":(active?`2px solid ${T.emerald}`:"2px solid transparent"),borderRight:isRTL?(active?`2px solid ${T.emerald}`:"2px solid transparent"):"2px solid transparent",justifyContent:showLabels?(isRTL?"flex-end":"flex-start"):"center",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sub.label}</button>; })}</div>}
+            const showFlyout = planningHover;
+            return <div key={id} onMouseEnter={()=>setPlanningHover(true)} onMouseLeave={()=>setPlanningHover(false)} style={{ marginBottom:"4px", position:"relative" }}>
+              <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
+                <button
+                  title={!showLabels ? label : undefined}
+                  onClick={() => { setActiveTab("planningDashboard"); if (isMobile) setMobileOpen(false); }}
+                  style={{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"9px 12px",minHeight:"38px",borderRadius:"8px",border:"none",background:childActive?T.emeraldBg:"transparent",color:childActive?T.emerald:T.textSidebarMuted,fontSize:"0.83rem",fontWeight:childActive?600:400,cursor:"pointer",textAlign:isRTL?"right":"left",transition:"all 0.15s",marginBottom:"2px",borderLeft:isRTL?"2px solid transparent":(childActive?`2px solid ${T.emerald}`:"2px solid transparent"),borderRight:isRTL?(childActive?`2px solid ${T.emerald}`:"2px solid transparent"):"2px solid transparent",justifyContent:showLabels?(isRTL?"flex-end":"flex-start"):"center"}}
+                >{showLabels?<><span style={{display:"flex",alignItems:"center",gap:"10px"}}>{icon}<span>{label}</span></span></>:icon}</button>
+              </div>
+              {showFlyout && !isMobile && (
+                <div style={{ position:"absolute", top:0, left:isRTL?"auto":"calc(100% + 8px)", right:isRTL?"calc(100% + 8px)":"auto", minWidth:"190px", padding:"8px", borderRadius:"10px", background:T.bgSidebar, border:`1px solid ${T.borderDark}`, boxShadow:"0 10px 30px rgba(0,0,0,0.22)", zIndex:20000 }}>
+                  {children.map((sub)=>{ const active = activeTab===sub.id; return <button key={sub.id} onClick={()=>{setActiveTab(sub.id); setPlanningHover(false); if (isMobile) setMobileOpen(false);}} style={{display:"flex",alignItems:"center",width:"100%",padding:"9px 12px",minHeight:"36px",borderRadius:"8px",border:"none",background:active?T.emeraldBg:"transparent",color:active?T.emerald:T.textSidebarMuted,fontSize:"0.8rem",fontWeight:active?600:500,cursor:"pointer",textAlign:isRTL?"right":"left",whiteSpace:"nowrap"}}>{sub.label}</button>; })}
+                </div>
+              )}
             </div>;
           }
           const active = activeTab === id;
-          return <button key={id} onClick={() => { setActiveTab(id); if (isMobile) setMobileOpen(false); }} style={{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"9px 12px",borderRadius:"8px",border:"none",background:active?T.emeraldBg:"transparent",color:active?T.emerald:T.textSidebarMuted,fontSize:"0.83rem",fontWeight:active?600:400,cursor:"pointer",textAlign:isRTL?"right":"left",transition:"all 0.15s",marginBottom:"2px",borderLeft:isRTL?"2px solid transparent":(active?`2px solid ${T.emerald}`:"2px solid transparent"),borderRight:isRTL?(active?`2px solid ${T.emerald}`:"2px solid transparent"):"2px solid transparent",justifyContent:showLabels?(isRTL?"flex-end":"flex-start"):"center",}}>{icon}{showLabels && <span>{label}</span>}</button>;
+          return <button key={id} title={!showLabels ? label : undefined} onClick={() => { setActiveTab(id); if (isMobile) setMobileOpen(false); }} style={{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"9px 12px",borderRadius:"8px",border:"none",background:active?T.emeraldBg:"transparent",color:active?T.emerald:T.textSidebarMuted,fontSize:"0.83rem",fontWeight:active?600:400,cursor:"pointer",textAlign:isRTL?"right":"left",transition:"all 0.15s",marginBottom:"2px",borderLeft:isRTL?"2px solid transparent":(active?`2px solid ${T.emerald}`:"2px solid transparent"),borderRight:isRTL?(active?`2px solid ${T.emerald}`:"2px solid transparent"):"2px solid transparent",justifyContent:showLabels?(isRTL?"flex-end":"flex-start"):"center",}}>{icon}{showLabels && <span>{label}</span>}</button>;
         })}
       </nav>
 
@@ -2690,14 +2705,22 @@ const transactionRemainingDays = (tx) => {
   today.setHours(0, 0, 0, 0);
   return Math.ceil((due - today) / 86400000);
 };
+const isTransactionDone = (tx) => isDepositedTransaction(tx) || isCollectedTransaction(tx);
 const formatTransactionRemainingTime = (tx, t = {}) => {
+  if (isTransactionDone(tx)) return t.done || "Done";
   const days = transactionRemainingDays(tx);
   if (!Number.isFinite(days)) return "—";
   if (days < 0) return t.smartStatusLate || "Late";
-  if (days === 0) return t.today || "Today";
-  if (days === 1) return t.tomorrow || "Tomorrow";
-  return `In ${days} ${t.days || "days"}`;
+  return String(Math.max(days, 0));
 };
+const remainingTimeBadgeColor = (tx) => {
+  if (isTransactionDone(tx)) return T.positive;
+  const days = transactionRemainingDays(tx);
+  if (!Number.isFinite(days)) return T.textMuted;
+  if (days < 0) return T.negative;
+  return days <= 7 ? T.warning : T.positive;
+};
+const isLateRemainingTransaction = (tx) => !isTransactionDone(tx) && transactionRemainingDays(tx) < 0;
 const isSamePriceValue = (left, right) => {
   const leftNum = Number(left);
   const rightNum = Number(right);
@@ -2767,6 +2790,7 @@ function Dashboard({ onNavigateTransactionsByStatus, onNavigateTransactionsByInv
   const [sourceModal, setSourceModal] = useState(null);
   const [dashboardFundingLegendExpanded, setDashboardFundingLegendExpanded] = useState(false);
   const [hiddenDashboardFundingSources, setHiddenDashboardFundingSources] = useState(() => new Set());
+  const [hideLateCashFlow, setHideLateCashFlow] = useState(false);
 
   const safeDb = useMemo(() => migrateSchema(db || INITIAL_SCHEMA), [db]);
   const portfolios = useMemo(() => visible(safeDb?.portfolios || []), [safeDb]);
@@ -2874,7 +2898,9 @@ function Dashboard({ onNavigateTransactionsByStatus, onNavigateTransactionsByInv
   // Upcoming: scheduled transactions sorted by dueDate
   const upcoming = transactions
     .filter(tx=>tx.status==="scheduled"&&tx.dueDate)
-    .sort((a,b)=>transactionRemainingDays(a)-transactionRemainingDays(b));
+    .filter((tx)=>!hideLateCashFlow || !isLateRemainingTransaction(tx))
+    .sort((a,b)=>transactionRemainingDays(a)-transactionRemainingDays(b))
+    .slice(0, 7);
 
   // Funding source distribution chart + modal dataset
   const fundingDistribution = [...new Set([...(safeDb?.settings?.fundingSources || []), ...investments.flatMap((inv) => (inv.funding || []).map((f) => f.source).filter(Boolean))])]
@@ -3033,8 +3059,14 @@ function Dashboard({ onNavigateTransactionsByStatus, onNavigateTransactionsByInv
         </Card>
 
         {/* Upcoming cash flow */}
-        <Card style={{ padding:"18px", maxHeight:"450px", overflowY:"auto", scrollbarWidth:"thin", scrollbarColor:`${T.border} transparent` }}>
-          <SectionHeader title={t.upcomingCashFlow} />
+        <Card style={{ padding:"18px", height:"450px", overflow:"hidden" }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"10px", marginBottom:"12px" }}>
+            <SectionHeader title={t.upcomingCashFlow} />
+            <label style={{ display:"inline-flex", alignItems:"center", gap:"6px", color:T.textMuted, fontSize:"0.72rem", fontWeight:600, whiteSpace:"nowrap" }}>
+              <input type="checkbox" checked={hideLateCashFlow} onChange={(e)=>setHideLateCashFlow(e.target.checked)} />
+              {t.hideLate || "Hide Late"}
+            </label>
+          </div>
           {upcoming.length === 0
             ? <EmptyState text={t.noScheduled} />
             : (
@@ -3047,8 +3079,7 @@ function Dashboard({ onNavigateTransactionsByStatus, onNavigateTransactionsByInv
                   const completionDateOnly = depositedDateOnly || collectedDateOnly;
                   const duePassed = dueDateOnly ? dueDateOnly < new Date(today.getFullYear(), today.getMonth(), today.getDate()) : false;
                   const isLate = duePassed && (!completionDateOnly || completionDateOnly > dueDateOnly);
-                  const diff = transactionRemainingDays(tx);
-                  const badgeColor = isLate ? T.negative : (diff<=7?T.warning:T.positive);
+                  const badgeColor = remainingTimeBadgeColor(tx);
                   const badgeLabel = formatTransactionRemainingTime(tx, t);
                   const inv = (db.investments||[]).find(i=>i.id===tx.investmentId);
                   const investmentName = inv?.name || tx.investmentName || "";
@@ -5666,7 +5697,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
                         })()}
                       </td>
                       <td style={{ padding:"11px 14px",textAlign:isRTL?"right":"left" }}>{txSmartStatus ? <Chip color={smartStatusColor(txSmartStatus)}>{smartStatusLabel(txSmartStatus)}</Chip> : "—"}</td>
-                      <td style={{ padding:"11px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{formatTransactionRemainingTime(tx, t)}</td>
+                      <td style={{ padding:"11px 14px",textAlign:isRTL?"right":"left" }}><Chip color={remainingTimeBadgeColor(tx)}>{formatTransactionRemainingTime(tx, t)}</Chip></td>
                       <td style={{ padding:"11px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{formatDateDisplay(tx.depositedAt || tx.deposited_at) || "—"}</td>
                       <td style={{ padding:"11px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{formatDateDisplay(tx.collectedAt || tx.collected_at) || "—"}</td>
                       <td style={{ padding:"11px 10px",position:"relative" }} onClick={e=>e.stopPropagation()}>
