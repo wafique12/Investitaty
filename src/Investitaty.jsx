@@ -2471,41 +2471,52 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileO
         })}
       </nav>
 
-      {showLabels && (
-        <div style={{ padding:"8px 12px 12px",borderTop:`1px solid ${T.borderDark}` }}>
-          <div style={{ display:"flex",alignItems:"center",gap:"8px",marginBottom:"10px" }}>
-            <Globe size={13} color={T.textSidebarMuted} />
-            <span style={{ color:T.textSidebarMuted,fontSize:"0.7rem",letterSpacing:"0.06em",flex:1 }}>{t.language}</span>
-            {["en","ar"].map(l=>(
-              <button key={l} onClick={()=>setLang(l)} style={{ background:lang===l?"rgba(255,255,255,0.12)":"transparent",border:`1px solid ${T.borderDark}`,borderRadius:"6px",color:lang===l?"#fff":T.textSidebarMuted,padding:"3px 8px",fontSize:"0.68rem",cursor:"pointer" }}>{l.toUpperCase()}</button>
-            ))}
-          </div>
-          <div style={{ marginBottom:"10px" }}>
-            <div style={{ color:T.textSidebarMuted,fontSize:"0.7rem",letterSpacing:"0.06em",marginBottom:"6px" }}>{t.country}</div>
-            <select
-              value={selectedCountry?.name || ""}
-              onChange={(e) => setSelectedCountry(e.target.value)}
-              style={{ width:"100%",padding:"6px 8px",background:"rgba(255,255,255,0.08)",border:`1px solid ${T.borderDark}`,borderRadius:"6px",color:"#fff",fontSize:"0.72rem",fontFamily:font }}
-            >
-              {countries.map((country) => (
-                <option key={country} value={country} style={{ color:"#0f172a" }}>{country}</option>
+      <div style={{ padding:showLabels?"8px 12px 12px":"8px 10px 12px",borderTop:`1px solid ${T.borderDark}`, display:"flex", flexDirection:"column", gap:showLabels?"0":"8px", alignItems:showLabels?"stretch":"center" }}>
+        {showLabels ? (
+          <>
+            <div style={{ display:"flex",alignItems:"center",gap:"8px",marginBottom:"10px" }}>
+              <Globe size={13} color={T.textSidebarMuted} />
+              <span style={{ color:T.textSidebarMuted,fontSize:"0.7rem",letterSpacing:"0.06em",flex:1 }}>{t.language}</span>
+              {["en","ar"].map(l=>(
+                <button key={l} onClick={()=>setLang(l)} style={{ background:lang===l?"rgba(255,255,255,0.12)":"transparent",border:`1px solid ${T.borderDark}`,borderRadius:"6px",color:lang===l?"#fff":T.textSidebarMuted,padding:"3px 8px",fontSize:"0.68rem",cursor:"pointer" }}>{l.toUpperCase()}</button>
               ))}
-            </select>
-          </div>
-          <div style={{ display:"flex",alignItems:"center",gap:"8px",marginBottom:"8px" }}>
-            <div style={{ width:"26px",height:"26px",borderRadius:"50%",overflow:"hidden",background:"rgba(255,255,255,0.1)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:"0.65rem" }}>
+            </div>
+            <div style={{ marginBottom:"10px" }}>
+              <div style={{ color:T.textSidebarMuted,fontSize:"0.7rem",letterSpacing:"0.06em",marginBottom:"6px" }}>{t.country}</div>
+              <select
+                value={selectedCountry?.name || ""}
+                onChange={(e) => setSelectedCountry(e.target.value)}
+                style={{ width:"100%",padding:"6px 8px",background:"rgba(255,255,255,0.08)",border:`1px solid ${T.borderDark}`,borderRadius:"6px",color:"#fff",fontSize:"0.72rem",fontFamily:font }}
+              >
+                {countries.map((country) => (
+                  <option key={country} value={country} style={{ color:"#0f172a" }}>{country}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ display:"flex",alignItems:"center",gap:"8px",marginBottom:"8px" }}>
+              <div style={{ width:"26px",height:"26px",borderRadius:"50%",overflow:"hidden",background:"rgba(255,255,255,0.1)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:"0.65rem" }}>
+                {user?.picture ? <img src={user.picture} alt="" style={{ width:"100%",height:"100%",objectFit:"cover" }}/> : user?.name?.[0]}
+              </div>
+              <div style={{ overflow:"hidden",flex:1 }}>
+                <div style={{ color:"rgba(255,255,255,0.75)",fontSize:"0.76rem",fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{user?.name}</div>
+                <div style={{ color:"rgba(255,255,255,0.42)",fontSize:"0.62rem",fontWeight:300,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:"2px" }}>{user?.email}</div>
+              </div>
+            </div>
+            <button onClick={signOut} style={{ display:"flex",alignItems:"center",gap:"6px",width:"100%",padding:"7px 10px",background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.2)",borderRadius:"7px",color:"rgba(255,100,100,0.8)",fontSize:"0.76rem",cursor:"pointer",fontFamily:font }}>
+              <LogOut size={13}/>{t.signOut}
+            </button>
+          </>
+        ) : (
+          <>
+            <button data-icon-tooltip={t.language} onClick={()=>setLang(lang === "en" ? "ar" : "en")} style={{ display:"flex",alignItems:"center",justifyContent:"center",width:"38px",height:"38px",borderRadius:"8px",border:"none",background:"transparent",color:T.textSidebarMuted,cursor:"pointer" }}><Globe size={17}/></button>
+            <button data-icon-tooltip={`${t.country}: ${selectedCountry?.name || "—"}`} style={{ display:"flex",alignItems:"center",justifyContent:"center",width:"38px",height:"38px",borderRadius:"8px",border:"none",background:"transparent",color:T.textSidebarMuted,cursor:"default" }}><Landmark size={17}/></button>
+            <div data-icon-tooltip={user?.name || user?.email || "User"} style={{ width:"32px",height:"32px",borderRadius:"50%",overflow:"hidden",background:"rgba(255,255,255,0.1)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:"0.75rem" }}>
               {user?.picture ? <img src={user.picture} alt="" style={{ width:"100%",height:"100%",objectFit:"cover" }}/> : user?.name?.[0]}
             </div>
-            <div style={{ overflow:"hidden",flex:1 }}>
-              <div style={{ color:"rgba(255,255,255,0.75)",fontSize:"0.76rem",fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{user?.name}</div>
-              <div style={{ color:"rgba(255,255,255,0.42)",fontSize:"0.62rem",fontWeight:300,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:"2px" }}>{user?.email}</div>
-            </div>
-          </div>
-          <button onClick={signOut} style={{ display:"flex",alignItems:"center",gap:"6px",width:"100%",padding:"7px 10px",background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.2)",borderRadius:"7px",color:"rgba(255,100,100,0.8)",fontSize:"0.76rem",cursor:"pointer",fontFamily:font }}>
-            <LogOut size={13}/>{t.signOut}
-          </button>
-        </div>
-      )}
+            <button data-icon-tooltip={t.signOut} onClick={signOut} style={{ display:"flex",alignItems:"center",justifyContent:"center",width:"38px",height:"38px",borderRadius:"8px",border:"1px solid rgba(239,68,68,0.2)",background:"rgba(239,68,68,0.08)",color:"rgba(255,100,100,0.8)",cursor:"pointer" }}><LogOut size={17}/></button>
+          </>
+        )}
+      </div>
     </>
   );
 
@@ -3116,11 +3127,6 @@ function Dashboard({ onNavigateTransactionsByStatus, onNavigateTransactionsByInv
               </div>
             )
           }
-          <button
-            type="button"
-            onClick={() => onNavigateTransactionsByInvestment?.({ sortBy:"remainingTime", sortDirection:"asc", stamp: Date.now() })}
-            style={{ marginTop:"10px", background:"none", border:"none", padding:"6px 0 0", color:T.info, fontSize:"0.78rem", fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}
-          >{t.more || "More..."}</button>
         </Card>
 
         {/* Funding source distribution */}
@@ -3366,7 +3372,7 @@ function PortfoliosTab({ onQuickAddInvestment, onViewInvestments }) {
         </div>
       </div>
 
-      <div style={{ ...filterBarCss, justifyContent:isRTL?"flex-start":"flex-end" }}>
+      <div style={{ ...filterBarCss, justifyContent:isRTL?"flex-end":"flex-start" }}>
         <div style={{ width:"220px", maxWidth:"100%" }}>
           <Select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} options={[{ value:"", label:t.status }, ...statusOpts, { value:ARCHIVED_FILTER, label:t.archivedFilter }]} isRTL={isRTL} style={{ ...filterInputCss(isRTL), width:"100%", flex:"0 0 auto" }} />
         </div>
