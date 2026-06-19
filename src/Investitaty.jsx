@@ -5143,7 +5143,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const autoOpenedTxRef = useRef("");
   const appliedNavigationRef = useRef("");
   const [viewOpenedFromDashboard, setViewOpenedFromDashboard] = useState(false);
-  const [sortConfig, setSortConfig] = useState({ key:"date", direction:"desc" });
+  const [sortConfig, setSortConfig] = useState({ key:"remainingTime", direction:"asc" });
   const [modalActionsOpen, setModalActionsOpen] = useState(false);
 
   const EMPTY = { portfolioId:"",investmentId:"",category:"",amount:"",date:"",dueDate:"",depositedAt:"",collectedAt:"",type:"income",status:"recorded",notes:"" };
