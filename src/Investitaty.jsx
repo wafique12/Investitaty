@@ -356,7 +356,7 @@ const TRANSLATIONS = {
     backupPreviewActive: "Previewing",
     sessionExpiredSecurity: "Session expired for your security",
     syncFailed: "Sync failed. Changes may not be saved.",
-    days: "d",
+    days: "Days",
     overdue: "Overdue",
     today: "Today",
     deployed: "deployed",
@@ -2451,20 +2451,23 @@ function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, isMobile, mobileO
             return <div key={id} onMouseEnter={()=>setPlanningHover(true)} onMouseLeave={()=>setPlanningHover(false)} style={{ marginBottom:"4px", position:"relative" }}>
               <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
                 <button
-                  title={!showLabels ? label : undefined}
+                  data-icon-tooltip={!showLabels ? label : undefined}
                   onClick={() => { setActiveTab("planningDashboard"); if (isMobile) setMobileOpen(false); }}
                   style={{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"9px 12px",minHeight:"38px",borderRadius:"8px",border:"none",background:childActive?T.emeraldBg:"transparent",color:childActive?T.emerald:T.textSidebarMuted,fontSize:"0.83rem",fontWeight:childActive?600:400,cursor:"pointer",textAlign:isRTL?"right":"left",transition:"all 0.15s",marginBottom:"2px",borderLeft:isRTL?"2px solid transparent":(childActive?`2px solid ${T.emerald}`:"2px solid transparent"),borderRight:isRTL?(childActive?`2px solid ${T.emerald}`:"2px solid transparent"):"2px solid transparent",justifyContent:showLabels?(isRTL?"flex-end":"flex-start"):"center"}}
                 >{showLabels?<><span style={{display:"flex",alignItems:"center",gap:"10px"}}>{icon}<span>{label}</span></span></>:icon}</button>
               </div>
               {showFlyout && !isMobile && (
-                <div style={{ position:"absolute", top:0, left:isRTL?"auto":"calc(100% + 8px)", right:isRTL?"calc(100% + 8px)":"auto", minWidth:"190px", padding:"8px", borderRadius:"10px", background:T.bgSidebar, border:`1px solid ${T.borderDark}`, boxShadow:"0 10px 30px rgba(0,0,0,0.22)", zIndex:20000 }}>
-                  {children.map((sub)=>{ const active = activeTab===sub.id; return <button key={sub.id} onClick={()=>{setActiveTab(sub.id); setPlanningHover(false); if (isMobile) setMobileOpen(false);}} style={{display:"flex",alignItems:"center",width:"100%",padding:"9px 12px",minHeight:"36px",borderRadius:"8px",border:"none",background:active?T.emeraldBg:"transparent",color:active?T.emerald:T.textSidebarMuted,fontSize:"0.8rem",fontWeight:active?600:500,cursor:"pointer",textAlign:isRTL?"right":"left",whiteSpace:"nowrap"}}>{sub.label}</button>; })}
-                </div>
+                <>
+                  <div style={{ position:"absolute", top:0, left:isRTL?"auto":"100%", right:isRTL?"100%":"auto", width:"14px", height:"52px", zIndex:19999 }} />
+                  <div style={{ position:"absolute", top:0, left:isRTL?"auto":"calc(100% + 8px)", right:isRTL?"calc(100% + 8px)":"auto", minWidth:"190px", padding:"8px", borderRadius:"10px", background:T.bgSidebar, border:`1px solid ${T.borderDark}`, boxShadow:"0 10px 30px rgba(0,0,0,0.22)", zIndex:20000 }}>
+                    {children.map((sub)=>{ const active = activeTab===sub.id; return <button key={sub.id} onClick={()=>{setActiveTab(sub.id); setPlanningHover(false); if (isMobile) setMobileOpen(false);}} style={{display:"flex",alignItems:"center",width:"100%",padding:"9px 12px",minHeight:"36px",borderRadius:"8px",border:"none",background:active?T.emeraldBg:"transparent",color:active?T.emerald:T.textSidebarMuted,fontSize:"0.8rem",fontWeight:active?600:500,cursor:"pointer",textAlign:isRTL?"right":"left",whiteSpace:"nowrap"}}>{sub.label}</button>; })}
+                  </div>
+                </>
               )}
             </div>;
           }
           const active = activeTab === id;
-          return <button key={id} title={!showLabels ? label : undefined} onClick={() => { setActiveTab(id); if (isMobile) setMobileOpen(false); }} style={{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"9px 12px",borderRadius:"8px",border:"none",background:active?T.emeraldBg:"transparent",color:active?T.emerald:T.textSidebarMuted,fontSize:"0.83rem",fontWeight:active?600:400,cursor:"pointer",textAlign:isRTL?"right":"left",transition:"all 0.15s",marginBottom:"2px",borderLeft:isRTL?"2px solid transparent":(active?`2px solid ${T.emerald}`:"2px solid transparent"),borderRight:isRTL?(active?`2px solid ${T.emerald}`:"2px solid transparent"):"2px solid transparent",justifyContent:showLabels?(isRTL?"flex-end":"flex-start"):"center",}}>{icon}{showLabels && <span>{label}</span>}</button>;
+          return <button key={id} data-icon-tooltip={!showLabels ? label : undefined} onClick={() => { setActiveTab(id); if (isMobile) setMobileOpen(false); }} style={{display:"flex",alignItems:"center",gap:"10px",width:"100%",padding:"9px 12px",borderRadius:"8px",border:"none",background:active?T.emeraldBg:"transparent",color:active?T.emerald:T.textSidebarMuted,fontSize:"0.83rem",fontWeight:active?600:400,cursor:"pointer",textAlign:isRTL?"right":"left",transition:"all 0.15s",marginBottom:"2px",borderLeft:isRTL?"2px solid transparent":(active?`2px solid ${T.emerald}`:"2px solid transparent"),borderRight:isRTL?(active?`2px solid ${T.emerald}`:"2px solid transparent"):"2px solid transparent",justifyContent:showLabels?(isRTL?"flex-end":"flex-start"):"center",}}>{icon}{showLabels && <span>{label}</span>}</button>;
         })}
       </nav>
 
@@ -2711,7 +2714,7 @@ const formatTransactionRemainingTime = (tx, t = {}) => {
   const days = transactionRemainingDays(tx);
   if (!Number.isFinite(days)) return "—";
   if (days < 0) return t.smartStatusLate || "Late";
-  return String(Math.max(days, 0));
+  return `${Math.max(days, 0)} ${t.days || "Days"}`;
 };
 const remainingTimeBadgeColor = (tx) => {
   if (isTransactionDone(tx)) return T.positive;
@@ -3061,7 +3064,7 @@ function Dashboard({ onNavigateTransactionsByStatus, onNavigateTransactionsByInv
         {/* Upcoming cash flow */}
         <Card style={{ padding:"18px", height:"450px", overflow:"hidden" }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"10px", marginBottom:"12px" }}>
-            <SectionHeader title={t.upcomingCashFlow} />
+            <button type="button" onClick={() => onNavigateTransactionsByInvestment?.({ sortBy:"remainingTime", sortDirection:"asc", stamp: Date.now() })} style={{ background:"none", border:"none", padding:0, margin:0, cursor:"pointer", color:T.textPrimary, fontSize:"0.9rem", fontWeight:700, fontFamily:"inherit", textAlign:isRTL?"right":"left" }}>{t.upcomingCashFlow}</button>
             <label style={{ display:"inline-flex", alignItems:"center", gap:"6px", color:T.textMuted, fontSize:"0.72rem", fontWeight:600, whiteSpace:"nowrap" }}>
               <input type="checkbox" checked={hideLateCashFlow} onChange={(e)=>setHideLateCashFlow(e.target.checked)} />
               {t.hideLate || "Hide Late"}
@@ -5256,13 +5259,25 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
     const endMatch = !parsedEndDate || (parsedTxDate && parsedTxDate < parsedEndDate);
     return portfolioMatch && statusMatch && investmentMatch && methodMatch && smartStatusMatch && startMatch && endMatch;
   });
+  const getRemainingSortParts = (tx) => {
+    if (isLateRemainingTransaction(tx)) return { group:0, days:transactionRemainingDays(tx) };
+    if (isTransactionDone(tx)) return { group:2, days:Number.POSITIVE_INFINITY };
+    return { group:1, days:transactionRemainingDays(tx) };
+  };
   const getSortValue = (tx, key) => {
-    if (key === "remainingTime") return transactionRemainingDays(tx);
     if (key === "depositedAt") return toDateOnly(tx.depositedAt || tx.deposited_at)?.getTime() ?? Number.POSITIVE_INFINITY;
     if (key === "collectedAt") return toDateOnly(tx.collectedAt || tx.collected_at)?.getTime() ?? Number.POSITIVE_INFINITY;
     return toDateOnly(tx.date || tx.created_at)?.getTime() ?? Number.POSITIVE_INFINITY;
   };
   const sorted = [...filtered].sort((a,b)=>{
+    if (sortConfig.key === "remainingTime") {
+      const left = getRemainingSortParts(a);
+      const right = getRemainingSortParts(b);
+      if (left.group !== right.group) return left.group - right.group;
+      const direction = sortConfig.direction === "asc" ? 1 : -1;
+      if (left.days !== right.days) return (left.days > right.days ? 1 : -1) * direction;
+      return new Date(b.date||b.created_at||0)-new Date(a.date||a.created_at||0);
+    }
     const direction = sortConfig.direction === "asc" ? 1 : -1;
     const left = getSortValue(a, sortConfig.key);
     const right = getSortValue(b, sortConfig.key);
@@ -5861,11 +5876,11 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
           <div style={{ display:"flex",justifyContent:"flex-end",gap:"10px",marginTop:"8px" }}>
             {modalMode==="view" && (<>
               <div style={{ position:"relative" }}>
-                <Btn variant="secondary" onClick={() => setModalActionsOpen((open) => !open)}>{t.actions || "Actions"}</Btn>
+                <Btn onClick={() => setModalActionsOpen((open) => !open)}>{t.actions || "Actions"}</Btn>
                 {modalActionsOpen && (
                   <div style={{ position:"absolute", right:0, bottom:"calc(100% + 6px)", zIndex:13000, background:T.bgCard, border:`1px solid ${T.border}`, borderRadius:"10px", minWidth:"180px", boxShadow:"0 8px 28px rgba(0,0,0,0.15)", overflow:"hidden" }}>
-                    <button type="button" onClick={() => markTransactionDeposited(editItem)} style={{ display:"block", width:"100%", padding:"9px 14px", background:"none", border:"none", color:T.info, fontSize:"0.78rem", fontWeight:500, cursor:"pointer", textAlign:isRTL?"right":"left" }}>{t.markDeposited || "Mark as Deposited"}</button>
-                    <button type="button" onClick={() => markTransactionCollected(editItem)} style={{ display:"block", width:"100%", padding:"9px 14px", background:"none", border:"none", color:T.positive, fontSize:"0.78rem", fontWeight:500, cursor:"pointer", textAlign:isRTL?"right":"left" }}>{t.markCollected || "Mark as Collected"}</button>
+                    <button type="button" onClick={() => markTransactionDeposited(editItem)} onMouseEnter={(e)=>{e.currentTarget.style.background=T.bgApp;}} onMouseLeave={(e)=>{e.currentTarget.style.background="transparent";}} style={{ display:"block", width:"100%", padding:"9px 14px", background:"transparent", border:"none", color:T.info, fontSize:"0.78rem", fontWeight:600, cursor:"pointer", textAlign:isRTL?"right":"left" }}>{t.markDeposited || "Mark as Deposited"}</button>
+                    <button type="button" onClick={() => markTransactionCollected(editItem)} onMouseEnter={(e)=>{e.currentTarget.style.background=T.bgApp;}} onMouseLeave={(e)=>{e.currentTarget.style.background="transparent";}} style={{ display:"block", width:"100%", padding:"9px 14px", background:"transparent", border:"none", color:T.positive, fontSize:"0.78rem", fontWeight:600, cursor:"pointer", textAlign:isRTL?"right":"left" }}>{t.markCollected || "Mark as Collected"}</button>
                   </div>
                 )}
               </div>
