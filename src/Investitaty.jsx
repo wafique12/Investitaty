@@ -29,6 +29,7 @@ const AUTH_STORAGE_KEY = "investitaty_auth_v1";
 const AUTH_CONSENT_STORAGE_KEY = "investitaty_auth_consent_v1";
 const AUTH_LOGIN_DAY_KEY = "investitaty_auth_login_day_v1";
 const TAB_STORAGE_KEY = "investitaty_active_tab_v1";
+const SIDEBAR_STATUS_STORAGE_KEY = "sidebarStatus";
 const POST_LOGIN_REDIRECT_KEY = "investitaty_post_login_redirect_v1";
 const SESSION_EXPIRED_NOTICE_KEY = "investitaty_session_expired_notice_v1";
 const SESSION_EXPIRED_MESSAGE_KEY = "investitaty_session_expired_message_v1";
@@ -5143,7 +5144,7 @@ function TransactionsTab({ modalPrefill, navigationFilter, onSmartBack, showSmar
   const autoOpenedTxRef = useRef("");
   const appliedNavigationRef = useRef("");
   const [viewOpenedFromDashboard, setViewOpenedFromDashboard] = useState(false);
-  const [sortConfig, setSortConfig] = useState({ key:"date", direction:"desc" });
+  const [sortConfig, setSortConfig] = useState({ key:"remainingTime", direction:"asc" });
   const [modalActionsOpen, setModalActionsOpen] = useState(false);
 
   const EMPTY = { portfolioId:"",investmentId:"",category:"",amount:"",date:"",dueDate:"",depositedAt:"",collectedAt:"",type:"income",status:"recorded",notes:"" };
@@ -7531,7 +7532,7 @@ function MainApp() {
     if (path === "/planning-unit/analysis") return "stockAnalysis";
     return localStorage.getItem(TAB_STORAGE_KEY) || "dashboard";
   });
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem(SIDEBAR_STATUS_STORAGE_KEY) !== "collapsed");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [investmentPrefill, setInvestmentPrefill] = useState(null);
   const [transactionPrefill, setTransactionPrefill] = useState(null);
@@ -7554,6 +7555,10 @@ function MainApp() {
     setActiveTab(postLoginTarget);
     sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem(SIDEBAR_STATUS_STORAGE_KEY, sidebarOpen ? "expanded" : "collapsed");
+  }, [sidebarOpen]);
 
   useEffect(() => {
     localStorage.setItem(TAB_STORAGE_KEY, activeTab);
