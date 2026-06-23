@@ -1,7 +1,7 @@
 import React, { useState, useEffect, createContext, useContext, useCallback, useRef, useMemo, useId } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import {
-  X, Trash2, Check, Edit3, MoreVertical, Zap, BookOpen,
+  X, Trash2, Check, Edit3, MoreVertical, BookOpen,
   RefreshCw, ChevronDown, ChevronRight, Plus, Settings,
   TrendingUp, Wallet, DollarSign, BarChart2, Globe, LogOut,
   Cloud, Shield, Layers, Tag, FolderOpen, ArrowUpRight, PieChart as PieChartIcon,
@@ -216,6 +216,7 @@ const TRANSLATIONS = {
     initialCapital: "Initial Capital",
     purchasePrice: "Purchase Price (Per Unit)",
     currentPrice: "Current Price (Per Unit)",
+    currentUnitPrice: "Current Unit Price",
     viewPriceHistory: "View Price History",
     priceHistoryLog: "Price History Log",
     inheritPrice: "Sync with Portfolio",
@@ -274,7 +275,6 @@ const TRANSLATIONS = {
     noRecords: "No records yet.",
     fundingBreakdown: "Funding Breakdown",
     transactionLedger: "Transaction Ledger",
-    quickUpdatePrice: "Quick update price",
     archiveInvestment: "Archive Investment",
     archivePortfolio: "Archive Portfolio",
     settingsTitle: "Settings & Lookup Categories",
@@ -506,6 +506,7 @@ const TRANSLATIONS = {
     initialCapital: "رأس المال الابتدائي",
     purchasePrice: "سعر الشراء (لكل وحدة)",
     currentPrice: "السعر الحالي (لكل وحدة)",
+    currentUnitPrice: "سعر الوحدة الحالي",
     viewPriceHistory: "عرض سجل الأسعار",
     priceHistoryLog: "سجل الأسعار",
     inheritPrice: "مزامنة مع المحفظة",
@@ -564,7 +565,6 @@ const TRANSLATIONS = {
     noRecords: "لا توجد سجلات بعد.",
     fundingBreakdown: "تفصيل التمويل",
     transactionLedger: "سجل المعاملات",
-    quickUpdatePrice: "تحديث السعر سريعاً",
     archiveInvestment: "أرشفة الاستثمار",
     archivePortfolio: "أرشفة المحفظة",
     settingsTitle: "الإعدادات وفئات القوائم",
@@ -3588,7 +3588,6 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   const { db, addItem, archiveItem, unarchiveItem, hardDeleteItem, patchItem, t, isRTL, font } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
-  const [editingPrice, setEditingPrice] = useState(null);
   const [expandedRow, setExpandedRow] = useState(null);
   const [collapsedPortfolios, setCollapsedPortfolios] = useState({});
   const [showHistoryModal, setShowHistoryModal] = useState(false);
@@ -3601,7 +3600,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   const [form, setForm] = useState(EMPTY);
   const f = k => v => setForm(p=>({...p,[k]:v}));
 
-  const portfolios = visible(db?.portfolios||[]);
+  const portfolios = useMemo(() => visible(db?.portfolios||[]), [db?.portfolios]);
   const investments = db?.investments||[];
   const priceHistory = db?.priceHistory || [];
 
@@ -3747,7 +3746,6 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   useEffect(() => () => {
     setShowModal(false);
     setEditItem(null);
-    setEditingPrice(null);
     setExpandedRow(null);
     setCollapsedPortfolios({});
     setShowHistoryModal(false);
@@ -3813,13 +3811,20 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   useEffect(() => {
     setCollapsedPortfolios((prev) => {
       const next = { ...prev };
+      let changed = false;
       (portfolios || []).forEach((portfolio) => {
-        if (!Object.prototype.hasOwnProperty.call(next, portfolio.id)) next[portfolio.id] = false;
+        if (!Object.prototype.hasOwnProperty.call(next, portfolio.id)) {
+          next[portfolio.id] = false;
+          changed = true;
+        }
       });
       Object.keys(next).forEach((id) => {
-        if (!(portfolios || []).some((portfolio) => portfolio.id === id)) delete next[id];
+        if (!(portfolios || []).some((portfolio) => portfolio.id === id)) {
+          delete next[id];
+          changed = true;
+        }
       });
-      return next;
+      return changed ? next : prev;
     });
   }, [portfolios]);
 
@@ -3951,11 +3956,12 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
       {/* Grouped by portfolio */}
       {portfolios.length === 0
         ? <EmptyState text={t.noPortfolioData}/>
-        : portfolios.map(p => {
+        : portfolios.map((p, portfolioIndex) => {
+          const portfolioKey = p.id || `portfolio-${portfolioIndex}`;
           const invs = filteredInvestments.filter(i=>i.portfolioId===p.id);
           if (invs.length === 0) return null;
           return (
-            <div key={p.id} style={{ marginBottom:"24px" }}>
+            <div key={portfolioKey} style={{ marginBottom:"24px" }}>
               <button
                 onClick={() => setCollapsedPortfolios(prev => ({ ...prev, [p.id]: !prev[p.id] }))}
                 title={p.name}
@@ -3973,7 +3979,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                 <table style={{ width:"100%",minWidth:"980px",borderCollapse:"collapse",fontSize:"0.85rem" }}>
                   <thead>
                     <tr style={{ background:T.bgApp }}>
-                      {[t.name,t.startDate,t.endDate,t.investmentMethod,t.unitPurchasePrice,t.principal,t.currentValue,t.roi,t.currentPrice,t.risk,t.status,""].map((h,i)=>(
+                      {[t.name,t.startDate,t.endDate,t.investmentMethod,t.unitPurchasePrice,t.currentUnitPrice,t.principal,t.currentValue,t.roi,t.risk,t.status,""].map((h,i)=>(
                         <th key={i} style={{ padding:"10px 14px",textAlign:isRTL?"right":"left",fontSize:"0.7rem",fontWeight:600,color:T.textMuted,whiteSpace:"nowrap",borderBottom:`1px solid ${T.border}` }}>{h}</th>
                       ))}
                     </tr>
@@ -3983,10 +3989,22 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                       const roiVal = roi(inv, db);
                       const cvVal  = curVal(inv, db);
                       const cbVal  = costBasis(inv);
+                      const purchasePrice = parseFloat(inv.purchasePrice) || 0;
+                      const currentUnitPrice = effectiveCurrentPrice(db, inv);
+                      const priceComparisonColor = currentUnitPrice > purchasePrice
+                        ? T.positive
+                        : currentUnitPrice < purchasePrice
+                          ? T.negative
+                          : T.textSecondary;
+                      const priceComparisonArrow = currentUnitPrice > purchasePrice
+                        ? "↑"
+                        : currentUnitPrice < purchasePrice
+                          ? "↓"
+                          : "";
                       const isExpanded = expandedRow === inv.id;
                       const txs = tx_of_investment(db, inv.id);
                       return (
-                        <>
+                        <React.Fragment key={inv.id}>
                           <tr key={inv.id}
                             style={{ borderBottom:`1px solid ${T.border}`,cursor:"pointer",transition:"background 0.12s" }}
                             onMouseEnter={e=>e.currentTarget.style.background=T.bgApp}
@@ -4001,24 +4019,17 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                             <td style={{ padding:"12px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{inv.startDate || inv.purchaseDate || "—"}</td>
                             <td style={{ padding:"12px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{inv.endDate || "—"}</td>
                             <td style={{ padding:"12px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{inv.investmentMethod || "—"}</td>
-                            <td style={{ padding:"12px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{fmtMoney(parseFloat(inv.purchasePrice)||0,{currency:portfolioCurrency(db, inv.portfolioId)})}</td>
+                            <td style={{ padding:"12px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{fmtMoney(purchasePrice,{currency:portfolioCurrency(db, inv.portfolioId)})}</td>
+                            <td style={{ padding:"12px 14px",textAlign:isRTL?"right":"left" }}>
+                              <span style={{ color:priceComparisonColor }}>
+                                {fmtMoney(currentUnitPrice,{currency:portfolioCurrency(db, inv.portfolioId)})}
+                                {priceComparisonArrow ? ` ${priceComparisonArrow}` : ""}
+                              </span>
+                            </td>
                             <td style={{ padding:"12px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{fmtMoney(cbVal,{currency:portfolioCurrency(db, inv.portfolioId)})}</td>
                             <td style={{ padding:"12px 14px",fontWeight:600,color:T.textPrimary,textAlign:isRTL?"right":"left" }}>{fmtMoney(cvVal,{currency:portfolioCurrency(db, inv.portfolioId)})}</td>
                             <td style={{ padding:"12px 14px",textAlign:isRTL?"right":"left" }}>
                               <span style={{ fontWeight:600,color:roiVal>=0?T.positive:T.negative }}>{roiVal>=0?"+":""}{roiVal.toFixed(3)}%</span>
-                            </td>
-                            <td style={{ padding:"12px 14px",textAlign:isRTL?"right":"left" }} onClick={e=>e.stopPropagation()}>
-                              {editingPrice===inv.id
-                                ? <QuickPriceField inv={inv} onDone={()=>setEditingPrice(null)}/>
-                                : (
-                                  <div style={{ display:"flex",alignItems:"center",gap:"6px" }}>
-                                    <span style={{ color:T.textSecondary }}>{fmtMoney(effectiveCurrentPrice(db, inv),{currency:portfolioCurrency(db, inv.portfolioId)})}</span>
-                                    <button onClick={()=>setEditingPrice(inv.id)} style={{ background:"none",border:"none",cursor:"pointer",color:T.emerald,padding:"2px",borderRadius:"4px",display:"flex" }} data-icon-tooltip={t.quickUpdatePrice}>
-                                      <Zap size={12}/>
-                                    </button>
-                                  </div>
-                                )
-                              }
                             </td>
                             <td style={{ padding:"12px 14px" }}>
                               <Chip color={riskColor(inv.risk)}>{inv.risk || "—"}</Chip>
@@ -4049,7 +4060,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                               </td>
                             </tr>
                           )}
-                        </>
+                        </React.Fragment>
                       );
                     })}
                   </tbody>
@@ -5026,21 +5037,6 @@ function TradingPlanInlineView({ investment }) {
   );
 }
 
-
-function QuickPriceField({ inv }) {
-  const { patchItem } = useApp();
-  const [val, setVal] = useState(inv.currentPrice||"");
-  const save = () => { if(val!=="") patchItem("investments",inv.id,{currentPrice:val}); };
-  return (
-    <div style={{ display:"flex",gap:"5px",alignItems:"center" }}>
-      <input autoFocus type="number" value={val} onChange={e=>setVal(e.target.value)}
-        onKeyDown={e=>{ if(e.key==="Enter") save(); }}
-        style={{ width:"80px",padding:"4px 8px",background:T.bgInput,border:`1px solid ${T.emerald}`,borderRadius:"6px",color:T.textPrimary,fontSize:"0.82rem",outline:"none" }}
-      />
-      <button onClick={save} style={{ background:T.emeraldBg,border:"none",borderRadius:"5px",cursor:"pointer",color:T.emerald,padding:"4px",display:"flex" }}><Check size={12}/></button>
-    </div>
-  );
-}
 
 // Expanded row detail: funding breakdown + transaction ledger
 function InvestmentDetailExpanded({ inv, txs, db }) {
