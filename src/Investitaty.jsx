@@ -3746,7 +3746,6 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   useEffect(() => () => {
     setShowModal(false);
     setEditItem(null);
-    setEditingPrice(null);
     setExpandedRow(null);
     setCollapsedPortfolios({});
     setShowHistoryModal(false);
