@@ -269,6 +269,7 @@ const TRANSLATIONS = {
     investment: "Investment",
     roi: "ROI %",
     principal: "Principal",
+    unitPurchasePrice: "Unit Purchase Price",
     currentValue: "Current Value",
     noRecords: "No records yet.",
     fundingBreakdown: "Funding Breakdown",
@@ -558,6 +559,7 @@ const TRANSLATIONS = {
     investment: "الاستثمار",
     roi: "نسبة العائد %",
     principal: "رأس المال",
+    unitPurchasePrice: "سعر شراء الوحدة",
     currentValue: "القيمة الحالية",
     noRecords: "لا توجد سجلات بعد.",
     fundingBreakdown: "تفصيل التمويل",
@@ -3971,7 +3973,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                 <table style={{ width:"100%",minWidth:"980px",borderCollapse:"collapse",fontSize:"0.85rem" }}>
                   <thead>
                     <tr style={{ background:T.bgApp }}>
-                      {[t.name,t.startDate,t.endDate,t.investmentMethod,t.principal,t.currentValue,t.roi,t.currentPrice,t.risk,t.status,""].map((h,i)=>(
+                      {[t.name,t.startDate,t.endDate,t.investmentMethod,t.unitPurchasePrice,t.principal,t.currentValue,t.roi,t.currentPrice,t.risk,t.status,""].map((h,i)=>(
                         <th key={i} style={{ padding:"10px 14px",textAlign:isRTL?"right":"left",fontSize:"0.7rem",fontWeight:600,color:T.textMuted,whiteSpace:"nowrap",borderBottom:`1px solid ${T.border}` }}>{h}</th>
                       ))}
                     </tr>
@@ -3999,6 +4001,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                             <td style={{ padding:"12px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{inv.startDate || inv.purchaseDate || "—"}</td>
                             <td style={{ padding:"12px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{inv.endDate || "—"}</td>
                             <td style={{ padding:"12px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{inv.investmentMethod || "—"}</td>
+                            <td style={{ padding:"12px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{fmtMoney(parseFloat(inv.purchasePrice)||0,{currency:portfolioCurrency(db, inv.portfolioId)})}</td>
                             <td style={{ padding:"12px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{fmtMoney(cbVal,{currency:portfolioCurrency(db, inv.portfolioId)})}</td>
                             <td style={{ padding:"12px 14px",fontWeight:600,color:T.textPrimary,textAlign:isRTL?"right":"left" }}>{fmtMoney(cvVal,{currency:portfolioCurrency(db, inv.portfolioId)})}</td>
                             <td style={{ padding:"12px 14px",textAlign:isRTL?"right":"left" }}>
@@ -4041,7 +4044,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                           </tr>
                           {isExpanded && (
                             <tr key={inv.id+"_exp"}>
-                              <td colSpan={11} style={{ padding:"0",background:"transparent" }}>
+                              <td colSpan={12} style={{ padding:"0",background:"transparent" }}>
                                 <InvestmentDetailExpanded inv={inv} txs={txs} db={db}/>
                               </td>
                             </tr>
