@@ -3600,7 +3600,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   const [form, setForm] = useState(EMPTY);
   const f = k => v => setForm(p=>({...p,[k]:v}));
 
-  const portfolios = visible(db?.portfolios||[]);
+  const portfolios = useMemo(() => visible(db?.portfolios||[]), [db?.portfolios]);
   const investments = db?.investments||[];
   const priceHistory = db?.priceHistory || [];
 
@@ -3812,13 +3812,20 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   useEffect(() => {
     setCollapsedPortfolios((prev) => {
       const next = { ...prev };
+      let changed = false;
       (portfolios || []).forEach((portfolio) => {
-        if (!Object.prototype.hasOwnProperty.call(next, portfolio.id)) next[portfolio.id] = false;
+        if (!Object.prototype.hasOwnProperty.call(next, portfolio.id)) {
+          next[portfolio.id] = false;
+          changed = true;
+        }
       });
       Object.keys(next).forEach((id) => {
-        if (!(portfolios || []).some((portfolio) => portfolio.id === id)) delete next[id];
+        if (!(portfolios || []).some((portfolio) => portfolio.id === id)) {
+          delete next[id];
+          changed = true;
+        }
       });
-      return next;
+      return changed ? next : prev;
     });
   }, [portfolios]);
 
@@ -3950,11 +3957,12 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
       {/* Grouped by portfolio */}
       {portfolios.length === 0
         ? <EmptyState text={t.noPortfolioData}/>
-        : portfolios.map(p => {
+        : portfolios.map((p, portfolioIndex) => {
+          const portfolioKey = p.id || `portfolio-${portfolioIndex}`;
           const invs = filteredInvestments.filter(i=>i.portfolioId===p.id);
           if (invs.length === 0) return null;
           return (
-            <div key={p.id} style={{ marginBottom:"24px" }}>
+            <div key={portfolioKey} style={{ marginBottom:"24px" }}>
               <button
                 onClick={() => setCollapsedPortfolios(prev => ({ ...prev, [p.id]: !prev[p.id] }))}
                 title={p.name}
@@ -3997,7 +4005,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                       const isExpanded = expandedRow === inv.id;
                       const txs = tx_of_investment(db, inv.id);
                       return (
-                        <>
+                        <React.Fragment key={inv.id}>
                           <tr key={inv.id}
                             style={{ borderBottom:`1px solid ${T.border}`,cursor:"pointer",transition:"background 0.12s" }}
                             onMouseEnter={e=>e.currentTarget.style.background=T.bgApp}
@@ -4053,7 +4061,7 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                               </td>
                             </tr>
                           )}
-                        </>
+                        </React.Fragment>
                       );
                     })}
                   </tbody>
