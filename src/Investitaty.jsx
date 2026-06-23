@@ -1,7 +1,7 @@
 import React, { useState, useEffect, createContext, useContext, useCallback, useRef, useMemo, useId } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import {
-  X, Trash2, Check, Edit3, MoreVertical, Zap, BookOpen,
+  X, Trash2, Check, Edit3, MoreVertical, BookOpen,
   RefreshCw, ChevronDown, ChevronRight, Plus, Settings,
   TrendingUp, Wallet, DollarSign, BarChart2, Globe, LogOut,
   Cloud, Shield, Layers, Tag, FolderOpen, ArrowUpRight, PieChart as PieChartIcon,
@@ -275,7 +275,6 @@ const TRANSLATIONS = {
     noRecords: "No records yet.",
     fundingBreakdown: "Funding Breakdown",
     transactionLedger: "Transaction Ledger",
-    quickUpdatePrice: "Quick update price",
     archiveInvestment: "Archive Investment",
     archivePortfolio: "Archive Portfolio",
     settingsTitle: "Settings & Lookup Categories",
@@ -566,7 +565,6 @@ const TRANSLATIONS = {
     noRecords: "لا توجد سجلات بعد.",
     fundingBreakdown: "تفصيل التمويل",
     transactionLedger: "سجل المعاملات",
-    quickUpdatePrice: "تحديث السعر سريعاً",
     archiveInvestment: "أرشفة الاستثمار",
     archivePortfolio: "أرشفة المحفظة",
     settingsTitle: "الإعدادات وفئات القوائم",
@@ -3590,7 +3588,6 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
   const { db, addItem, archiveItem, unarchiveItem, hardDeleteItem, patchItem, t, isRTL, font } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
-  const [editingPrice, setEditingPrice] = useState(null);
   const [expandedRow, setExpandedRow] = useState(null);
   const [collapsedPortfolios, setCollapsedPortfolios] = useState({});
   const [showHistoryModal, setShowHistoryModal] = useState(false);
@@ -4016,21 +4013,11 @@ function InvestmentsTab({ onQuickAddTransaction, onViewTransactions, modalPrefil
                             <td style={{ padding:"12px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{inv.endDate || "—"}</td>
                             <td style={{ padding:"12px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{inv.investmentMethod || "—"}</td>
                             <td style={{ padding:"12px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{fmtMoney(purchasePrice,{currency:portfolioCurrency(db, inv.portfolioId)})}</td>
-                            <td style={{ padding:"12px 14px",textAlign:isRTL?"right":"left" }} onClick={e=>e.stopPropagation()}>
-                              {editingPrice===inv.id
-                                ? <QuickPriceField inv={inv} onDone={()=>setEditingPrice(null)}/>
-                                : (
-                                  <div style={{ display:"flex",alignItems:"center",gap:"6px" }}>
-                                    <span style={{ color:priceComparisonColor }}>
-                                      {fmtMoney(currentUnitPrice,{currency:portfolioCurrency(db, inv.portfolioId)})}
-                                      {priceComparisonArrow ? ` ${priceComparisonArrow}` : ""}
-                                    </span>
-                                    <button onClick={()=>setEditingPrice(inv.id)} style={{ background:"none",border:"none",cursor:"pointer",color:T.emerald,padding:"2px",borderRadius:"4px",display:"flex" }} data-icon-tooltip={t.quickUpdatePrice}>
-                                      <Zap size={12}/>
-                                    </button>
-                                  </div>
-                                )
-                              }
+                            <td style={{ padding:"12px 14px",textAlign:isRTL?"right":"left" }}>
+                              <span style={{ color:priceComparisonColor }}>
+                                {fmtMoney(currentUnitPrice,{currency:portfolioCurrency(db, inv.portfolioId)})}
+                                {priceComparisonArrow ? ` ${priceComparisonArrow}` : ""}
+                              </span>
                             </td>
                             <td style={{ padding:"12px 14px",color:T.textSecondary,textAlign:isRTL?"right":"left" }}>{fmtMoney(cbVal,{currency:portfolioCurrency(db, inv.portfolioId)})}</td>
                             <td style={{ padding:"12px 14px",fontWeight:600,color:T.textPrimary,textAlign:isRTL?"right":"left" }}>{fmtMoney(cvVal,{currency:portfolioCurrency(db, inv.portfolioId)})}</td>
@@ -5043,21 +5030,6 @@ function TradingPlanInlineView({ investment }) {
   );
 }
 
-
-function QuickPriceField({ inv }) {
-  const { patchItem } = useApp();
-  const [val, setVal] = useState(inv.currentPrice||"");
-  const save = () => { if(val!=="") patchItem("investments",inv.id,{currentPrice:val}); };
-  return (
-    <div style={{ display:"flex",gap:"5px",alignItems:"center" }}>
-      <input autoFocus type="number" value={val} onChange={e=>setVal(e.target.value)}
-        onKeyDown={e=>{ if(e.key==="Enter") save(); }}
-        style={{ width:"80px",padding:"4px 8px",background:T.bgInput,border:`1px solid ${T.emerald}`,borderRadius:"6px",color:T.textPrimary,fontSize:"0.82rem",outline:"none" }}
-      />
-      <button onClick={save} style={{ background:T.emeraldBg,border:"none",borderRadius:"5px",cursor:"pointer",color:T.emerald,padding:"4px",display:"flex" }}><Check size={12}/></button>
-    </div>
-  );
-}
 
 // Expanded row detail: funding breakdown + transaction ledger
 function InvestmentDetailExpanded({ inv, txs, db }) {
